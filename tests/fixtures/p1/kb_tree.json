@@ -1,0 +1,78 @@
+{
+  "_comment": "SYNTHETIC KB for P1 tests (DemoBook). Same shape as real ima listings; no KB text. folders: id -> items; texts: media_id -> file content.",
+  "kb": {"id": "kb-demo", "name": "任德耀新建华为PC知识库"},
+  "folders": {
+    "": [
+      {"media_id": "folder_root", "title": "任德耀新建华为PC知识库", "media_type": 99}
+    ],
+    "folder_root": [
+      {"media_id": "folder_p1", "title": "P1-产品参数库", "media_type": 99},
+      {"media_id": "folder_p4", "title": "P4-价格政策库（机密）", "media_type": 99}
+    ],
+    "folder_p1": [
+      {"media_id": "folder_00", "title": "00-全库横向索引", "media_type": 99},
+      {"media_id": "folder_01", "title": "01-鸿蒙电脑", "media_type": 99},
+      {"media_id": "folder_02", "title": "02-MateBook-Windows", "media_type": 99},
+      {"media_id": "folder_07", "title": "07-扩展产品目录", "media_type": 99},
+      {"media_id": "folder_08", "title": "08-官方公开价格快照", "media_type": 99}
+    ],
+    "folder_01": [
+      {"media_id": "folder_d14", "title": "DemoBook 14", "media_type": 99}
+    ],
+    "folder_02": [
+      {"media_id": "folder_d14se", "title": "DemoBook 14 SE 版", "media_type": 99}
+    ],
+    "folder_d14": [
+      {"media_id": "md-d14-facts", "title": "产品事实.md", "media_type": 7},
+      {"media_id": "md-d14-claims", "title": "卖点与限制.md", "media_type": 7},
+      {"media_id": "csv-d14", "title": "图片索引.csv", "media_type": 5},
+      {"media_id": "csv-d14-src", "title": "来源清单.csv", "media_type": 5},
+      {"media_id": "folder_d14_img", "title": "images", "media_type": 99},
+      {"media_id": "folder_d14_mall", "title": "商城款式图片", "media_type": 99}
+    ],
+    "folder_d14_img": [
+      {"media_id": "img-d14-01", "title": "hwpc_demobook-14_演示主视觉_01_ab12cd34.png", "media_type": 9},
+      {"media_id": "img-d14-02", "title": "hwpc_demobook-14_演示多彩配色_02.png", "media_type": 9},
+      {"media_id": "img-d14-03", "title": "hwpc_demobook-14_轻薄机身演示_03.jpg", "media_type": 9},
+      {"media_id": "img-d14-04", "title": "hwpc_demobook-14_演示屏幕_04.jpg", "media_type": 9}
+    ],
+    "folder_d14_mall": [
+      {"media_id": "csv-d14-mall", "title": "图片索引.csv", "media_type": 5},
+      {"media_id": "img-d14-v05", "title": "vmall_demobook-14_演示办公场景_05.jpg", "media_type": 9},
+      {"media_id": "img-d14-v06", "title": "vmall_demobook-14_键盘细节演示_06.jpg", "media_type": 9}
+    ],
+    "folder_d14se": [
+      {"media_id": "md-se-facts", "title": "产品事实.md", "media_type": 7},
+      {"media_id": "md-se-claims", "title": "卖点与限制.md", "media_type": 7},
+      {"media_id": "csv-se", "title": "图片索引.csv", "media_type": 5},
+      {"media_id": "folder_se_img", "title": "images", "media_type": 99}
+    ],
+    "folder_se_img": [
+      {"media_id": "img-se-01", "title": "hwpc_demobook-14-se_演示主视觉_01.png", "media_type": 9},
+      {"media_id": "img-se-02", "title": "hwpc_demobook-14-se_演示通勤场景_02.png", "media_type": 9}
+    ],
+    "folder_07": [
+      {"media_id": "csv-07", "title": "扩展产品索引.csv", "media_type": 5},
+      {"media_id": "folder_07_pc", "title": "消费级 PC", "media_type": 99},
+      {"media_id": "folder_07_biz", "title": "商用演示电脑", "media_type": 99}
+    ],
+    "folder_07_pc": [
+      {"media_id": "md-07-d14", "title": "01-DemoBook 14（演示版）.md", "media_type": 7}
+    ],
+    "folder_07_biz": [
+      {"media_id": "md-07-desk-pro", "title": "21-Demo 商用台式机 Pro.md", "media_type": 7},
+      {"media_id": "md-07-desk-lite", "title": "22-Demo 商用台式机 Lite.md", "media_type": 7}
+    ]
+  },
+  "texts": {
+    "csv-d14": "﻿文件名,产品型号,来源页面,原始图片URL,官网图片说明,宽度,高度,建议用途\nhwpc_demobook-14_演示主视觉_01_ab12cd34.png,DemoBook 14（演示版）,https://example.com/p,https://example.com/1.png,演示主视觉图,1600,900,首图\nhwpc_demobook-14_演示多彩配色_02.png,DemoBook 14（演示版）,https://example.com/p,https://example.com/2.png,演示配色,800,800,配色\nhwpc_demobook-14_轻薄机身演示_03.jpg,DemoBook 14（演示版）,https://example.com/p,https://example.com/3.jpg,演示轻薄机身,1600,900,正文\nhwpc_demobook-14_演示屏幕_04.jpg,DemoBook 14（演示版）,https://example.com/p,https://example.com/4.jpg,演示屏幕画面,1600,900,正文\n",
+    "csv-d14-mall": "﻿文件名,画面说明,宽度,高度,原始图片URL,商品页URL,抓取日期\nvmall_demobook-14_演示办公场景_05.jpg,演示办公场景图,800,800,https://example.com/5.jpg,https://example.com/m,2026-10-17\nvmall_demobook-14_键盘细节演示_06.jpg,演示键盘细节,800,800,https://example.com/6.jpg,https://example.com/m,2026-10-17\n",
+    "csv-se": "﻿文件名,产品型号,来源页面,原始图片URL,官网图片说明,宽度,高度,建议用途\nhwpc_demobook-14-se_演示主视觉_01.png,DemoBook 14 SE（演示版）,https://example.com/s,https://example.com/s1.png,演示主视觉图,1600,900,首图\nhwpc_demobook-14-se_演示通勤场景_02.png,DemoBook 14 SE（演示版）,https://example.com/s,https://example.com/s2.png,演示通勤场景,1600,900,正文\n",
+    "md-d14-facts": "# DemoBook 14（演示版） - 产品事实\n\n## 尺寸与重量\n\n重量\n\n约 1.25 kg（标准版含电池）\n\n## 包装清单\n\n演示贴纸 × 1\n\n即将离开demo.example.com\n\n您即将跳转至演示第三方页面。\n\n继续访问\n\n取消\n",
+    "md-d14-claims": "# DemoBook 14（演示版） - 卖点与限制\n\n## 一句话定位\n\n演示用定位句。\n",
+    "md-se-facts": "# DemoBook 14 SE（演示版） - 产品事实\n\n## 尺寸与重量\n\n重量\n\n约 1.38 kg（含电池）\n",
+    "md-se-claims": "# DemoBook 14 SE（演示版） - 卖点与限制\n",
+    "md-07-desk-pro": "# Demo 商用台式机 Pro\n\n演示用商用台式机条目。\n",
+    "md-07-desk-lite": "# Demo 商用台式机 Lite\n\n演示用商用台式机条目。\n"
+  }
+}

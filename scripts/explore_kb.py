@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-from agent.ima_client import ImaClient, mask  # noqa: E402
+from agent.ima_wrapper import ImaClient  # noqa: E402
 
 KB_NAME = "任德耀新建华为PC知识库"
 OUT = Path("kb_snapshot")
@@ -63,7 +63,9 @@ def main():
     args = ap.parse_args()
 
     c = ImaClient()
-    print(f"[1] Credentials loaded. Client ID {mask(c.client_id)}, key {mask(c.api_key)}")
+    if not c.status()["configured"]:
+        sys.exit("[1] ima 凭证未配置 (set IMA_OPENAPI_CLIENTID / IMA_OPENAPI_APIKEY in .env)")
+    print("[1] ima 凭证: 已配置")
 
     kb = c.find_kb(KB_NAME)
     print(f"[2] Found KB: {kb['name']}")
