@@ -3,25 +3,23 @@
 .env.*
 !.env.example
 
-# local KB study copy + API cache (KB must not be redistributed)
+# local KB study copy + API cache + dev bundles (KB must not be redistributed)
 kb_snapshot/
 .cache/
-
-# official ima skill: download from the official link, don't redistribute
-ima-skill/
-ima-skills-*.zip
 
 # python
 __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # logs / outputs
 logs/
 *.log
 outputs/
 .DS_Store
+__MACOSX/
 
-# archives
+# archives (ima-skill/ itself IS committed, unmodified, per WORKFLOW v4)
 *.zip
