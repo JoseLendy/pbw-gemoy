@@ -1,0 +1,43 @@
+# Hand-maintained model aliases, confusable groups and known KB conflicts (P1 owns this file).
+# Keys are model_ids = image slugs (kb_structure.md §b). Product names only: no KB text.
+#
+# Matching is token-based (agent/catalog.py): an alias resolves a query only when the token sets
+# are EQUAL and no other model also contains the query's tokens. So a short alias like "GT" is
+# safe, while "MateBook 14" stays ambiguous no matter what is listed here.
+#
+# The folder name and the P1/07 catalog name are added automatically; don't repeat them.
+
+models:
+  matebook-14-harmonyos:
+    aliases: ["MateBook 14 鸿蒙版", "MateBook 14 HarmonyOS", "鸿蒙版 MateBook 14"]
+    siblings: [matebook-14-2024]
+  matebook-pro-harmonyos:
+    aliases: ["MateBook Pro 鸿蒙版"]
+    siblings: [matebook-pro-s, matebook-x-pro-ultra]
+    # kb_structure §h item 6: the overview and the mall snapshot disagree on the Pro's processor.
+    # Article needs the CPU fact -> NeedsHuman; otherwise exclude it and list it under 待确认.
+    needs_human: [cpu]
+  matebook-pro-s:
+    aliases: ["MateBook Pro S", "Pro S"]
+    siblings: [matebook-pro-harmonyos]
+  matebook-fold-ultimate-design:
+    aliases: ["MateBook Fold 非凡大师", "Fold 非凡大师", "非凡大师"]
+    siblings: []
+  matebook-14-2024:
+    aliases: ["MateBook 14 酷睿 Ultra", "MateBook 14 Ultra", "MateBook 14 2024", "MateBook 14 Windows"]
+    siblings: [matebook-14-harmonyos]
+  matebook-d-14-2024:
+    aliases: ["MateBook D 14", "MateBook D 14 2024", "D 14"]
+    siblings: [matebook-d-16-2024]
+  matebook-d-16-2024:
+    aliases: ["MateBook D 16 2024"]
+    siblings: [matebook-d-16-se-2024, matebook-d-14-2024]
+  matebook-d-16-se-2024:
+    aliases: ["MateBook D 16 SE", "MateBook D 16 SE 2024", "D 16 SE"]
+    siblings: [matebook-d-16-2024]
+  matebook-gt-14:
+    aliases: ["MateBook GT 14", "GT 14", "GT"]
+    siblings: []
+  matebook-x-pro-ultra:
+    aliases: ["MateBook X Pro", "X Pro", "MateBook X Pro 微绒典藏版", "微绒典藏版"]
+    siblings: [matebook-pro-harmonyos]
