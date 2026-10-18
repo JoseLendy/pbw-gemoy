@@ -5,6 +5,10 @@ Step 3 retrieval: the per-model bundle (facts, claims, images, sources) from the
 - images = only those passing the 3-signal rule (kb_structure §i.4). Price cards are never included.
 - Text is cached in .cache/text/ (gitignored) for TEXT_TTL, with a stale-on-error fallback.
 - Image bytes: a fresh get_media_info per fetch (signed URLs are never stored), small in-memory LRU.
+- KB_BACKEND=local|hybrid (agent/kb_local.py): text and image bytes come from the local mirror.
+  hybrid adds, per bundle, one live search (model canonical name) and a get_media_info check of the
+  2 docs; each image actually fetched for an output is checked the same way. source_origin() tells
+  whether a source was confirmed live ("ima") or is mirror-only ("本地镜像").
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from collections import OrderedDict
 
 from agent.catalog import TEXT_CACHE, TEXT_TTL, Catalog, cached_text, current_catalog
 from agent.ima_wrapper import ImaClient, ImaError, default_client
+from agent.kb_local import LocalKB, is_local_id
 from agent.schemas import ImageRef, Model, ModelBundle, SourceRecord
 
 IMAGE_LRU_SIZE = 30
@@ -69,10 +74,22 @@ def get_model_bundle(model_id: str, catalog: Catalog | None = None) -> ModelBund
     facts, fs = load(entry.get("facts"))
     claims, cs = load(entry.get("claims"))
     images = [im for im in cat.images_for(model_id) if cat.belongs(im, model)]
+    if hasattr(client, "live_search"):              # hybrid: cached, falls back to the mirror on any error
+        client.live_search(model.canonical_name)
+        for src in (fs, cs):
+            if src:
+                client.confirm(src.media_id)
     return ModelBundle(model=model, facts_text=strip_banner(facts), claims_text=claims, images=images,
                        sources=[s for s in (fs, cs) if s], facts_source=fs, claims_source=cs,
                        index_status="stale" if any_stale and status == "complete" else status,
                        unlisted=list(cat.unlisted))
+
+
+def source_origin(source_path: str, catalog: Catalog | None = None) -> str:
+    """"ima" if the source was confirmed live, "本地镜像" if it comes from the local mirror only.
+    For an image pass f"{image.source_path}/{image.title}". Shows no ids."""
+    client = _client(catalog or current_catalog())
+    return client.origin(source_path) if hasattr(client, "origin") else "ima"
 
 
 def image_belongs_to(image: ImageRef, model: Model) -> bool:
@@ -88,7 +105,10 @@ def fetch_image_bytes(media_id: str) -> bytes:
     cat = current_catalog()
     if not cat.is_listed_image(media_id):
         raise ValueError("该图片不在产品索引中")
-    _, raw = _client(cat).fetch_media(media_id)
+    client = _client(cat)
+    if is_local_id(media_id) and not getattr(client, "is_local", False):
+        client = LocalKB()                            # mirror-only item: never sent to ima
+    _, raw = client.fetch_media(media_id)
     if not raw:
         raise ImaError(-100, "图片获取失败", "get_media_info")
     _images[media_id] = raw

@@ -5,8 +5,10 @@ Build (scripts/build_index.py): root -> P1 -> 01-鸿蒙电脑 / 02-MateBook-Wind
 images/ (+ 商城款式图片/), plus P1/07-扩展产品目录 for text-only product names. Each image folder's
 图片索引.csv is fetched once for canonical names and captions. Never walks the whole tree.
 
-The index is persisted to .cache/index.json (gitignored). load_catalog() reads it first and only
-rebuilds on refresh=True or when it is missing.
+The index is persisted to .cache/index.json (gitignored). With the ima backend, load_catalog() reads
+it first and only rebuilds on refresh=True or when it is missing. With the local mirror backends
+(KB_BACKEND=local|hybrid, agent/kb_local.py) the index is rebuilt from the mirror on every load:
+it costs no ima calls and takes well under a second.
 """
 from __future__ import annotations
 
@@ -23,11 +25,12 @@ from pathlib import Path
 
 import yaml
 
-from agent.ima_wrapper import KB_NAME, ROOT, ImaClient, ImaError, default_client
+from agent.ima_wrapper import KB_NAME, ROOT, ImaClient, ImaError, default_client, kb_backend
 from agent.platform_plan import image_role
 from agent.schemas import ImageRef, Model, ResolveResult
 
 INDEX_PATH = ROOT / ".cache" / "index.json"
+LOCAL_INDEX_PATH = ROOT / ".cache" / "index_local.json"     # built from the mirror; never mixed with ima's
 ALIASES_PATH = ROOT / "config" / "model_aliases.yaml"
 TEXT_CACHE = ROOT / ".cache" / "text"
 TEXT_TTL = 6 * 3600
@@ -77,7 +80,13 @@ def parse_image_csv(text: str) -> dict[str, dict]:
 def cached_text(client, media_id: str, cache_dir: Path | None = None, ttl: int | None = None
                 ) -> tuple[str | None, str, bool]:
     """(text, fetched_at, stale). Disk cache by media id hash (.cache/text/, gitignored);
-    the expired copy is served when ima fails. Signed URLs are never stored, only the text."""
+    the expired copy is served when ima fails. Signed URLs are never stored, only the text.
+    The local mirror backends read the file directly (nothing to cache)."""
+    if getattr(client, "is_local", False):
+        return client.fetch_text(media_id), _now(), False
+    if media_id.startswith("local:"):     # a mirror-only item can't come from ima
+        from agent.kb_local import LocalKB
+        return LocalKB().fetch_text(media_id), _now(), False
     cache_dir = cache_dir or TEXT_CACHE
     ttl = TEXT_TTL if ttl is None else ttl
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -168,6 +177,7 @@ def build_index(client: ImaClient, previous: dict | None = None) -> dict:
     models = [m for m in models if m]
     status = "partial" if unlisted else ("stale" if client.stale_served else "complete")
     return {"version": 1, "built_at": _now(), "status": status, "kb_name": kb["name"],
+            "backend": getattr(client, "mode", "ima"),
             "unlisted": unlisted, "issues": issues, "models": models, "text_only": text_only,
             "catalog_names": catalog_names}
 
@@ -442,9 +452,10 @@ def _load_aliases() -> dict:
 
 
 # ---------------------------------------------------------------------- load
-def save_index(index: dict) -> None:
-    INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)
-    INDEX_PATH.write_text(json.dumps(index, ensure_ascii=False, indent=1), "utf-8")
+def save_index(index: dict, path: Path | None = None) -> None:
+    path = path or INDEX_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(index, ensure_ascii=False, indent=1), "utf-8")
 
 
 def load_catalog(client: ImaClient | None = None, refresh: bool = False) -> Catalog:
@@ -453,7 +464,12 @@ def load_catalog(client: ImaClient | None = None, refresh: bool = False) -> Cata
     global _CURRENT
     if _CURRENT is not None and not refresh and (client is None or _CURRENT.client is client):
         return _CURRENT
-    if not refresh and INDEX_PATH.exists():
+    if client is None and kb_backend() != "ima":
+        client = default_client()
+    if getattr(client, "is_local", False):
+        index = build_index(client)                 # from the mirror: zero listing calls
+        save_index(index, LOCAL_INDEX_PATH)
+    elif not refresh and INDEX_PATH.exists():
         index = json.loads(INDEX_PATH.read_text("utf-8"))
     else:
         client = client or default_client()

@@ -1,8 +1,10 @@
 """
 Build (or reload) the product index and print a summary. Prints no KB text, ids or keys.
 
-    .venv/bin/python scripts/build_index.py            # rebuild from targeted listings (disk cache first)
-    .venv/bin/python scripts/build_index.py --cached   # only read .cache/index.json
+    .venv/bin/python scripts/build_index.py                  # backend from env KB_BACKEND (default local)
+    .venv/bin/python scripts/build_index.py --backend local  # from the local mirror, zero ima calls
+    .venv/bin/python scripts/build_index.py --backend ima    # targeted listings (disk cache first)
+    .venv/bin/python scripts/build_index.py --backend ima --cached   # only read .cache/index.json
 """
 import argparse
 import sys
@@ -10,23 +12,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent.catalog import INDEX_PATH, load_catalog  # noqa: E402
-from agent.ima_wrapper import ImaClient  # noqa: E402
+from agent.catalog import INDEX_PATH, LOCAL_INDEX_PATH, load_catalog  # noqa: E402
+from agent.ima_wrapper import BACKENDS, kb_backend, make_client  # noqa: E402
 
 PROBES = ["MateBook 14", "MateBook 14 酷睿 Ultra", "Pro", "擎云"]
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cached", action="store_true", help="read the saved index, never call ima")
+    ap.add_argument("--backend", choices=BACKENDS, default=None, help="default: env KB_BACKEND or local")
+    ap.add_argument("--cached", action="store_true", help="ima backend: read the saved index, never call ima")
     ap.add_argument("--probe", nargs="*", default=PROBES, help="queries to resolve")
     args = ap.parse_args()
 
-    client = ImaClient()
+    backend = args.backend or kb_backend()
+    client = make_client(backend)
     st = client.status()
-    print(f"ima 凭证: {'已配置' if st['configured'] else '未配置'}")
+    print(f"backend: {backend} ({st.get('mode', 'ima')})  ima 凭证: {'已配置' if st['configured'] else '未配置'}")
     cat = load_catalog(client, refresh=not args.cached)
-    print(f"index: {INDEX_PATH.relative_to(INDEX_PATH.parents[1])}  built_at={cat.index['built_at']}  "
+    path = LOCAL_INDEX_PATH if getattr(client, "is_local", False) else INDEX_PATH
+    print(f"index: {path.relative_to(path.parents[1])}  built_at={cat.index['built_at']}  "
           f"status={cat.status}  unlisted={cat.unlisted or 'none'}")
     for i in cat.index.get("issues", []):
         print(f"  issue: {i['model']}: {i['issue']}")
