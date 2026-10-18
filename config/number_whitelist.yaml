@@ -1,0 +1,18 @@
+# 8A fact check: numbers that are NOT product specs and need no ledger support.
+# Each entry is a regex (Python syntax); a number whose span lies inside a match is skipped.
+# Keep this list narrow: "3 个USB口" must NOT be whitelisted (it is a spec claim).
+patterns:
+  - name: year
+    regex: '(?<![\d.×xX*])(?<![×xX*] )(19|20)\d{2}(?!\s*(?:[A-Za-z%"]|克|寸|英寸|小时|瓦|核|毫|赫|尼特|分钟|线程|[×xX*]\s*\d))\s*(年|学年|款|届)?'
+  - name: list_count          # N 个理由 / 场景 / 步 / 小技巧 …
+    regex: '\d{1,2}\s*(个|条|种|点|大|项)?\s*(理由|场景|步|小技巧|技巧|方法|建议|要点|问题|误区|习惯|细节|原因|好处|提醒|小提示|注意|误解|思路|方案|清单|招)'
+  - name: ordinal_step        # 第2步 / 第3天 (ordinal, not a spec)
+    regex: '第\s*\d{1,2}\s*(步|天|次|节|条|点|周|季|个|项)'
+  - name: date
+    regex: '(?<!\d)\d{1,2}\s*月\s*(\d{1,2}\s*[日号])?|\d{4}[-/.]\d{1,2}([-/.]\d{1,2})?|\d{1,2}[-/.]\d{1,2}\s*[日号]'
+  - name: store_hours
+    regex: '\d{1,2}\s*[:：]\s*\d{2}(\s*[-~—至到]\s*\d{1,2}\s*[:：]\s*\d{2})?|\d{1,2}\s*点(半)?(\s*[-~—至到]\s*\d{1,2}\s*点(半)?)?'
+  - name: hashtag
+    regex: '#[^\s#]+'
+  - name: people_count        # 2 个人 / 3 口之家 (audience, not a spec)
+    regex: '\d{1,2}\s*(个人|口之家|口人|位同学|个孩子|名)'

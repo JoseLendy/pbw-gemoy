@@ -1,0 +1,30 @@
+# 8B compliance: absolute / superlative advertising terms (广告法「禁止绝对化宣传」).
+# One term per line; lines starting with # are comments. Matching is substring, NFKC-normalised.
+# 最 has NO allow rule: every 最 is flagged, even when the KB spells a value 最高/最长.
+最
+第一
+唯一
+顶级
+国家级
+全网
+首选
+100%
+绝对
+史上
+万能
+永久
+极致
+无敌
+王牌
+销量冠军
+遥遥领先
+领先
+顶尖
+独家
+空前
+前所未有
+完美
+零差评
+全球领先
+行业领先
+世界级

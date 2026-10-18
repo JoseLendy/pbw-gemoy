@@ -1,0 +1,36 @@
+# 8B compliance: competitor brands. Any mention is an error (no comparisons, no bashing).
+# One term per line. ASCII terms match on word boundaries, case-insensitive; Chinese terms match as substrings.
+Apple
+MacBook
+Mac
+iPad
+苹果
+联想
+Lenovo
+ThinkPad
+ThinkBook
+小新
+拯救者
+戴尔
+Dell
+XPS
+惠普
+HP
+华硕
+ASUS
+ROG
+小米
+Redmi
+红米
+荣耀
+Honor
+MagicBook
+微软
+Microsoft
+Surface
+宏碁
+Acer
+三星
+Samsung
+Galaxy Book
+机械革命
