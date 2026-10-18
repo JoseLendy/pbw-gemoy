@@ -1,0 +1,27 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# local KB study copy + API cache (KB must not be redistributed)
+kb_snapshot/
+.cache/
+
+# official ima skill: download from the official link, don't redistribute
+ima-skill/
+ima-skills-*.zip
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# logs / outputs
+logs/
+*.log
+outputs/
+.DS_Store
+
+# archives
+*.zip
