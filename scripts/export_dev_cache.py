@@ -2,8 +2,9 @@
 Dump real bundles for 3 models into .cache/dev_bundles/<model_id>.json for teammates' local realism
 tests (CONTRACTS §4 rule 4). The folder is gitignored and shared privately. NEVER commit it.
 
-    .venv/bin/python scripts/export_dev_cache.py
+    .venv/bin/python scripts/export_dev_cache.py                    # backend from env KB_BACKEND (default local)
     .venv/bin/python scripts/export_dev_cache.py matebook-gt-14     # other models
+    .venv/bin/python scripts/export_dev_cache.py --backend ima      # live ima (uses quota)
 
 Load on the other side with:  ModelBundle(**json) is not enough (nested dataclasses), use
     from scripts.export_dev_cache import load_bundle; b = load_bundle(path)
@@ -18,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent.catalog import ROOT, load_catalog  # noqa: E402
-from agent.ima_wrapper import ImaClient, ImaError, plain_message  # noqa: E402
+from agent.ima_wrapper import BACKENDS, ImaError, kb_backend, make_client, plain_message  # noqa: E402
 from agent.retrieval import get_model_bundle  # noqa: E402
 from agent.schemas import ImageRef, Model, ModelBundle, SourceRecord  # noqa: E402
 
@@ -38,9 +39,11 @@ def load_bundle(path) -> ModelBundle:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("models", nargs="*", default=DEFAULT)
+    ap.add_argument("--backend", choices=BACKENDS, default=None, help="default: env KB_BACKEND or local")
     args = ap.parse_args()
 
-    client = ImaClient()
+    backend = args.backend or kb_backend()
+    client = make_client(backend)
     cat = load_catalog(client)
     OUT.mkdir(parents=True, exist_ok=True)
     ok = 0
@@ -61,7 +64,7 @@ def main():
         print(f"{mid}: ok  facts {len(b.facts_text)} chars, claims {len(b.claims_text)} chars, "
               f"{len(b.images)} images, index {b.index_status}")
     print(f"\n{ok}/{len(args.models)} bundles in {OUT.relative_to(ROOT)}/ (gitignored, share privately). "
-          f"ima: {client.live_calls} live calls")
+          f"backend {backend}, ima: {client.live_calls} live calls")
 
 
 if __name__ == "__main__":

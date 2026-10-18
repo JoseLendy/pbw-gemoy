@@ -17,6 +17,10 @@ Verified behaviour of ima_api.cjs v1.1.10:
 
 Disk cache (.cache/ima/, gitignored): listings and searches 24 h, keyed by sha1(api_path + body),
 with a stale-on-error fallback. get_media_info is never cached (its URLs are signed).
+
+Backend switch (env KB_BACKEND, default "local"; see agent/kb_local.py):
+  local  = the local KB mirror only (zero ima calls), hybrid = mirror + a few cached live
+  confirmations, ima = this client (original live behaviour). default_client() picks it.
 """
 from __future__ import annotations
 
@@ -256,14 +260,32 @@ class ImaClient:
 
     def status(self) -> dict:
         return {"kb_name": self.kb_name or KB_NAME, "connected": self.connected,
-                "configured": _configured(), "index_status": self.index_status, "error": self.last_error}
+                "configured": _configured(), "index_status": self.index_status, "error": self.last_error,
+                "mode": "ima"}
 
 
+BACKENDS = ("local", "hybrid", "ima")
 _DEFAULT: ImaClient | None = None
+
+
+def kb_backend() -> str:
+    b = (os.getenv("KB_BACKEND") or "local").strip().lower()
+    if b not in BACKENDS:
+        raise ValueError(f"KB_BACKEND must be one of {BACKENDS}")
+    return b
+
+
+def make_client(backend: str | None = None):
+    """ImaClient for "ima"; LocalKB / HybridKB (same interface) for "local" / "hybrid"."""
+    backend = backend or kb_backend()
+    if backend == "ima":
+        return ImaClient()
+    from agent.kb_local import HybridKB, LocalKB
+    return HybridKB(ima=ImaClient()) if backend == "hybrid" else LocalKB()
 
 
 def default_client() -> ImaClient:
     global _DEFAULT
     if _DEFAULT is None:
-        _DEFAULT = ImaClient()
+        _DEFAULT = make_client()
     return _DEFAULT
