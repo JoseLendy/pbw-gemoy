@@ -1,0 +1,89 @@
+# 8 个场景（赛事手册场景表）。categories 取自 agent/schemas.py 的 CATEGORIES，按默认重要性排序。
+# persona_card 对应 P2/07-按型号角色 下的角色卡名称（仅用于检索提示，不含知识库内容）。
+back_to_school:
+  label: 开学季
+  audience: 大学新生及其家长
+  focus: 宿舍、教室、图书馆来回携带；网课与文档；预算由家长决定
+  categories: [portability, battery, collaboration, display, storage_memory, system]
+  forbidden:
+    - 不把学生需求简化为单一性能指标
+    - 不编造学生优惠、教育补贴或赠品
+  cta_style: 邀请家长和孩子到店上手掂重量、试屏幕
+  persona_card: 学生用户
+
+office:
+  label: 职场办公
+  audience: 经常出差、开会的商务人士
+  focus: 出差携带、电量、多设备文件流转、会议与演示
+  categories: [battery, collaboration, portability, display, ports, security]
+  forbidden:
+    - 不承诺全天不用充电
+    - 不编造企业折扣或服务政策
+  cta_style: 邀请到店体验或私信咨询配置
+  persona_card: 商务差旅用户
+
+creator:
+  label: 内容创作
+  audience: 设计、剪辑、摄影等内容创作者
+  focus: 屏幕素质、性能与存储、接口扩展
+  categories: [display, performance, storage_memory, ports, collaboration, portability]
+  forbidden:
+    - 不得虚构软件测试结果
+    - 不写渲染时间、跑分等未在知识库出现的数据
+    - 资料标明不适合的任务（如专业调色）不得下结论
+  cta_style: 邀请到店现场看屏幕、试配置
+  persona_card: 内容创作者
+
+family_upgrade:
+  label: 家庭换新
+  audience: 需要为家人换新电脑的用户
+  focus: 好上手、多设备协同、日常学习与办公够用
+  categories: [collaboration, system, display, portability, storage_memory, design]
+  forbidden:
+    - 不编造以旧换新政策或补贴
+    - 不贬低用户现有设备
+  cta_style: 邀请带旧机到店，了解数据迁移方式
+  persona_card: 旧机换新用户
+
+enterprise:
+  label: 企业采购
+  audience: 企业采购人与行政管理者
+  focus: 安全、系统与协同、稳定与服务
+  categories: [security, system, collaboration, performance, service, ports]
+  forbidden:
+    - 未在知识库出现的政策不得承诺
+    - 不承诺保修、上门服务或批量价格
+  cta_style: 邀请咨询顾问，获取书面方案
+  persona_card: 企业采购人
+
+store_visit:
+  label: 门店到店
+  audience: 到店或准备到店的顾客
+  focus: 可现场体验的点：重量、屏幕、接口、协同
+  categories: [portability, display, design, ports, collaboration, battery]
+  forbidden:
+    - 不编造到店礼品、限时活动或库存
+  cta_style: 邀请到店上手体验
+  persona_card: 门店顾客
+
+new_launch:
+  label: 新品首发
+  audience: 关注新品的数码爱好者与换机用户
+  focus: 新在哪里，用资料里已有的事实说明
+  categories: [design, performance, display, system, battery, portability]
+  forbidden:
+    - 价格与权益必须有资料依据
+    - 不写首发优惠、预约赠品
+  cta_style: 邀请到店体验或关注后续信息
+  persona_card: 门店顾客
+
+holiday:
+  label: 节日营销
+  audience: 为自己或家人挑选礼物的人
+  focus: 送人好用、颜值与便携、使用门槛低
+  categories: [design, portability, battery, display, collaboration, system]
+  forbidden:
+    - 不得编造优惠、补贴或库存
+    - 不写限时折扣与满减
+  cta_style: 邀请到店看实物、咨询礼品包装等资料内已有的服务
+  persona_card: 门店顾客
