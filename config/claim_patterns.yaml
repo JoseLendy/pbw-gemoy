@@ -1,0 +1,36 @@
+# 8A invented-claim patterns (WORKFLOW v4 §3 step 8A item 5). A match is an error unless a fact value in
+# the TARGET ledger contains the matched term. Prices are off by default (CONTRACTS §1), so any price
+# wording is an error until the ledger carries a price fact.
+# Also used by 8B for task.extra_requirements (-> pending_request / 待确认).
+# Each category: code suffix, Chinese label, regex list (Python syntax).
+categories:
+  price:
+    label: 价格或优惠
+    patterns:
+      - '[¥￥]\s*\d+(?:\.\d+)?'
+      - '\d+(?:\.\d+)?\s*(元|块钱|万元|千元)'
+      - '(优惠|补贴|立减|直降|降价|到手价|特价|折扣|打折|\d+\s*折|满减|买赠|赠送|赠品|免费送|低价|仅售|售价|起售|起价|定价|价格|报价)'
+  sales:
+    label: 销量
+    patterns:
+      - '(销量|卖出|热销|爆款|畅销|售出|销售额|卖爆|卖断货|\d+\s*万台)'
+  stock:
+    label: 库存
+    patterns:
+      - '(库存|现货|仅剩|限量|限时|断货|售罄|抢购|手慢无)'
+  award:
+    label: 奖项或认证
+    patterns:
+      - '(荣获|获奖|奖项|大奖|金奖|银奖|认证|榜单|上榜|排行榜|榜首|年度.{0,6}奖|权威认可|推荐奖)'
+  review:
+    label: 用户评价
+    patterns:
+      - '(好评|差评|用户反馈|口碑|评分|用户评价|真实评价|五星|好评率|推荐率|满意度)'
+  benchmark:
+    label: 测试结果
+    patterns:
+      - '(跑分|实测|测试结果|渲染时间|渲染速度|导出时间|导出速度|压缩时间|帧率|fps|FPS|benchmark|Cinebench|Geekbench|3DMark|PCMark)'
+  policy:
+    label: 政策或权益
+    patterns:
+      - '(保修|质保|上门|以旧换新|分期|免息|权益|延保|退换|包换|包退|终身|售后承诺|企业采购价|政企优惠|教育优惠|学生优惠)'
