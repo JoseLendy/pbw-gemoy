@@ -79,3 +79,67 @@ def test_extra_requirement_kept_verbatim():
     t = parse_task("DemoBook 14（演示版），开学，小红书，加上500元补贴", FakeCatalog(), llm=llm)
     assert isinstance(t, Task)
     assert t.extra_requirements == ["加上500元补贴"]
+
+
+# ---------------------------------------------------------------- model vs variant split
+from agent.catalog import Catalog  # noqa: E402
+from agent.intake import check_variant  # noqa: E402
+from tests.fakes import fake_ledger  # noqa: E402
+
+
+def _mb_catalog() -> Catalog:
+    """The real resolver over a synthetic index holding only model names (no KB text)."""
+    def entry(mid, name, folder, route):
+        return {"model_id": mid, "canonical_name": name, "folder_name": folder, "route": route, "images": []}
+    index = {"built_at": "2099-01-01T00:00:00+00:00", "status": "complete", "text_only": [], "catalog_names": [],
+             "models": [entry("matebook-14-harmonyos", "HUAWEI MateBook 14（鸿蒙版）", "MateBook 14 鸿蒙版", "harmonyos"),
+                        entry("matebook-14-2024", "HUAWEI MateBook 14 酷睿 Ultra", "MateBook 14 2024", "windows"),
+                        entry("matebook-d-14-2024", "HUAWEI MateBook D 14 2024", "MateBook D 14 2024", "windows")]}
+    aliases = {"models": {"matebook-14-harmonyos": {"aliases": ["MateBook 14 鸿蒙版"]},
+                          "matebook-14-2024": {"aliases": ["MateBook 14 酷睿 Ultra", "MateBook 14 2024"]}}}
+    return Catalog(index, aliases_cfg=aliases)
+
+
+def test_series_words_in_variant_resolve_the_model():
+    """LLM split "MateBook 14 酷睿 Ultra" into product + variant: query+variant picks the model, variant dropped."""
+    llm = _llm(product_query="MateBook 14", variant="酷睿 Ultra", platform="小红书", scenario="办公")
+    t = parse_task("MateBook 14 酷睿 Ultra 小红书", _mb_catalog(), llm=llm)
+    assert isinstance(t, Task)
+    assert t.model_id == "matebook-14-2024" and t.variant is None
+    assert t.product_query == "MateBook 14 酷睿 Ultra"
+
+
+def test_full_name_in_product_query_resolves():
+    llm = _llm(product_query="MateBook 14 酷睿 Ultra", platform="小红书", scenario="办公")
+    t = parse_task("MateBook 14 酷睿 Ultra 小红书", _mb_catalog(), llm=llm)
+    assert isinstance(t, Task) and t.model_id == "matebook-14-2024" and t.variant is None
+
+
+def test_sku_variant_is_kept():
+    llm = _llm(product_query="MateBook 14 鸿蒙版", variant="32GB", platform="小红书", scenario="办公")
+    t = parse_task("MateBook 14 鸿蒙版 32GB", _mb_catalog(), llm=llm)
+    assert isinstance(t, Task)
+    assert t.model_id == "matebook-14-harmonyos" and t.variant == "32GB"
+    ledger = fake_ledger()                       # memory "16 GB / 32 GB" lists the 32GB configuration
+    assert check_variant(t, ledger) is None and t.variant == "32GB"
+
+
+def test_bare_name_with_unhelpful_variant_still_asks():
+    llm = _llm(product_query="MateBook 14", variant="32GB", platform="小红书", scenario="办公")
+    c = parse_task("MateBook 14 32GB", _mb_catalog(), llm=llm)
+    assert isinstance(c, Clarification) and c.questions[0].slot == "product"
+
+
+def test_variant_matches_ledger_labels_and_options():
+    ledger = fake_ledger()                       # F1 标准版, F2 触控版, F9 "16 GB / 32 GB"
+    for v in ("触控版", "触控", "标准版", "16GB", "32 GB"):
+        t = Task(raw_text="x", variant=v)
+        assert check_variant(t, ledger) is None and t.variant == v, v
+
+
+def test_unknown_variant_dropped_with_note():
+    t = Task(raw_text="x", variant="64GB")
+    note = check_variant(t, fake_ledger())
+    assert t.variant is None
+    assert note == "配置「64GB」未在该型号资料中找到，已按全部配置处理"
+    assert check_variant(Task(raw_text="x"), fake_ledger()) is None

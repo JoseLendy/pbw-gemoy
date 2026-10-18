@@ -188,3 +188,85 @@ def test_auto_reports_fake_fields():
     assert set(d.fake_fields) <= {"catalog", "get_bundle", "build_ledger", "plan_images", "parse_task",
                                   "analyze", "reconcile", "write_post", "rewrite", "run_checks", "llm",
                                   "status"}
+
+
+# ---------------------------------------------------------------- citation auto-fix in the check loop
+def _renumbered_ledger():
+    """The DemoBook ledger with F1 -> F51 and F7 -> F57 (the shape of the live-run case)."""
+    import dataclasses
+    led = F.fake_ledger()
+    ren = {"F1": "F51", "F7": "F57"}
+    led.facts = [dataclasses.replace(f, id=ren.get(f.id, f.id)) for f in led.facts]
+    return led
+
+
+def test_missing_citation_fixed_in_code_without_rewrite(deps):
+    from agent.checks import run_all
+    ledger = _renumbered_ledger()
+    sentence = "重量约 1.25 kg，本地视频播放可达约 14 小时"
+    post = F.fake_post()
+    post.body = [f"重量约 1.25 kg [F51]，本地视频播放可达约 14 小时。", "多屏协同 [F11] 让手机里的课件直接拖到电脑上。"]
+    post.selling_points = ["F51", "F11"]
+
+    class OnceLLM:   # 8A flags the missing F57 once; after the code fix it has nothing to say
+        def __init__(self):
+            self.n8a = 0
+
+        def chat_json(self, system, user, stage="", **kw):
+            if stage == "8A":
+                self.n8a += 1
+                if self.n8a == 1:
+                    return {"issues": [{"field": "body[0]", "sentence": sentence, "code": "uncited_claim",
+                                        "message": "续航未标注编号", "fact_id": "F57"}]}
+            return {"issues": []}
+
+    rewrites = []
+    deps.llm = OnceLLM()
+    deps.run_checks = run_all
+    deps.rewrite = lambda *a, **k: rewrites.append(1) or a[0]
+    task, strategy = F.fake_task(), F.fake_strategy()
+    lines = []
+    new, report, loops = check_loop(post, task, strategy, ledger, {}, F.fake_plan(), deps,
+                                    on_progress=lambda s, m: lines.append(m))
+    assert report.passed, [i.message for i in report.issues if i.severity == "error"]
+    assert loops == 1 and rewrites == []
+    assert new.body[0] == "重量约 1.25 kg [F51]，本地视频播放可达约 14 小时 [F57]。"
+    assert "F57" in new.selling_points
+    assert any("补上 1 处事实编号" in m for m in lines)
+
+
+def test_auto_cite_plus_other_errors_rewrites_only_the_rest(deps):
+    ledger = F.fake_ledger()
+    post = F.fake_post()
+    post.body[0] = "重量约 1.25 kg，放进双肩包不占地方。"
+    cite = CheckIssue("8A", "error", "uncited_claim", "x", "body[0]", "重量约 1.25 kg，放进双肩包不占地方", "F1")
+    other = CheckIssue("8B", "error", "banned_word", "x", "cta", "最")
+    reports = iter([CheckReport([cite, other]), CheckReport()])
+    deps.run_checks = lambda *a, **k: next(reports)
+    got = []
+    deps.rewrite = lambda p, errors, *a, **k: got.append(errors) or p
+    new, report, loops = check_loop(post, F.fake_task(), F.fake_strategy(), ledger, {}, F.fake_plan(), deps)
+    assert report.passed and loops == 1
+    assert got == [[other]] and "[F1]" in new.body[0]
+
+
+# ---------------------------------------------------------------- variant check after the ledger
+def test_unknown_variant_becomes_pending_note(deps):
+    base = deps.parse_task
+
+    def parse(text, catalog, form=None, llm=None):
+        t = base(text, catalog, form, llm)
+        t.variant = "64GB"
+        return t
+    deps.parse_task = parse
+    r = run(TEXT, deps=deps)
+    assert isinstance(r, RunResult) and r.task.variant is None
+    note = "配置「64GB」未在该型号资料中找到，已按全部配置处理"
+    assert note in r.pending
+    r2 = edit(r, "短一点", deps=deps)              # the note survives edits
+    assert note in r2.pending
+
+
+def test_known_variant_kept(deps):
+    r = run(TEXT, form={"variant": "触控版"}, deps=deps)
+    assert isinstance(r, RunResult) and r.task.variant == "触控版" and r.pending == []

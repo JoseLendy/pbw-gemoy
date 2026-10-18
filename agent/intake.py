@@ -6,6 +6,7 @@ The LLM (fast model) only extracts raw phrases. Mapping to keys and resolving th
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Optional
 
 from agent.schemas import (
@@ -30,6 +31,9 @@ SCENARIO_SYNONYMS: dict[str, list[str]] = {
     "new_launch": ["新品", "首发"],
     "holiday": ["送礼", "节日", "双十一", "礼物"],
 }
+
+# Ledger attributes whose listed options are SKU configurations (memory/storage size, colour, keyboard, screen).
+SKU_ATTRIBUTES = {"memory", "storage", "color", "keyboard", "display_type", "touchscreen"}
 
 PLATFORM_CHIPS = ["小红书", "朋友圈", "公众号", "海报"]
 SCENARIO_CHIPS = ["开学季", "职场办公", "内容创作", "家庭换新"]
@@ -74,6 +78,42 @@ def _clean(v) -> Optional[str]:
     return s if s and s.lower() not in ("null", "none") else None
 
 
+def _found(res) -> bool:
+    return res.status in ("resolved", "text_only") and res.model is not None
+
+
+def _norm_variant(s: str) -> str:
+    s = unicodedata.normalize("NFKC", s or "").lower()
+    s = re.sub(r"[\s()（）【】\[\]·,，、/]+", "", s)
+    return re.sub(r"(版|款|配置)$", "", s)
+
+
+def ledger_variants(ledger) -> set[str]:
+    """Normalised SKU configurations of a model: fact variant labels (方键盘, 柔光版 …) plus the options listed
+    under the SKU attributes ("24 GB / 32 GB" -> 24gb, 32gb). Block-local 配置1/配置2 labels are not names."""
+    out = set()
+    for f in ledger.facts:
+        v = (f.variant or "all").strip()
+        if v != "all" and not re.fullmatch(r"配置\d+", v):
+            out.add(_norm_variant(v))
+        if f.attribute in SKU_ATTRIBUTES:
+            out.update(_norm_variant(o) for o in re.split(r"[/／、,，;；|]", f.value))
+    return {v for v in out if len(v) >= 2}
+
+
+def check_variant(task: Task, ledger) -> Optional[str]:
+    """After the ledger is built: keep task.variant only if it matches one of the model's configurations
+    (normalised substring either way). Otherwise drop it and return a 待确认 note."""
+    if not task.variant:
+        return None
+    want = _norm_variant(task.variant)
+    if want and any(want in k or k in want for k in ledger_variants(ledger)):
+        return None
+    note = f"配置「{task.variant}」未在该型号资料中找到，已按全部配置处理"
+    task.variant = None
+    return note
+
+
 def parse_task(text: str, catalog, form: dict | None = None, llm=None) -> Task | Clarification:
     form = form or {}
     if llm is None:
@@ -116,9 +156,19 @@ def parse_task(text: str, catalog, form: dict | None = None, llm=None) -> Task |
 
     questions: list[Question] = []
 
-    # --- product
+    # --- product: the LLM sometimes puts series/OS words (酷睿 Ultra, 鸿蒙版, SE …) into variant.
+    # Resolve query + variant first; if the variant is what picked the model, it was part of the name.
     if product_query:
-        res = catalog.resolve(product_query)
+        res = None
+        if variant:
+            full = catalog.resolve(f"{product_query} {variant}")
+            if _found(full):
+                res = full
+                plain = catalog.resolve(product_query)
+                if not (_found(plain) and plain.model.model_id == full.model.model_id):
+                    task.product_query = f"{product_query} {variant}"
+                    task.variant = None
+        res = res or catalog.resolve(product_query)
         if res.status in ("resolved", "text_only") and res.model:
             task.model_id = res.model.model_id
         elif res.status == "ambiguous":

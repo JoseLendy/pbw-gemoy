@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent.checks.compliance import check_compliance
+from agent.checks.compliance import boundary_phrases, check_compliance
 from agent.checks import load_lines
 from tests.fakes import FakeLLM, fake_ledger, fake_plan, fake_post, fake_task
 
@@ -116,14 +116,62 @@ def test_fake_experience_only_on_xhs():
 
 
 # ------------------------------------------------------------------ boundaries
-def test_boundary_hint_warns():
+def test_boundary_phrase_warns():
     ledger = fake_ledger()
-    ledger.boundaries = [{"category": "续航", "text": "不要承诺全天续航", "source_title": "卖点与限制.md"}]
-    r = issues(fake_post(), ledger=ledger)
-    assert "boundary_violation" not in codes(r)
+    ledger.boundaries = [{"category": "battery", "text": "续航为实验室数据，不得承诺“全天不用充电”。",
+                          "source_title": "卖点与限制.md"}]
+    assert "boundary_violation" not in codes(issues(fake_post(), ledger=ledger))
     p = fake_post()
-    p.body[0] = "不要承诺全天续航之外的话，重量约 1.25 kg [F1]"   # token overlap -> warn
-    assert "boundary_violation" in codes(issues(p, ledger=ledger), "warn")
+    p.body[1] = "续航可达约 14 小时 [F7]，全天不用充电。"
+    r = issues(p, ledger=ledger)
+    hit = [i for i in r.issues if i.code == "boundary_violation"]
+    assert len(hit) == 1 and hit[0].severity == "warn" and hit[0].span == "全天不用充电"
+    assert "待确认" not in hit[0].message
+
+
+@pytest.mark.parametrize("text,phrases", [
+    ("表达边界：不要写成支持所有显示器。", ["支持所有显示器"]),
+    ("表达边界：不要写成\"最轻\"，不要与其他品牌比较重量。", ["最轻"]),
+    ("不要写：\"全网最轻的笔记本。\"", ["全网最轻的笔记本"]),
+    ("避免使用“秒开”这类说法", ["秒开"]),
+    ("圆角屏按标准矩形测量，14.2 英寸为标准矩形对角线长度。", []),
+    ("USB-C 接口支持充电与数据传输，HDMI 接口最高支持 4K 输出。", []),
+])
+def test_boundary_phrases_only_from_forbid_lines(text, phrases):
+    assert boundary_phrases(text) == phrases
+
+
+def test_correct_post_has_no_boundary_noise():
+    """Boundary lines that merely mention 14.2 英寸 / USB-C / HDMI must not flag a post that uses those terms."""
+    ledger = fake_ledger()
+    ledger.boundaries = [
+        {"category": "display", "text": "圆角屏按标准矩形测量，14.2 英寸为标准矩形对角线长度，实际可视区域略小。",
+         "source_title": "产品事实.md"},
+        {"category": "ports", "text": "USB-C 接口支持充电与数据传输，HDMI 接口外接显示器时以实际设备为准。",
+         "source_title": "产品事实.md"},
+        {"category": "ports", "text": "表达边界：不要写成支持所有显示器。", "source_title": "卖点与限制.md"},
+    ]
+    p = fake_post()
+    p.body = ["14.2 英寸屏幕 [F3]，看课件更舒服。",
+              "2 个 USB-C 接口 [F10]，外接 HDMI 扩展坞也方便。"]
+    assert [i for i in issues(p, ledger=ledger).issues if i.code == "boundary_violation"] == []
+
+
+def test_boundaries_reach_8b_llm_prompt():
+    ledger = fake_ledger()
+    ledger.boundaries = [{"category": "portability", "text": "不要写成“最轻”", "source_title": "卖点与限制.md"},
+                         {"category": "security", "text": "不得承诺数据绝对安全", "source_title": "卖点与限制.md"}]
+    seen = {}
+
+    class Spy:
+        def chat_json(self, system, user, stage="", **kw):
+            seen[stage] = (system, user)
+            return {"issues": []}
+    check_compliance(fake_post(), ledger, fake_task(), llm=Spy())
+    system, user = seen["8B"]
+    assert "<boundaries>" in user and "不要写成“最轻”" in user       # F1 is portability -> relevant
+    assert "数据绝对安全" not in user                                   # no cited security fact
+    assert "表达边界" in system
 
 
 # ------------------------------------------------------------------ LLM layer

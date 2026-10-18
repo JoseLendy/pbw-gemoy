@@ -65,18 +65,24 @@
 .skin-douyin .tags { color: #fff; font-weight: 600; }
 .skin-douyin .src { color: #333; }
 
-/* talk card + banners (outside the phone) */
-.hw-talk { background: #fff8e1; border: 1px solid #ffe082; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+/* talk card + banners (outside the phone). Light cards always carry dark text, in light AND dark mode:
+   the Gradio dark theme recolours h4/li/b, so every descendant is pinned with !important. */
+.hw-talk { background: #FAEEDA !important; border: 1px solid #FAC775; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+.hw-talk, .hw-talk * { color: #412402 !important; }
 .hw-talk h4 { margin: 0 0 6px; font-size: 14px; }
 .hw-talk ol { margin: 0; padding-left: 20px; }
 .hw-banner { border-radius: 10px; padding: 10px 14px; margin: 8px 0; font-size: 14px; }
-.hw-banner.ok { background: #e8f5e9; border: 1px solid #81c784; color: #1b5e20; }
-.hw-banner.warn { background: #fff3e0; border: 1px solid #ffb74d; color: #e65100; }
-.hw-banner.err { background: #ffebee; border: 1px solid #e57373; color: #b71c1c; }
+.hw-banner.ok { background: #EAF3DE !important; border: 1px solid #97C459; }
+.hw-banner.ok, .hw-banner.ok * { color: #27500A !important; }
+.hw-banner.warn, .hw-banner.note { background: #FAEEDA !important; border: 1px solid #EF9F27; }
+.hw-banner.warn, .hw-banner.warn *, .hw-banner.note, .hw-banner.note * { color: #633806 !important; }
+.hw-banner.err { background: #FCEBEB !important; border: 1px solid #F09595; }
+.hw-banner.err, .hw-banner.err * { color: #791F1F !important; }
 .hw-banner ul { margin: 6px 0 0; padding-left: 18px; }
 .hw-status { font-size: 13px; color: #555; display: flex; flex-wrap: wrap; gap: 14px; padding: 6px 0; }
 .hw-status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
 .hw-status .on { background: #43a047; } .hw-status .off { background: #e53935; } .hw-status .mid { background: #fb8c00; }
-.hw-dev { background: #ede7f6; color: #4527a0; border-radius: 6px; padding: 4px 10px; font-size: 12px; }
-.hw-stop { background: #fff; border: 2px solid #e53935; border-radius: 10px; padding: 14px; }
+.hw-dev { background: #ede7f6; color: #4527a0 !important; border-radius: 6px; padding: 4px 10px; font-size: 12px; }
+.hw-stop { background: #FCEBEB !important; border: 2px solid #F09595; border-radius: 10px; padding: 14px; }
+.hw-stop, .hw-stop * { color: #791F1F !important; }
 .hw-progress { font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; color: #444; }

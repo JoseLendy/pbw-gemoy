@@ -15,6 +15,8 @@ Issue codes (stage "8A"):
   unsupported_claim    (LLM) cited fact does not support the sentence                               error
   uncited_claim        (LLM) spec-like claim with no [F#] tag                                       error
   llm_check_skipped    (LLM) the LLM layer failed; code checks still ran                            warn
+
+auto_cite(post, issues, ledger) appends a missing [F#] in code when an LLM issue names a target fact id.
 """
 from __future__ import annotations
 
@@ -301,6 +303,73 @@ def _llm_layer(post: Post, ledger: Ledger, llm) -> list[CheckIssue]:
         msg = it.get("message") or ("无编号的参数化表述" if code == "uncited_claim" else "引用的事实不支持该表述")
         issues.append(_issue(code, msg, it.get("field", ""), it.get("sentence", ""), it.get("fact_id", "")))
     return issues
+
+
+# ------------------------------------------------------------------ citation auto-fix (code, no LLM)
+_SENT_PIECE_RE = re.compile(r"[^。！？!?；;\n]+[。！？!?；;\n]*")
+_FACT_ID_RE = re.compile(r"F\d+")
+_FIELD_RE = re.compile(r"^(title|intro|cta)$|^body\[(\d+)\]$")
+
+
+def _get_field(post: Post, field: str) -> str | None:
+    m = _FIELD_RE.match(field or "")
+    if not m:
+        return None
+    if m.group(1):
+        return getattr(post, m.group(1))
+    k = int(m.group(2))
+    return post.body[k] if k < len(post.body) else None
+
+
+def _set_field(post: Post, field: str, text: str) -> None:
+    m = _FIELD_RE.match(field)
+    if m.group(1):
+        setattr(post, m.group(1), text)
+    else:
+        post.body[int(m.group(2))] = text
+
+
+def _cite_in(text: str, sentence: str, fid: str) -> str | None:
+    """Append [fid] to the sentence of `text` that matches `sentence`; None if not found or already cited."""
+    want = _norm(FACT_TAG_RE.sub("", sentence)).rstrip("。！？!?；;")
+    if not want:
+        return None
+    for m in _SENT_PIECE_RE.finditer(text):
+        piece = m.group(0)
+        have = _norm(FACT_TAG_RE.sub("", piece)).rstrip("。！？!?；;")
+        if not have or not (want in have or (have in want and len(have) * 2 >= len(want))):
+            continue
+        if fid in FACT_TAG_RE.findall(piece):
+            return None
+        body = piece.rstrip("。！？!?；;\n")
+        return text[:m.start()] + f"{body.rstrip()} [{fid}]" + piece[len(body):] + text[m.end():]
+    return None
+
+
+def auto_cite(post: Post, issues: list[CheckIssue], ledger: Ledger) -> tuple[Post, list[CheckIssue]]:
+    """Fix missing citations in code: an LLM 8A issue that names a fact id of the TARGET ledger, on a sentence
+    that does not carry that tag, gets [Fxx] appended to the sentence. Returns (post, issues fixed)."""
+    import copy
+    new, fixed = copy.deepcopy(post), []
+    for i in issues:
+        if i.stage != STAGE or i.code not in ("unsupported_claim", "uncited_claim") or not i.span:
+            continue
+        fids = [f for f in _FACT_ID_RE.findall(i.fact_id or "") if ledger.get(f) is not None]
+        fields = [i.field] if _get_field(new, i.field) is not None else \
+            [f for f, _ in _fields(new) if _get_field(new, f) is not None]
+        done = False
+        for fid in fids:
+            for field in fields:
+                out = _cite_in(_get_field(new, field), i.span, fid)
+                if out is not None:
+                    _set_field(new, field, out)
+                    if fid not in new.selling_points:
+                        new.selling_points.append(fid)
+                    done = True
+                    break
+        if done:
+            fixed.append(i)
+    return new, fixed
 
 
 # ------------------------------------------------------------------ entry point

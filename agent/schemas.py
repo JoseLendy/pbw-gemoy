@@ -68,6 +68,7 @@ class Task:
     scenario: Optional[str] = None          # a Scenario key
     platform: Optional[str] = None          # a Platform key
     extra_requirements: list[str] = field(default_factory=list)  # e.g. "加上500元补贴" (checks decide)
+    notes: list[str] = field(default_factory=list)  # 待确认 lines from intake (e.g. a variant not in the KB)
     to_dict = _d
 
 

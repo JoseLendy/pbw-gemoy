@@ -256,18 +256,21 @@ def talk_card_html(r: RunResult) -> str:
 
 def banner_html(r: RunResult) -> str:
     errs = [i for i in r.report.issues if i.severity == "error"]
-    warns = [i for i in r.report.issues if i.severity == "warn"]
-    if r.report.passed and not r.pending:
-        return ('<div class="hw-banner ok">✅ 已核验：所有产品事实均来自知识库台账，图片属于目标型号，未发现合规问题。'
-                f'（{len(r.post.selling_points)} 个事实点 · {len(r.post.images)} 张图 · 改写 {r.loops} 轮）</div>')
+    shown = set(r.pending)
+    notes = [i for i in r.report.issues if i.severity == "warn" and i.message not in shown]
     out = []
+    if r.report.passed and not r.pending:
+        out.append('<div class="hw-banner ok">✅ 已核验：所有产品事实均来自知识库台账，图片属于目标型号，未发现合规问题。'
+                   f'（{len(r.post.selling_points)} 个事实点 · {len(r.post.images)} 张图 · 改写 {r.loops} 轮）</div>')
     if errs:
         li = "".join(f"<li>{html.escape(i.message)}" + (f"：「{html.escape(i.span)}」" if i.span else "") + "</li>" for i in errs)
         out.append(f'<div class="hw-banner err">❌ {len(errs)} 处未通过核验（已标红，请人工处理）<ul>{li}</ul></div>')
-    if warns or r.pending:
-        li = "".join(f"<li>{html.escape(i.message)}</li>" for i in warns) + \
-             "".join(f"<li>{html.escape(p)}</li>" for p in r.pending)
+    if r.pending:
+        li = "".join(f"<li>{html.escape(p)}</li>" for p in r.pending)
         out.append(f'<div class="hw-banner warn">⚠️ 待确认<ul>{li}</ul></div>')
+    if notes:  # warnings (e.g. 表达边界) are 核验提示, not 待确认 lines
+        li = "".join(f"<li>{html.escape(i.message)}</li>" for i in notes)
+        out.append(f'<div class="hw-banner note">ℹ️ 核验提示<ul>{li}</ul></div>')
     return "".join(out)
 
 

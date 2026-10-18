@@ -169,15 +169,17 @@ def _say(on_progress: Progress, stage: str, message: str):
             log.exception("on_progress failed")
 
 
-def _collect_pending(strategy: Strategy, plan: ImagePlan, report: CheckReport) -> list[str]:
+def _collect_pending(strategy: Strategy, plan: ImagePlan, report: CheckReport,
+                     task: Task | None = None) -> list[str]:
     pending: list[str] = []
+    pending.extend(getattr(task, "notes", None) or [])
     pending.extend(strategy.pending or [])
     if plan.shortage and plan.note:
         pending.append(plan.note)
     for i in report.issues:
         if i.severity == "error":
             pending.append(f"未通过核验：{i.message}" + (f"（{i.span}）" if i.span else ""))
-        elif i.code == "pending_request" or "待确认" in i.message:
+        elif i.code == "pending_request" or ("待确认" in i.message and i.code != "boundary_violation"):
             pending.append(i.message)
     seen, out = set(), []
     for p in pending:
@@ -199,6 +201,26 @@ def _sibling_ledgers(deps: Deps, model, on_progress: Progress) -> dict[str, Ledg
     return out
 
 
+def _check_variant(task: Task, ledger: Ledger) -> Optional[str]:
+    """Drop a variant the model's ledger does not know (agent.intake.check_variant); returns the 待确认 note."""
+    from agent.intake import check_variant
+    try:
+        return check_variant(task, ledger)
+    except Exception as e:  # a malformed ledger must not stop the run
+        log.warning("variant check failed: %s", e)
+        return None
+
+
+def _auto_cite(post: Post, errors: list, ledger: Ledger) -> tuple[Post, list]:
+    """Missing [F#] named by the 8A LLM layer: fixed in code (agent.checks.facts.auto_cite), no rewrite."""
+    try:
+        from agent.checks.facts import auto_cite
+        return auto_cite(post, errors, ledger)
+    except Exception as e:
+        log.warning("auto-cite failed: %s", e)
+        return post, []
+
+
 # ---------------------------------------------------------------- the check loop (step 8)
 def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibling_ledgers: dict,
                plan: ImagePlan, deps: Deps, on_progress: Progress = None) -> tuple[Post, CheckReport, int]:
@@ -208,8 +230,14 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
     n_facts = len(post.selling_points)
     while not report.passed and loops < MAX_LOOPS:
         errors = [i for i in report.issues if i.severity == "error"]
-        _say(on_progress, "check", f"发现 {len(errors)} 处问题，定向改写（第 {loops + 1} 轮）…")
-        post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
+        post, fixed = _auto_cite(post, errors, ledger)
+        if fixed:
+            log.info("auto-cited %d sentence(s): %s", len(fixed), ", ".join(f"{i.field}+{i.fact_id}" for i in fixed))
+            _say(on_progress, "check", f"补上 {len(fixed)} 处事实编号（{'、'.join(i.fact_id for i in fixed)}）")
+            errors = [i for i in errors if i not in fixed]
+        if errors:
+            _say(on_progress, "check", f"发现 {len(errors)} 处问题，定向改写（第 {loops + 1} 轮）…")
+            post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
         loops += 1
         report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
     if report.passed:
@@ -240,7 +268,7 @@ def _from_write(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_
     _say(on_progress, "check", f"核验 {len(post.selling_points)} 个事实点…")
     post, report, loops = check_loop(post, task, strategy, ledger, sibling_ledgers, plan, deps, on_progress)
     timer.lap("check")
-    pending = _collect_pending(strategy, plan, report)
+    pending = _collect_pending(strategy, plan, report, task)
     result = RunResult(task=task, model=model, strategy=strategy, ledger=ledger, plan=plan, post=post,
                        report=report, pending=pending, sources=list(bundle.sources), timings=timer.total(),
                        loops=loops)
@@ -289,6 +317,10 @@ def run(text: str, form: dict | None = None, deps: Deps | None = None,
     ledger = deps.build_ledger(bundle, deps.llm)
     _say(on_progress, "ledger", f"台账 {len(ledger.facts)} 条事实" +
          (f"，{len(ledger.conflicts)} 处冲突" if ledger.conflicts else ""))
+    note = _check_variant(task, ledger)
+    if note:
+        task.notes = [*task.notes, note]
+        _say(on_progress, "ledger", note)
     sibling_ledgers = _sibling_ledgers(deps, model, on_progress)
     timer.lap("ledger")
     return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)

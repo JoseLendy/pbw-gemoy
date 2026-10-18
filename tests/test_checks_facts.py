@@ -201,3 +201,41 @@ def test_strip_fact_tags_multiple_ids_in_one_sentence():
     clean, pairs = strip_fact_tags("接口 [F10][F11]")
     assert clean.strip() == "接口"
     assert [p[1] for p in pairs] == ["F10", "F11"]
+
+
+# ------------------------------------------------------------------ citation auto-fix
+from agent.checks.facts import auto_cite  # noqa: E402
+from agent.schemas import CheckIssue  # noqa: E402
+
+
+def _llm_issue(code, field, sentence, fid):
+    return CheckIssue(stage="8A", severity="error", code=code, message="x", field=field, span=sentence, fact_id=fid)
+
+
+def test_auto_cite_appends_missing_tag():
+    p = fake_post()
+    p.body[0] = "重量约 1.25 kg [F1]，本地视频播放可达约 14 小时。还有别的。"
+    new, fixed = auto_cite(p, [_llm_issue("uncited_claim", "body[0]", "重量约 1.25 kg，本地视频播放可达约 14 小时", "F7")],
+                           fake_ledger())
+    assert len(fixed) == 1
+    assert new.body[0] == "重量约 1.25 kg [F1]，本地视频播放可达约 14 小时 [F7]。还有别的。"
+    assert p.body[0].count("[F7]") == 0                 # input not mutated
+
+
+def test_auto_cite_skips_unknown_or_present_ids():
+    p = fake_post()
+    led = fake_ledger()
+    issues_ = [_llm_issue("unsupported_claim", "body[0]", p.body[0], "F1"),     # already cited -> needs rewrite
+               _llm_issue("uncited_claim", "body[1]", p.body[1], "F99"),        # not in the target ledger
+               _llm_issue("uncited_claim", "body[1]", p.body[1], ""),           # no id named
+               CheckIssue(stage="8B", severity="error", code="false_promise", message="x", field="body[1]",
+                          span=p.body[1], fact_id="F7")]
+    new, fixed = auto_cite(p, issues_, led)
+    assert fixed == [] and new.body == p.body
+
+
+def test_auto_cite_finds_field_when_llm_omits_it():
+    p = fake_post()
+    p.intro = "宿舍、教室来回跑，多屏协同让课件直接拖到电脑上。"
+    new, fixed = auto_cite(p, [_llm_issue("uncited_claim", "", "多屏协同让课件直接拖到电脑上", "F11")], fake_ledger())
+    assert fixed and new.intro.endswith("拖到电脑上 [F11]。")
