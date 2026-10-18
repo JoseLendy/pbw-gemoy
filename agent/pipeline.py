@@ -84,7 +84,7 @@ class Deps:
         checks = importlib.import_module("agent.checks")
         llm_mod = importlib.import_module("agent.llm")
         wrapper = importlib.import_module("agent.ima_wrapper")
-        client = wrapper.ImaClient()
+        client = wrapper.make_client()
         return cls(
             catalog=catalog_mod.load_catalog(client), get_bundle=retrieval.get_model_bundle,
             build_ledger=ledger.build_ledger, plan_images=platform_plan.plan_images,
@@ -110,7 +110,7 @@ class Deps:
         client = None
         try:
             wrapper = importlib.import_module("agent.ima_wrapper")
-            client = wrapper.ImaClient()
+            client = wrapper.make_client()
             d.status = client.status
             fake_fields.remove("status")
         except Exception as e:
