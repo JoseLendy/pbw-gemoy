@@ -201,7 +201,7 @@ def _sibling_ledgers(deps: Deps, model, on_progress: Progress) -> dict[str, Ledg
 
 # ---------------------------------------------------------------- the check loop (step 8)
 def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibling_ledgers: dict,
-               plan: ImagePlan, deps: Deps, on_progress: Progress = None) -> tuple[Post, CheckReport, int]:
+               plan: ImagePlan, deps: Deps, on_progress: Progress = None, on_post=None) -> tuple[Post, CheckReport, int]:
     """run_checks → if errors and loops < MAX_LOOPS: rewrite → run_checks again."""
     loops = 0
     report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
@@ -210,6 +210,8 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
         errors = [i for i in report.issues if i.severity == "error"]
         _say(on_progress, "check", f"发现 {len(errors)} 处问题，定向改写（第 {loops + 1} 轮）…")
         post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
+        if on_post:
+            on_post("revision", post)
         loops += 1
         report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
     if report.passed:
@@ -223,22 +225,24 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
 
 # ---------------------------------------------------------------- the stages 6 → 9 (shared by run and edit)
 def _from_plan(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
-               strategy: Strategy, deps: Deps, on_progress: Progress, timer: _Timer) -> RunResult:
+               strategy: Strategy, deps: Deps, on_progress: Progress, timer: _Timer, on_post=None) -> RunResult:
     _say(on_progress, "plan", f"规划 {PLATFORM_LABELS.get(task.platform, task.platform)} 版式…")
     plan = deps.plan_images(bundle, task.platform, strategy)
     timer.lap("plan")
     _say(on_progress, "plan", f"匹配到 {len(plan.items)} 张图片" + ("（不足，已标记待确认）" if plan.shortage else ""))
-    return _from_write(task, model, bundle, ledger, sibling_ledgers, strategy, plan, deps, on_progress, timer)
+    return _from_write(task, model, bundle, ledger, sibling_ledgers, strategy, plan, deps, on_progress, timer, on_post)
 
 
 def _from_write(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
                 strategy: Strategy, plan: ImagePlan, deps: Deps, on_progress: Progress,
-                timer: _Timer) -> RunResult:
+                timer: _Timer, on_post=None) -> RunResult:
     _say(on_progress, "write", "撰写软文…")
     post = deps.write_post(task, strategy, ledger, plan, deps.llm)
+    if on_post:
+        on_post("draft", post)
     timer.lap("write")
     _say(on_progress, "check", f"核验 {len(post.selling_points)} 个事实点…")
-    post, report, loops = check_loop(post, task, strategy, ledger, sibling_ledgers, plan, deps, on_progress)
+    post, report, loops = check_loop(post, task, strategy, ledger, sibling_ledgers, plan, deps, on_progress, on_post)
     timer.lap("check")
     pending = _collect_pending(strategy, plan, report)
     result = RunResult(task=task, model=model, strategy=strategy, ledger=ledger, plan=plan, post=post,
@@ -248,7 +252,7 @@ def _from_write(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_
 
 
 def _from_reconcile(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
-                    analysis, deps: Deps, on_progress: Progress, timer: _Timer):
+                    analysis, deps: Deps, on_progress: Progress, timer: _Timer, on_post=None):
     _say(on_progress, "reconcile", "对照知识库事实确定卖点…")
     strategy = deps.reconcile(task, analysis, ledger, model, deps.llm)
     timer.lap("reconcile")
@@ -256,20 +260,20 @@ def _from_reconcile(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibl
         _say(on_progress, "reconcile", "资料冲突，已停止输出，需人工确认")
         return strategy
     _say(on_progress, "reconcile", f"卖点：{'、'.join(sp.fact_id for sp in strategy.selling_points)}")
-    return _from_plan(task, model, bundle, ledger, sibling_ledgers, strategy, deps, on_progress, timer)
+    return _from_plan(task, model, bundle, ledger, sibling_ledgers, strategy, deps, on_progress, timer, on_post)
 
 
 def _from_analyze(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
-                  deps: Deps, on_progress: Progress, timer: _Timer):
+                  deps: Deps, on_progress: Progress, timer: _Timer, on_post=None):
     _say(on_progress, "analyze", f"分析{SCENARIO_LABELS.get(task.scenario, task.scenario or '')}场景…")
     analysis = deps.analyze(task, deps.llm)
     timer.lap("analyze")
-    return _from_reconcile(task, model, bundle, ledger, sibling_ledgers, analysis, deps, on_progress, timer)
+    return _from_reconcile(task, model, bundle, ledger, sibling_ledgers, analysis, deps, on_progress, timer, on_post)
 
 
 # ---------------------------------------------------------------- run
 def run(text: str, form: dict | None = None, deps: Deps | None = None,
-        on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman:
+        on_progress: Progress = None, on_post=None) -> RunResult | Clarification | NeedsHuman:
     deps = deps or default_deps()
     timer = _Timer()
     _say(on_progress, "intake", "理解需求、匹配型号…")
@@ -291,7 +295,7 @@ def run(text: str, form: dict | None = None, deps: Deps | None = None,
          (f"，{len(ledger.conflicts)} 处冲突" if ledger.conflicts else ""))
     sibling_ledgers = _sibling_ledgers(deps, model, on_progress)
     timer.lap("ledger")
-    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
+    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer, on_post)
 
 
 # ---------------------------------------------------------------- edit
@@ -330,7 +334,7 @@ def classify_edit(instruction: str, llm=None) -> tuple[str, dict]:
 
 
 def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
-         on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman:
+         on_progress: Progress = None, on_post=None) -> RunResult | Clarification | NeedsHuman:
     """Quick edit. Ledger and bundle are reused; never refetched. Every path ends in the check loop."""
     deps = deps or default_deps()
     timer = _Timer()
@@ -344,17 +348,17 @@ def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
     _say(on_progress, "edit", f"编辑：{instruction}（从{stage_label}重跑）")
     if stage == "platform":
         task.platform = params["platform"]
-        return _from_plan(task, model, bundle, ledger, sibling_ledgers, prev.strategy, deps, on_progress, timer)
+        return _from_plan(task, model, bundle, ledger, sibling_ledgers, prev.strategy, deps, on_progress, timer, on_post)
     task.extra_requirements = [*task.extra_requirements, params["requirement"]]
     if stage == "writer":
         return _from_write(task, model, bundle, ledger, sibling_ledgers, prev.strategy, prev.plan, deps,
-                           on_progress, timer)
+                           on_progress, timer, on_post)
     if stage == "reconcile":
         return _from_reconcile(task, model, bundle, ledger, sibling_ledgers, prev.strategy.analysis, deps,
-                               on_progress, timer)
+                               on_progress, timer, on_post)
     if params.get("scenario"):
         task.scenario = params["scenario"]
-    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
+    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer, on_post)
 
 
 def _bundle_from_result(prev: RunResult) -> ModelBundle:

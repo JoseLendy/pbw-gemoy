@@ -92,6 +92,11 @@ def _as_str(v) -> str:
     return v.strip() if isinstance(v, str) else ""
 
 
+def _no_dash(text: str) -> str:
+    """8C forbids em-dashes; normalize them to commas so the check never has to loop on it."""
+    return text.replace("——", "，").replace("—", "，")
+
+
 def _clean_images(raw, plan: ImagePlan) -> list[PostImage]:
     by_id = {p.image.media_id: p for p in plan.items}
     out: list[PostImage] = []
@@ -112,10 +117,10 @@ def _clean_fields(data: dict, ledger: Ledger, plan: ImagePlan, allowed_ids: set[
     out: dict = {}
     for k in ("title", "intro", "cta"):
         if k in data:
-            out[k] = _strip_bad_tags(_as_str(data[k]), allowed_ids)
+            out[k] = _no_dash(_strip_bad_tags(_as_str(data[k]), allowed_ids))
     if "body" in data:
         body = data["body"] if isinstance(data["body"], list) else [data["body"]]
-        out["body"] = [s for s in (_strip_bad_tags(_as_str(p), allowed_ids) for p in body) if s]
+        out["body"] = [s for s in (_no_dash(_strip_bad_tags(_as_str(p), allowed_ids)) for p in body) if s]
     if "tags" in data:
         tags = data["tags"] if isinstance(data["tags"], list) else [data["tags"]]
         out["tags"] = [t.strip().lstrip("#") for t in tags if isinstance(t, str) and t.strip()]

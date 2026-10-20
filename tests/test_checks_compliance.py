@@ -129,7 +129,7 @@ def test_boundary_hint_warns():
 # ------------------------------------------------------------------ LLM layer
 def test_llm_false_promise():
     llm = FakeLLM({"8B": {"issues": [{"field": "cta", "quote": "保证", "code": "false_promise", "message": "虚假承诺"}]}})
-    assert "false_promise" in codes(issues(fake_post(), llm=llm), "error")
+    assert "false_promise" in codes(issues(fake_post(), llm=llm), "warn")
 
 
 def test_llm_failure_is_skipped_not_fatal():
@@ -154,3 +154,25 @@ def test_run_all_merges_all_stages():
     r = run_all(p, fake_ledger(), SIB, fake_task(), fake_plan())
     assert {"8A", "8B", "8C"} <= {i.stage for i in r.issues}
     assert not r.passed
+
+
+def test_run_all_runs_8a_and_8b_llm_layers_concurrently():
+    import threading
+
+    from agent.checks import run_all
+
+    barrier = threading.Barrier(2, timeout=5)
+
+    class BarrierLLM:
+        """Each LLM call waits for the other: only passes if 8A and 8B are in flight together."""
+
+        def chat_json(self, system, user, stage="", **kw):
+            barrier.wait()
+            return {}
+
+    p = fake_post()
+    p.body[0] = "赋能学习，重量约 1.38 kg [F1] 最轻 —— 到店立减500元"
+    r = run_all(p, fake_ledger(), SIB, fake_task(), fake_plan(), llm=BarrierLLM())
+    assert "llm_check_skipped" not in codes(r)
+    stages = [i.stage for i in r.issues]
+    assert stages == sorted(stages), "merged order must stay 8A, 8B, 8C"

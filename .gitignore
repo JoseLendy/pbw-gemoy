@@ -23,3 +23,7 @@ __MACOSX/
 
 # archives (ima-skill/ itself IS committed, unmodified, per WORKFLOW v4)
 *.zip
+
+# frontend (node_modules and build output are generated)
+frontend/node_modules/
+frontend/dist/

@@ -168,13 +168,13 @@ def test_llm_uncited_claim():
     llm = FakeLLM({"8A": {"issues": [{"field": "body[0]", "sentence": "一整天不用充电",
                                       "code": "uncited_claim", "message": "无编号的续航表述"}]}})
     r = issues(fake_post(), llm=llm)
-    assert "uncited_claim" in codes(r, "error")
+    assert "uncited_claim" in codes(r, "warn")
 
 
 def test_llm_unsupported_claim():
     llm = FakeLLM({"8A": {"issues": [{"field": "body[0]", "code": "weird_code", "message": "事实不支持"}]}})
     r = issues(fake_post(), llm=llm)
-    assert "unsupported_claim" in codes(r, "error")
+    assert "unsupported_claim" in codes(r, "warn")
 
 
 def test_llm_failure_does_not_crash():

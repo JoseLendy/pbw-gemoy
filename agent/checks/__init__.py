@@ -8,6 +8,7 @@ All checks run without an LLM (llm=None); the LLM layers are optional extras.
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
 
@@ -60,15 +61,24 @@ def load_yaml(name: str) -> dict:
 
 def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task: Task,
             plan: ImagePlan, llm=None) -> CheckReport:
-    """8A → 8B → 8C, merged into one report (8C last because stripping in 8A/8B can break structure)."""
+    """8A → 8B → 8C, merged into one report (8C last because stripping in 8A/8B can break structure).
+
+    With an LLM, 8A and 8B are independent and run concurrently; the merged order is unchanged."""
     from agent.checks.compliance import check_compliance
     from agent.checks.conformance import check_conformance
     from agent.checks.facts import check_facts
 
     variant = getattr(task, "variant", None)
     platform = post.platform or getattr(task, "platform", None) or plan.platform
-    report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=llm)
-    report = report.merge(check_compliance(post, ledger, task, llm=llm))
+    if llm is None:
+        facts_report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=None)
+        compliance_report = check_compliance(post, ledger, task, llm=None)
+    else:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            facts_future = pool.submit(check_facts, post, ledger, sibling_ledgers or {}, variant=variant, llm=llm)
+            compliance_future = pool.submit(check_compliance, post, ledger, task, llm=llm)
+            facts_report, compliance_report = facts_future.result(), compliance_future.result()
+    report = facts_report.merge(compliance_report)
     report = report.merge(check_conformance(post, platform, plan))
     return report
 

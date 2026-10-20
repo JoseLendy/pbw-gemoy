@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -120,6 +121,7 @@ class LLM:
             raise LLMConfigError("缺少依赖 openai，请执行 pip install -r requirements.txt") from e
         self._client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
         self.timings: dict[str, float] = {}
+        self._lock = threading.Lock()        # 8A and 8B record timings from two threads
         self.calls: list[dict] = []          # {"stage", "model", "seconds", "ok", "json_retries"}; never content
         self._json_mode_ok: dict[str, bool] = {}   # per model: does response_format work?
 
@@ -133,9 +135,10 @@ class LLM:
 
     def _record(self, stage: str, model: str, t0: float, ok: bool, retries: int = 0) -> None:
         dt = time.perf_counter() - t0
-        self.timings[stage or "unnamed"] = self.timings.get(stage or "unnamed", 0.0) + dt
-        self.calls.append({"stage": stage, "model": model, "seconds": round(dt, 3), "ok": ok,
-                           "json_retries": retries})
+        with self._lock:
+            self.timings[stage or "unnamed"] = self.timings.get(stage or "unnamed", 0.0) + dt
+            self.calls.append({"stage": stage, "model": model, "seconds": round(dt, 3), "ok": ok,
+                               "json_retries": retries})
 
     def _complete(self, messages: list[dict], model: str, temperature: float,
                   json_mode: bool, **kw: Any) -> str:
