@@ -10,6 +10,10 @@ Env: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL (strong), LLM_MODEL_FAST (fast).
   WRITER_TEMPERATURE (default 0.85) writer / rewrite / baseline
   CHECK_TEMPERATURE (default 0)  8A / 8B / 8C / 8D / 8E and any judge stage
 - Per-stage timings are accumulated in self.timings (seconds, summed per stage name).
+- Hard wall-clock deadline per HTTP attempt: LLM_CALL_DEADLINE seconds (default 120). The SDK/httpx
+  timeout is per socket read, so an endpoint that keeps a response alive by trickling bytes never
+  trips it (2026-10-23: four single calls ran ~3600 s). An attempt past the deadline is abandoned
+  and raised as openai.APITimeoutError, so it is retried and then fails exactly like a timeout.
 - Never logs or prints keys. Missing env raises LLMConfigError with a message the UI can show.
 """
 from __future__ import annotations
@@ -18,6 +22,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -35,6 +40,22 @@ DEFAULT_CHECK_TEMPERATURE = 0.0
 JSON_RETRIES = 2
 RATE_RETRIES = 2            # 429 / timeout / 5xx: retried with backoff, each retry logged
 RATE_BACKOFF = (2.0, 6.0)   # seconds before retry 1, 2
+DEFAULT_CALL_DEADLINE = 120.0   # s, hard wall-clock cap on ONE HTTP attempt (healthy calls take < 40 s)
+
+
+def call_deadline() -> float:
+    """LLM_CALL_DEADLINE in seconds (> 0); a missing, bad or non-positive value gives the default."""
+    raw = (os.environ.get("LLM_CALL_DEADLINE") or "").strip()
+    if not raw:
+        return DEFAULT_CALL_DEADLINE
+    try:
+        v = float(raw)
+    except ValueError:
+        v = -1.0
+    if not v > 0:
+        log.warning("LLM_CALL_DEADLINE=%r is not a positive number, using %s", raw, DEFAULT_CALL_DEADLINE)
+        return DEFAULT_CALL_DEADLINE
+    return v
 
 
 def _env_temperature(name: str, default: float) -> float:
@@ -92,10 +113,13 @@ def load_prompt(name: str) -> str:
 
 
 def _load_env() -> None:
-    """Load .env if python-dotenv is available. Never reads or prints the values itself."""
+    """Load the repo-root .env if python-dotenv is available. Never reads or prints the values itself.
+
+    The path is explicit (as in ima_wrapper): a bare load_dotenv() walks up from this file and, in a
+    git worktree under <repo>/.claude/worktrees/, picks up the MAIN checkout's .env."""
     try:
         from dotenv import load_dotenv  # type: ignore
-        load_dotenv()
+        load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     except Exception:
         pass
 
@@ -193,7 +217,7 @@ class LLM:
         """One completion; 429 / timeout / 5xx are retried RATE_RETRIES times with backoff and logged."""
         for attempt in range(RATE_RETRIES + 1):
             try:
-                r = self._client.chat.completions.create(**params)
+                r = self._bounded_create(params)
                 return r.choices[0].message.content or ""
             except Exception as e:  # noqa: BLE001
                 if attempt >= RATE_RETRIES or not _is_transient(e):
@@ -204,6 +228,35 @@ class LLM:
                 self.rate_retries += 1
                 time.sleep(wait)
         raise AssertionError("unreachable")
+
+    def _bounded_create(self, params: dict[str, Any]) -> Any:
+        """chat.completions.create with a hard wall-clock deadline (LLM_CALL_DEADLINE).
+
+        The request runs on a daemon thread; if it is still running at the deadline it is abandoned
+        (its socket read timeout or the server ends it later) and APITimeoutError is raised here.
+        """
+        deadline = call_deadline()
+        box: dict[str, Any] = {}
+
+        def run() -> None:
+            try:
+                box["r"] = self._client.chat.completions.create(**params)
+            except BaseException as e:  # noqa: BLE001  (re-raised on the caller's thread)
+                box["e"] = e
+
+        t = threading.Thread(target=run, name="llm-call", daemon=True)
+        t.start()
+        t.join(deadline)
+        if t.is_alive():
+            log.warning("LLM call (model %s) still running after the %.0fs deadline (LLM_CALL_DEADLINE); "
+                        "abandoning it", params.get("model", ""), deadline)
+            import httpx
+            from openai import APITimeoutError
+            url = str(getattr(self._client, "base_url", "") or "http://llm.invalid/")
+            raise APITimeoutError(request=httpx.Request("POST", url))
+        if "e" in box:
+            raise box["e"]
+        return box["r"]
 
     def _create(self, params: dict[str, Any]) -> str:
         """One API call. A model that rejects `temperature` is retried without it, once per model."""
