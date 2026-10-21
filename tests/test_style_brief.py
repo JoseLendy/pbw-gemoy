@@ -208,3 +208,10 @@ def test_question_hook_no_longer_invites_a_reported_customer_question():
 def test_moments_brief_asks_for_one_selling_point():
     task = card_to_task(_card("S01", "potential"))
     assert task.platform == "moments" and "只引用 1 个已选事实编号" in brief(task)
+
+
+def test_brief_requires_the_landmark_once_and_exact_qualifiers():
+    task = card_to_task(_card("S01", "potential"))
+    block = brief(task)
+    assert f"正文里要自然带一次门店位置：{task.landmark}" in block
+    assert "限定词照抄事实原文" in block and "到店邀请、署名这类句子里不要夹带任何产品说法" in block

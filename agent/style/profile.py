@@ -84,7 +84,7 @@ def _detail_block(task) -> list[str]:
     out: list[str] = []
     landmark = getattr(task, "landmark", None)
     if landmark:
-        out.append(f"可以在正文里自然带一次门店位置：{landmark}。最多出现一次，不要重复，也不要写地址细节之外的信息。")
+        out.append(f"正文里要自然带一次门店位置：{landmark}（这是只有本店写得出的细节）。只出现一次，不要写地址细节之外的信息。")
     nickname = getattr(task, "nickname", None)
     if nickname and (getattr(task, "platform", "") == "moments"):
         out.append(f"结尾可以用「{nickname}」署名，只出现一次。")
@@ -135,6 +135,8 @@ def _claim_block(task) -> list[str]:
         "只写事实本身，不要从参数推出体验结论或承诺：不写“不费劲”“轻松些”“不用另买转接头”“不用重新适应”"
         "“按一下就能开机”“一整天够用”这类结果。可以写这个参数在什么场景会用到，感受留给顾客到店自己试。",
         "一句话里有几个参数，就在每个参数后面各标它自己的事实编号；不要给没有参数的句子（如到店邀请）标编号。",
+        "标的编号必须是原文里写着这句内容的那条事实；型号、版本和限定词照抄事实原文，不要省略或简写。",
+        "到店邀请、署名这类句子里不要夹带任何产品说法（例如“不同版本配置不一样”），产品说法只放在带编号的句子里。",
     ]
     if not getattr(task, "question", None):
         lines.append("不得转述别人的话或经历：不写“顾客常问”“常听……说”“很多人问”“有人以为”“同学们都说”。")
