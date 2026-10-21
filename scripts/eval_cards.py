@@ -281,6 +281,8 @@ def main(argv=None) -> int:
               + f" rewrites={e.rewrites} {e.seconds:.1f}s" + (f" 8E[{'; '.join(e.sim_flags)}]" if e.sim_flags else ""))
     print(f"wrote {out} · {sm['generated']}/{sm['stores']} generated · {sm['passed']}/{sm['stores']} passed "
           f"within 2 rewrites · median {sm['median_s']:.1f}s · max {sm['max_s']:.1f}s")
+    print(f"calls: LLM {len(getattr(deps.llm, 'calls', []) or [])} · "
+          f"ima {getattr(getattr(deps.catalog, 'client', None), 'live_calls', 'n/a')}")
     return 0
 
 
