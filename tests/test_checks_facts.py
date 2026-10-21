@@ -299,3 +299,35 @@ def test_llm_layer_does_not_send_image_captions_as_uncited_claims():
     p.images = [PostImage("img-1", "文末", "DemoBook 14 星空灰正面"), PostImage("img-2", "文末", "DemoBook 14 接口特写")]
     block = _uncited_block(p)
     assert "星空灰" not in block and "接口特写" not in block
+
+
+# ------------------------------------------------------------------ verbatim fact containing "；" (canary proof)
+def _ledger_with_semicolon_claim():
+    import copy
+    from tests.fakes import _f
+    led = copy.deepcopy(fake_ledger())
+    led.facts.append(_f(13, "demobook-14", "angle_6", "other", "更适合经常出差的人；系统兼容是选型前置条件",
+                        "更适合经常出差的人；系统兼容是选型前置条件", kind="claim", src="卖点与限制.md"))
+    return led
+
+
+@pytest.mark.xfail(strict=True, reason="PENDING (docs/HANDOVER_BACKEND.md, item 1): 8A splits a verbatim tagged "
+                   "fact at its own '；'. Fix narrowly in agent/checks/facts.py, then remove this marker.")
+def test_a_verbatim_tagged_fact_containing_a_semicolon_is_one_tagged_claim():
+    """Real canary: '更适合…移动办公者；系统兼容是选型前置条件 [F56]' (the KB 可用结论 verbatim, tagged once)
+    was split at the fact's own '；' and its first half reported as untagged / uncited."""
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["挑电脑前先看看它适合谁：更适合经常出差的人；系统兼容是选型前置条件 [F13]。"]
+    assert not [i for i in check_facts(p, led, {}).issues if i.code in ("untagged_claim", "uncited_claim")]
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(p, led, llm)
+    assert "更适合经常出差的人" not in llm.user.split("<uncited>")[1]
+
+
+def test_an_untagged_spec_before_a_semicolon_is_still_flagged():
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["内存 16 GB；更适合经常出差的人；系统兼容是选型前置条件 [F13]。"]
+    assert any(i.code == "untagged_claim" and "16 GB" in i.span for i in check_facts(p, led, {}).issues)

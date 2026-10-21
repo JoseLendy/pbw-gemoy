@@ -91,20 +91,28 @@ def main(argv=None) -> int:
     a = _numeric(ledger)
     b = _numeric(ledger, exclude={a.id} | {f.id for f in ledger.facts if f.attribute == a.attribute})
     invite = f"店在{plain.landmark}附近，想上手可以过来看看。" if plain.landmark else "想上手可以来店里看看。"
+    cta = "有问题可以私信我。"          # no 周末 / opening-hours promise: the store data has none
 
     def draft(*sentences, task=None):
         return Post(platform="moments", title="", intro="", body=[" ".join(sentences), invite],
-                    cta="周末来店里上手试试，或者私信我。", tags=["门店推荐"],
+                    cta=cta, tags=["门店推荐"],
                     selling_points=[a.id], images=copy.deepcopy(post_images)), (task or plain)
 
-    # Clean drafts follow the writer brief: reader-side scenarios, and facts whose category carries no KB
-    # 表达边界 qualifier (a weight without the KB's variance note is a correct 8B catch, not a clean draft).
+    # Clean drafts are built strictly from the ledger (the writer brief's rules): only tagged facts, values copied
+    # verbatim (qualifiers included), usage as the reader's own question, nothing implied beyond the fact.
+    #  - claim: a KB 可用结论 quoted verbatim; it carries its own suitability wording and caveats.
+    #  - entity: one fact from a category with no 表达边界 lines, so no qualifier can be missing.
     bounded = {bd.get("category") for bd in (ledger.boundaries or []) if bd.get("category")}
     blocked = {fid for c in (ledger.conflicts or []) for fid in c.fact_ids}
-    free = [f for f in ledger.facts if f.norm_value is not None and f.category not in bounded and f.id not in blocked]
-    c = free[0] if free else a
-    d = next((f for f in free if f.attribute != c.attribute), b)
-    clean_a = f"适合每天背去上课的同学，先看这一项：{c.value} [{c.id}]。"
+    usable = [f for f in ledger.facts if f.id not in blocked]
+    claim = next((f for f in usable if f.kind == "claim" and "适合" in f.value),
+                 next((f for f in usable if f.kind == "claim"), a))
+    entity = next((f for f in usable if f.kind != "claim" and f.category not in bounded | {"other"}
+                   and f.attribute not in ("battery_life", "battery_capacity")), b)
+    clean_a = f"挑电脑前先看看它适合谁：{claim.value} [{claim.id}]。"
+    clean_b = f"如果你想先确认一项配置，可以看这一项：{entity.value} [{entity.id}]。"
+    promo_ok = promo is not None and valid_price_record(promo) is not None
+    clean_c = (f"{clean_a} {rec['label']} {rec['value']} 元 [演示活动]，{rec['conditions']}。" if promo_ok and rec else None)
     wrong_value = re.sub(r"\d+(?:\.\d+)?", "0.86", a.value, count=1)      # first number → one no fact has
     sib = next((f for f in sib_ledger.facts if f.norm_value is not None and f.attribute in {x.attribute for x in ledger.facts}
                 and not any(x.value == f.value for x in ledger.facts)), None)
@@ -129,9 +137,11 @@ def main(argv=None) -> int:
         (Case("赋能 + 不仅…更…", True), draft(clean_a, "它不仅仅是一台电脑，更是赋能学习的伙伴。")),
         (Case(f"{sibling} 的参数写在 {target} 下", True),
          draft(clean_a, f"这一项是 {sib.value} [{same_attr[sib.attribute]}]。") if sib else draft(clean_a)),
-        (Case("干净稿 1", False), draft(clean_a)),
-        (Case("干净稿 2", False), draft(f"如果你常在图书馆待一下午，可以看看这一项：{d.value} [{d.id}]。")),
+        (Case("干净稿 1 · 潜力款 · 可用结论原文", False), draft(clean_a)),
+        (Case("干净稿 2 · 潜力款 · 无边界的参数", False), draft(clean_b)),
     ]
+    if clean_c:
+        cases.append((Case("干净稿 3 · 活动款 · 原文结论 + 演示活动价与条件", False), draft(clean_c, task=promo)))
     print(f"canary {day} · {'fakes' if args.fake else 'real deps'} · target {target} · LLM judges on")
     for case, (post, task) in cases:
         post.selling_points = list(dict.fromkeys(re.findall(r"\[(F\d+)\]", post.all_text())))[:1]
@@ -154,7 +164,8 @@ def main(argv=None) -> int:
     clean = [c for c, _ in cases if not c.planted]
     missed = [c.name for c in planted if not c.caught]
     false_pos = [c.name for c in clean if c.caught]
-    print(f"\ncaught {len(planted) - len(missed)}/{len(planted)} planted · false positives {len(false_pos)}/{len(clean)} clean")
+    print(f"\nplanted errors caught {len(planted) - len(missed)}/{len(planted)} · "
+          f"clean drafts passed {len(clean) - len(false_pos)}/{len(clean)}")
     print(f"calls: LLM {len(getattr(deps.llm, 'calls', []) or [])}")
     return 0 if not missed and not false_pos else 1
 
