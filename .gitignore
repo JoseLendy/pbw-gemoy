@@ -28,3 +28,6 @@ __MACOSX/
 # data/demo/inputs/poi_cache/ files from fetch_poi.py may be committed too
 !data/demo/
 !data/demo/**
+
+# eval reports from real runs contain KB-derived copy: never commit
+eval/
