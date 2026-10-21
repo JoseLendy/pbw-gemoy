@@ -11,6 +11,7 @@ Issue codes (stage "8B"):
   boundary_violation a phrase an 表达边界 line forbids (不要写/不得/不能/避免/不要说) appears in the post   warn
   false_promise      (LLM) promise / comparison / misleading price / denigration / faked experience     error
   llm_check_skipped  (LLM) the LLM layer failed; code checks still ran                                  warn
+  invented_customer_quote  (card runs) a customer question/quote that is not the card's logged one   error
   price_*            price traceability (agent/checks/prices.py): untraceable / mismatch / conditions   error
 """
 from __future__ import annotations
@@ -187,6 +188,31 @@ def relevant_boundaries(post: Post, ledger: Ledger, limit: int = 20) -> list[str
     return [t for t in dict.fromkeys(lines) if t][:limit]
 
 
+# ------------------------------------------------------------------ customer quotes (card runs, plan §4.6)
+CUSTOMER_REF_RE = re.compile(r"(顾客|客户|客人|买家|同学们?|很多人|不少人|好几位|好多人)[^。！？!?\n]{0,10}"
+                             r"(问|说|反馈|评价|夸|推荐|觉得|都在|常问)")
+
+
+def _check_customer_quotes(post: Post, task: Task | None) -> list[CheckIssue]:
+    """A post may say "这几天常有顾客问……" only about the ONE question logged on the card. Card runs only:
+    the manual flow has no question log (its invented reviews are covered by 8A's review patterns)."""
+    if task is None or getattr(task, "source", "manual") != "card":
+        return []
+    q = (getattr(task, "question", None) or {}).get("text") or ""
+    want = re.sub(r"[\s“”\"「」？?。，,]", "", q)
+    issues: list[CheckIssue] = []
+    for field, raw in _fields(post):
+        clean, _ = strip_fact_tags(raw)
+        for m in CUSTOMER_REF_RE.finditer(clean):
+            sent = _sentence_of(clean, m.start())
+            if want and want in re.sub(r"[\s“”\"「」？?。，,]", "", sent):
+                continue
+            msg = (f"提到顾客的说法「{m.group(0)}」，但本店记录里只有「{q}」这一个问题，只能引用这一条" if q else
+                   "本卡片没有已记录的顾客问题，不能写顾客问答或顾客原话；改用场景或问题开头")
+            issues.append(_issue("invented_customer_quote", msg, field, m.group(0)))
+    return issues
+
+
 # ------------------------------------------------------------------ LLM layer
 def _llm_layer(post: Post, ledger: Ledger, llm) -> list[CheckIssue]:
     system = ("你是广告合规审核员。检查整篇文案是否存在：虚假承诺、无依据的比较、误导性价格、贬低其他品牌、"
@@ -222,6 +248,7 @@ def check_compliance(post: Post, ledger: Ledger, task: Task, llm=None) -> CheckR
     issues += _check_boundaries(post, ledger)
     from agent.checks.prices import check_prices     # price traceability (card runs; plan §4.3)
     issues += check_prices(post, task)
+    issues += _check_customer_quotes(post, task)
     if llm is not None:
         issues += _llm_layer(post, ledger, llm)
     return CheckReport(issues)

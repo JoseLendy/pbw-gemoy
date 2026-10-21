@@ -148,3 +148,41 @@ def test_demo_promo_quotes_value_conditions_and_marks_the_tag():
         assert str(task.promo["price_info"]["value"]) in block
         assert task.promo["price_info"]["conditions"] in block
         assert "[演示活动]" in block
+
+
+# ------------------------------------------------------------------ customer hook enforced by the checks
+def _card_post(text):
+    from tests.fakes import fake_post
+    p = fake_post("moments")
+    p.body = [text]
+    p.cta = "来店里上手。"
+    return p
+
+
+def _check(post, task):
+    from agent.checks import run_all
+    return run_all(post, fake_ledger(), {}, task, fake_plan("moments"))
+
+
+def test_customer_hook_without_logged_question_fails_the_checks():
+    task = card_to_task(_card("S01"))
+    task.hook, task.question = CUSTOMER_HOOK, None
+    r = _check(_card_post("这几天好几位顾客都在问续航够不够。重量约 1.25 kg [F1]。"), task)
+    assert "invented_customer_quote" in {i.code for i in r.issues if i.severity == "error"}
+    assert not r.passed
+
+
+def test_customer_hook_quoting_the_logged_question_passes_and_others_fail():
+    card = _card("S01", "customer_question")
+    task = card_to_task(card)
+    q = task.question["text"]
+    ok = _check(_card_post(f"这几天常有顾客问“{q}”。重量约 1.25 kg [F1]。"), task)
+    assert "invented_customer_quote" not in {i.code for i in ok.issues}
+    bad = _check(_card_post(f"这几天常有顾客问“{q}”。也有顾客说用着很顺手。重量约 1.25 kg [F1]。"), task)
+    assert "invented_customer_quote" in {i.code for i in bad.issues}
+
+
+def test_manual_flow_has_no_customer_quote_rule():
+    from agent.checks.compliance import check_compliance
+    r = check_compliance(_card_post("顾客说很好用。重量约 1.25 kg [F1]。"), fake_ledger(), fake_task("moments"))
+    assert "invented_customer_quote" not in {i.code for i in r.issues}
