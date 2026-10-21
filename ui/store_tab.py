@@ -56,10 +56,12 @@ class _PreparedDisplay:
 
 # ---------------------------------------------------------------- pure-ish view helpers (session in, strings out)
 def _card_panel_html(card, prepared: bool, staff: StaffContext | None = None,
-                     prepared_slot: str | None = None) -> str:
+                     prepared_slot: str | None = None, review: bool = False) -> str:
     if card is None:
         return '<div class="hw-card"><p>今日暂无推荐。</p></div>'
-    if prepared:
+    if prepared and review:      # a prepared record that ended in NeedsReview is not a ready post
+        head = "今日一条 · 需人工确认"
+    elif prepared:
         head = "今日已为你准备好" + (f" · {prepared_slot}" if prepared_slot else "")
     elif card.is_default:
         head = "今日一条"
@@ -210,7 +212,8 @@ def _render(session: dict, allow_fetch: bool = False) -> tuple:
         editable = False
     prepared_slot = (SLOT_LABELS.get(getattr(actual_card, "slot", None), "")
                      if prepared and actual_card is not card else None)
-    panel_html = _card_panel_html(actual_card, prepared and not locked, staff, prepared_slot)
+    review = prepared and (display.payload or {}).get("status") == "NeedsReview"
+    panel_html = _card_panel_html(actual_card, prepared and not locked, staff, prepared_slot, review)
     action_update = gr.update(value="重新生成" if display is not None else "生成",
                               visible=not locked and can_act(card, staff))
 

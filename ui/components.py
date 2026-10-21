@@ -351,7 +351,8 @@ def prepared_post_html(payload: dict, deps: Any = None) -> str:
                      (f"：「{html.escape(f.get('sentence'))}」" if f.get("sentence") else "") + "</li>"
                      for f in v["failing"])
         return (f'<div class="hw-banner err">⛔ {html.escape(v["message"])}'
-               + (f"<ul>{li}</ul>" if li else "") + "</div>") + out
+               + (f"<ul>{li}</ul>" if li else "")
+               + "<p>下方为未发布草稿，仅供人工确认，不能直接复制或发布。</p></div>") + out
     note = FALLBACK_NOTES.get(v["fallback"])
     if note:
         out = f'<div class="hw-banner note">ℹ️ {html.escape(note)}</div>' + out
