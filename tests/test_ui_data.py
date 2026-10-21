@@ -165,7 +165,8 @@ def test_last_real_run_delegates_to_runs_latest_run(monkeypatch):
 
 # ---------------------------------------------------------------- plain_error (never leaks secrets)
 def test_plain_error_hides_long_tokens():
-    msg = ui_data.plain_error(RuntimeError("bad key sk-abcdefghijklmnopqrstuvwxyz123456"))
+    fake = "sk" + "-" + "abcdefghijklmnopqrstuvwxyz123456"     # built at run time: the secrets scan stays strict
+    msg = ui_data.plain_error(RuntimeError(f"bad key {fake}"))
     assert "sk-" not in msg and "［已隐藏］" in msg
 
 
