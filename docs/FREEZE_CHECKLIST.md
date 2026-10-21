@@ -11,7 +11,7 @@ This is the Phase 4 freeze gate. Tick every item before recording.
 - [ ] `PLANTED` and `STOCKOUT` in `scripts/gen_fake_data.py` use the mapped IDs.
 - [ ] `python scripts/gen_fake_data.py --today 2026-10-23` prints `All checks passed.`
 - [ ] The catalog guard passes: `pytest -q tests/test_catalog_guard.py` (not skipped).
-- [ ] `grep -R "<" data/demo/generated` and `grep -R "MODEL_" data/demo/generated` return nothing.
+- [ ] `grep -R "<" data/demo` and `grep -R "MODEL_" data/demo` return nothing (templates included).
 
 ## Tests and quality
 
@@ -42,12 +42,26 @@ This is the Phase 4 freeze gate. Tick every item before recording.
 
 Dry-run each scene once and list the exact store/card/input:
 
+## Video scenes
+
+Dry-run each scene once and list the exact store/card/input:
+
+| Scene | Exact demo input |
+|---|---|
+| S01 default | Store `S01` 紫金港店; date `2026-10-23`; slot `potential`; platform `公众号`; open → “为什么推这条” → preview → copy → 已发布. |
+| 三店对比 | Stores `S01` / `S04` / `S08` / `S02`; date `2026-10-23`; fixed platform `公众号`; S01 vs S02 are the same model, S04/S08 are their own models. |
+| Wrong-number edit | S01 card; edit “把续航写成 15 小时”; expect 8A fail + rewrite, no false auto-cite. |
+| Price block | S01 or S02 card; edit “加上立减500”; expect 8B block before the writer. |
+| Baseline | S01 default card; `generate_baseline`; label 对照组. |
+| New product | `matebook-fold-ultimate-design`; fact card draft → HQ verifies → every store’s 今日一条 becomes the new release. |
+| HQ panels | 12-store posting table, questions, weekly plan; 模拟 badges visible. |
+
 - [ ] S01 default card: open → “为什么推这条” → preview → copy → 已发布.
-- [ ] 三店对比: S01 / S04 / S08 / S02 with one fixed model and platform.
+- [ ] 三店对比: S01 / S04 / S08 / S02 with a fixed platform; S01 vs S02 are the same model.
 - [ ] Planted wrong-number edit: 8A fails and rewrites; no false auto-cite.
 - [ ] “加上立减500” edit: 8B blocks before the writer.
 - [ ] Baseline vs ours: `generate_baseline` clearly labelled 对照组.
-- [ ] New product: `MODEL_N` draft → HQ verifies → every store’s 今日一条 becomes the new release.
+- [ ] New product: `matebook-fold-ultimate-design` draft → HQ verifies → every store’s 今日一条 becomes the new release.
 - [ ] HQ panels: posting rate, questions, weekly plan.
 
 ## Screen and submission

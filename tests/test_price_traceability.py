@@ -95,6 +95,12 @@ def test_matching_price_on_a_different_model_fails():
     assert "price_untraceable" in codes(check_prices(post_with(f"演示活动价 4999 元，{COND}。"), t))
 
 
+@pytest.mark.parametrize("claim", ["另加1万元礼包", "另加5千元礼包"])
+def test_wan_qian_money_is_still_checked(claim):
+    issues = check_prices(post_with(f"演示活动价 4999 元，{COND}，{claim}。"), promo_task())
+    assert "price_mismatch" in codes(issues) or "price_untraceable" in codes(issues)
+
+
 def test_money_terms_cover_the_old_8a_price_rule():
     """8B's card price rule must be at least as broad as the old 8A price pattern set."""
     from agent.checks.prices import TERM_RE

@@ -1257,7 +1257,12 @@
           "campaign_id": "DEMO-1111-PRE",
           "name": "双十一预约季",
           "mechanic": "到店预约体验，活动期内享演示活动价",
-          "price_info": null,
+          "price_info": {
+            "label": "演示活动价",
+            "value": "5299",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
           "source": "DEMO"
         },
         "question": null,
@@ -1481,7 +1486,12 @@
           "campaign_id": "DEMO-1111-PRE",
           "name": "双十一预约季",
           "mechanic": "到店预约体验，活动期内享演示活动价",
-          "price_info": null,
+          "price_info": {
+            "label": "演示活动价",
+            "value": "5299",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
           "source": "DEMO"
         },
         "question": null,
@@ -1649,7 +1659,12 @@
           "campaign_id": "DEMO-1111-PRE",
           "name": "双十一预约季",
           "mechanic": "到店预约体验，活动期内享演示活动价",
-          "price_info": null,
+          "price_info": {
+            "label": "演示活动价",
+            "value": "5299",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
           "source": "DEMO"
         },
         "question": null,

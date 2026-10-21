@@ -48,7 +48,10 @@ def generate_baseline(card: RecommendationCard, deps=None, llm=None) -> Baseline
         hits = []
     result = BaselineResult(card_id=card.card_id, model_id=card.model_id, platform=card.platform, prompt=prompt,
                             text=text, display_text=wrap(text), hits=hits)
-    if deps is not None and not getattr(deps, "is_dev_mode", True):
+    real = deps is not None and not getattr(deps, "is_dev_mode", True)
+    if deps is None and llm is not None:   # caller supplied a model directly; tests use FakeLLM
+        real = not type(llm).__module__.startswith("tests")
+    if real:
         try:
             from agent.runs import log_run
             log_run(card, result, kind="generate_baseline")

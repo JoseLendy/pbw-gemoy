@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import dataclasses
 
-from agent.pipeline import Deps, run_from_card
+import agent.runs as runs
+from agent.pipeline import Deps, generate_batch, run_from_card
 from agent.recommend.store_data import default_card, fact_card_overrides, reset_demo_state, set_fact_card_status
 from agent.runs import latest_run, log_run
 
@@ -33,3 +34,25 @@ def test_reset_demo_state_clears_fact_card_overrides():
     assert fact_card_overrides()
     reset_demo_state()
     assert fact_card_overrides() == {}
+
+
+def test_automatic_logging_only_for_non_fake_deps(tmp_path, monkeypatch):
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path)
+    card = _card()
+    fake = Deps.fake()
+    run_from_card(card, fake)
+    assert list(tmp_path.rglob("*.json")) == []
+
+    realish = Deps.fake()
+    realish.fake_fields = []           # simulate a fully-real Deps for the logging gate
+    run_from_card(card, realish)
+    files = list(tmp_path.rglob("*.json"))
+    assert len(files) == 1 and files[0].name.endswith("-S01-potential.json")
+
+
+def test_generate_batch_writes_a_batch_record(tmp_path, monkeypatch):
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path)
+    deps = Deps.fake()
+    deps.fake_fields = []
+    generate_batch([_card()], deps)
+    assert list(tmp_path.rglob("*-batch.json"))

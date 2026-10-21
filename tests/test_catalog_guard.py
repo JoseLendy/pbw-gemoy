@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import json
+import pathlib
 import re
 
 import pytest
@@ -25,7 +26,13 @@ def _catalog():
     from agent.catalog import INDEX_PATH, LOCAL_INDEX_PATH, Catalog
     for path in (INDEX_PATH, LOCAL_INDEX_PATH):
         if path.exists():
-            return Catalog(json.loads(path.read_text("utf-8")))
+            cat = Catalog(json.loads(path.read_text("utf-8")))
+            return {mid: m.canonical_name for mid, m in cat.models.items()}
+    # Clean checkouts have no .cache/ (it is gitignored). This committed fixture is the demo catalog
+    # snapshot, so the guard still enforces IDs and canonical names instead of skipping.
+    fixture = pathlib.Path(__file__).resolve().parent / "fixtures" / "catalog_ids.json"
+    if fixture.exists():
+        return json.loads(fixture.read_text("utf-8"))
     return None
 
 
@@ -35,13 +42,33 @@ def test_demo_models_resolve_in_catalog():
     if not mapped:
         pytest.skip(f"models.csv still uses placeholder IDs ({', '.join(r['model_id'] for r in rows)}); "
                     "this guard enforces itself once WS-A maps real catalog model_ids")
-    cat = _catalog()
-    if cat is None:
-        pytest.skip("no cached catalog index in .cache/ (run scripts/build_index.py on a machine with KB access)")
-    missing = [r["model_id"] for r in mapped if r["model_id"] not in cat.models]
+    catalog = _catalog()
+    if catalog is None:
+        pytest.skip("no cached catalog index or committed catalog fixture")
+    missing = [r["model_id"] for r in mapped if r["model_id"] not in catalog]
     assert not missing, f"models.csv model_ids not in the catalog: {missing}"
-    unfilled = [r["model_id"] for r in mapped if "<" in r["display_name"]]
-    assert not unfilled, f"mapped models still have placeholder display names: {unfilled}"
+    wrong = [r["model_id"] for r in mapped if r["display_name"] != catalog[r["model_id"]]]
+    assert not wrong, f"models.csv display_name does not match the catalog canonical name: {wrong}"
+
+
+def test_why_columns_are_references_not_values():
+    for row in _rows():
+        for col in ("why_student", "why_office", "why_family", "why_shopper"):
+            cell = row[col]
+            assert "—" in cell and "P1-产品参数库/" in cell, (row["model_id"], col, cell)
+            assert not any(ch in cell for ch in ('"', "“", "「", "」")), (row["model_id"], col, cell)
+
+
+def test_no_placeholders_anywhere_under_data_demo():
+    root = pathlib.Path(__file__).resolve().parents[1] / "data" / "demo"
+    bad = []
+    for p in root.rglob("*"):
+        if not p.is_file() or p.suffix.lower() not in (".csv", ".json", ".md", ".txt"):
+            continue
+        text = p.read_text(encoding="utf-8", errors="replace")
+        if "<" in text or "MODEL_" in text:
+            bad.append(str(p.relative_to(root)))
+    assert bad == []
 
 
 def test_placeholder_pattern():

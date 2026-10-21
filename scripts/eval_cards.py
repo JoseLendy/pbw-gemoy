@@ -188,6 +188,17 @@ def main(argv=None) -> int:
         return 2
     from agent.pipeline import Deps, generate_batch
     deps = Deps.fake() if args.fake else Deps.real()
+    if args.fake:
+        base_write = deps.write_post
+
+        def write(task, strategy, ledger, plan, llm=None):
+            p = base_write(task, strategy, ledger, plan, llm)
+            # The real writer follows the card brief. Make the fake rehearsal do the same so 8E's
+            # before/after is not artificially flat.
+            p.body = [f"【{task.store_name or ''}·{task.hook or ''}·{task.angle or ''}】"] + list(p.body)
+            return p
+
+        deps.write_post = write
     today = dt.date.fromisoformat(args.today)
     data = load_store_data()
     cards = []

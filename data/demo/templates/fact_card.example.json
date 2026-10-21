@@ -1,7 +1,7 @@
 {
-  "_doc": "Shape of a fact card. Real cards are produced by the existing fact ledger (temp 0) from the ima KB - never hand-written, never committed with KB text. status gates usage: only 'verified' cards may feed the writer. HQ flips draft -> verified in the HQ tab.",
-  "model_id": "MODEL_N",
-  "display_name": "<型号名>",
+  "_doc": "Shape of a fact card. Real cards are produced by the existing fact ledger (temp 0) from the ima KB - never hand-written, never committed with KB text. status gates usage: only 'verified' cards may feed the writer. HQ flips draft -> verified in the HQ tab. The values below are illustrative placeholders, not KB facts.",
+  "model_id": "matebook-fold-ultimate-design",
+  "display_name": "HUAWEI MateBook Fold 非凡大师",
   "status": "draft",
   "generated_at": "2026-10-21T10:00:00",
   "verified_by": null,
@@ -10,25 +10,25 @@
     {
       "fact_id": "F1",
       "field": "重量",
-      "value": "<值>",
-      "quote": "<KB原文逐字引用>",
-      "source_title": "<KB资料标题>",
+      "value": "示例事实值一",
+      "quote": "示例原文引用一",
+      "source_title": "产品事实.md",
       "verified": false,
       "conflict": false
     },
     {
       "fact_id": "F2",
       "field": "续航",
-      "value": "<值>",
-      "quote": "<KB原文逐字引用>",
-      "source_title": "<KB资料标题>",
+      "value": "示例事实值二",
+      "quote": "示例原文引用二",
+      "source_title": "产品事实.md",
       "verified": false,
       "conflict": true,
       "conflict_note": "两份资料数值不一致 -> 排除，不进入写作"
     }
   ],
   "images": [
-    {"image_id": "IMG1", "model_id": "MODEL_N", "source": "ima", "caption": "<图片说明>"}
+    {"image_id": "IMG1", "model_id": "matebook-fold-ultimate-design", "source": "ima", "caption": "示例图片说明"}
   ],
   "is_demo": true
 }

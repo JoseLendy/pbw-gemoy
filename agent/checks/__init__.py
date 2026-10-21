@@ -59,20 +59,34 @@ def load_yaml(name: str) -> dict:
 
 
 def _norm_span(span: str) -> str:
-    return re.sub(r"\s+", "", span or "")
+    return re.sub(r"[\s…，。！？、；;:：“”\"「」『』·]+", "", span or "")
+
+
+def _same_style_span(a: str, b: str) -> bool:
+    """Exact span, or a shared >=4-char prefix for 8C's pair phrase (不仅仅是…更是) and 8D's
+    regex match (不仅仅是轻薄，更)."""
+    na, nb = _norm_span(a), _norm_span(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    k = 0
+    while k < min(len(na), len(nb)) and na[k] == nb[k]:
+        k += 1
+    return k >= 4
 
 
 def dedupe_style_hits(report: "CheckReport") -> "CheckReport":
     """8C's ai_tell and 8D's ai_cliche/ai_pattern can flag the same phrase twice. Keep one line, using
     the 8D issue as primary and recording 8C in also_stages so 四、核验结果 shows `[8D/8C]`."""
-    d_hits: dict[tuple[str, str], object] = {}
+    d_hits: dict[str, list] = {}
     for i in report.issues:
         if i.stage == "8D" and i.code in ("ai_cliche", "ai_pattern") and i.span:
-            d_hits.setdefault((i.field, _norm_span(i.span)), i)
+            d_hits.setdefault(i.field, []).append(i)
     out = []
     for i in report.issues:
         if i.stage == "8C" and i.code == "ai_tell" and i.span:
-            primary = d_hits.get((i.field, _norm_span(i.span)))
+            primary = next((d for d in d_hits.get(i.field, []) if _same_style_span(i.span, d.span)), None)
             if primary is not None:
                 if "8C" not in primary.also_stages:
                     primary.also_stages.append("8C")

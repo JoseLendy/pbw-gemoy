@@ -35,5 +35,5 @@ Status: **proposed and applied on `feat/proactive-phase4` for the demo run**. Th
 ## Confirmation needed
 
 - Confirm the archetype mapping, especially `MODEL_F` (best-seller) and `MODEL_N` (new-release role).
-- Confirm the demo prices in `promotions.json` (4999 / 6999) are plausible for the mapped models.
+- Confirm the demo prices in `promotions.json` (4999 / 6999 / 5299) are plausible for the mapped models.
 - If the data owner changes a mapping, update the same files and re-run `python scripts/gen_fake_data.py`.

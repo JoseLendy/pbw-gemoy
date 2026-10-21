@@ -86,6 +86,16 @@ def test_auto_cite_never_fixes_an_unsupported_number():
     assert "unsupported_number" in codes(report, "error") or "untagged_claim" in codes(report, "error")
 
 
+def test_auto_cite_never_blesses_a_money_claim():
+    from agent.schemas import CheckIssue
+    post = with_body("另加1万元礼包。")
+    led = fake_ledger()
+    issue = CheckIssue("8A", "error", "uncited_claim", "x", field="body[0]",
+                       span="另加1万元礼包", fact_id="F7")
+    new, fixed = auto_cite(post, [issue], led)
+    assert fixed == [] and "[F7]" not in new.body[0]
+
+
 # ------------------------------------------------------------------ conflict gate
 def test_tag_to_an_excluded_fact_fails():
     led = conflicted_ledger()

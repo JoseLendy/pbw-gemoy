@@ -413,6 +413,12 @@ def _sentence_numbers_supported(ledger: Ledger, sentence: str) -> bool:
         else:
             if not _spec_count_supported(ledger, m.group(1), m.group(2)):
                 return False
+    try:  # a money / promo claim is never a product fact; 8B owns traceability
+        from agent.checks.prices import MONEY_RE, TERM_RE
+        if MONEY_RE.search(masked) or TERM_RE.search(masked):
+            return False
+    except Exception:  # noqa: BLE001 - price module must never break the fact checker
+        pass
     return True
 
 

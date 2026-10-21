@@ -401,9 +401,9 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
     """Run several recommendation cards and enforce 8E cross-store variety.
 
     Same-peer stores whose publishable text exceeds SIMILARITY_THRESHOLD are regenerated once (the later
-    store id), first with the next hook unused by peers today and, in the same rerun, the next unused angle.
-    Model, platform and facts never change; customer-question cards keep the reserved customer hook.
-    Returns final results plus before/after similarity pairs for the UI / eval report.
+    store id): first with the next hook unused by peers today; if still above the threshold, also with
+    the next unused angle. Model, platform and facts never change; customer-question cards keep the
+    reserved customer hook. Returns final results plus before/after similarity pairs for the UI / eval report.
     """
     from agent.formatter import render_publishable   # noqa: F401  (used by _batch_text)
     from agent.recommend.common import INPUTS, load_json
@@ -452,16 +452,24 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                     peer_cards = [by_store[s] for s in sids if s != later]
                     used_hooks = {c.hook.id for c in peer_cards if c.hook}
                     used_angles = {c.angle for c in peer_cards if c.angle}
+                    current_hook = card.hook.id if card.hook else None
                     hooks = [h for h in angles_cfg["hooks"] if not h.get("requires_logged_question")]
-                    next_hook = next((h for h in hooks if h["id"] not in used_hooks), None)
+                    next_hook = next((h for h in hooks
+                                      if h["id"] not in used_hooks and h["id"] != current_hook), None)
                     seg_angles = angles_cfg["segment_angles"][seg]
-                    next_angle = next((x for x in seg_angles if x not in used_angles), None)
+                    next_angle = next((x for x in seg_angles
+                                       if x not in used_angles and x != card.angle), None)
                     if next_hook is None and next_angle is None:
                         continue
+                    def max_peer_sim(text: str) -> float:
+                        vals = [jaccard(text, peer_text(s)) for s in sids if s != later and peer_text(s)]
+                        return max(vals, default=0.0)
+
                     new_card = copy.deepcopy(card)
-                    if next_hook is not None:
+                    hook_changed = next_hook is not None
+                    if hook_changed:
                         new_card.hook = CardHook(next_hook["id"], next_hook["label"])
-                    if next_angle is not None:
+                    if not hook_changed and next_angle is not None:
                         new_card.angle = next_angle
                     try:
                         new_result = run_from_card(new_card, deps, staff_map.get(later), on_progress)
@@ -471,6 +479,17 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                         continue
                     by_store[later] = new_card
                     results[later] = new_result
+                    # Phase 4 wording: hook first; only if still above the threshold, also change angle.
+                    if hook_changed and next_angle is not None and max_peer_sim(_batch_text(new_result)) > threshold:
+                        angle_card = copy.deepcopy(new_card)
+                        angle_card.angle = next_angle
+                        try:
+                            angle_result = run_from_card(angle_card, deps, staff_map.get(later), on_progress)
+                        except Exception:  # noqa: BLE001
+                            angle_result = None
+                        if isinstance(angle_result, RunResult):
+                            by_store[later] = angle_card
+                            results[later] = angle_result
                     regenerated.append(later)
                     changed = True
                     break
@@ -488,7 +507,14 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                     continue
                 pairs.append(SimilarityPair(seg, a, b, round(jaccard(before, after), 3),
                                             round(jaccard(peer_text(a), peer_text(b)), 3), b in regenerated))
-    return BatchResult(results=results, similarity=pairs, regenerated=regenerated)
+    batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated)
+    if deps is not None and not getattr(deps, "is_dev_mode", True):
+        try:
+            from agent.runs import log_batch
+            log_batch(items, batch)
+        except Exception as e:  # noqa: BLE001 - logging must never break a batch
+            log.warning("batch log failed: %s", e)
+    return batch
 
 
 # ---------------------------------------------------------------- edit

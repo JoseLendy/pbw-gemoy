@@ -34,8 +34,8 @@ RULE = "价格可追溯规则：价格、优惠、补贴、分期、库存说法
 # A money amount: ¥4999 / 4999元 / 4,999 元 / 活动价4999.
 _NUM = r"(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
 MONEY_RE = re.compile(
-    rf"[¥￥]\s*{_NUM}|(?:价|售价|活动价|到手价|特价)\s*[:：]?\s*{_NUM}(?:\s*(?:元|块钱|块|CNY|RMB|rmb))?"
-    rf"|{_NUM}\s*(?:元|块钱|块|CNY|RMB|rmb)")
+    rf"[¥￥]\s*{_NUM}|(?:价|售价|活动价|到手价|特价)\s*[:：]?\s*{_NUM}(?:\s*(?:元|块钱|块|万元|千元|CNY|RMB|rmb))?"
+    rf"|{_NUM}\s*(?:元|块钱|块|万元|千元|CNY|RMB|rmb)")
 # Money-adjacent mechanics the demo records never carry (a record only has label + value + conditions).
 TERM_RE = re.compile(r"(立减|直降|降价|优惠|补贴|折扣|打折|\d+\s*折|[一二三四五六七八九]\s*折|满减|分期|免息|"
                      r"到手价|特价|赠品|赠送|买赠|免费送|低价|仅售|售价|起售|起价|定价|价格|报价|"
@@ -50,7 +50,14 @@ def _norm(s: str) -> str:
 def _amount(m: re.Match) -> Optional[float]:
     raw = next((g for g in m.groups() if g), None)
     try:
-        return float(raw.replace(",", "")) if raw else None
+        if raw is None:
+            return None
+        amt = float(raw.replace(",", ""))
+        if "万元" in m.group(0):
+            amt *= 10000
+        elif "千元" in m.group(0):
+            amt *= 1000
+        return amt
     except ValueError:
         return None
 

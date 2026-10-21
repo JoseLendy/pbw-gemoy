@@ -18,7 +18,7 @@ from agent.llm import temperatures
 ROOT = Path(__file__).resolve().parent.parent
 RUNS_DIR = ROOT / "runs"
 
-__all__ = ["RUNS_DIR", "log_run", "latest_run"]
+__all__ = ["RUNS_DIR", "log_run", "log_batch", "latest_run"]
 
 
 def _payload(result: Any) -> Any:
@@ -60,6 +60,30 @@ def log_run(card, result, staff=None, kind: str = "run_from_card",
         "result": _payload(result),
     }
     path = folder / name
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def log_batch(cards, batch, runs_dir: Path | None = None) -> Path:
+    """One record per real generate_batch call. Individual run results are already logged by
+    run_from_card; this record keeps the 8E similarity report and the store set."""
+    out_dir = Path(runs_dir) if runs_dir else RUNS_DIR
+    now = dt.datetime.now(dt.timezone.utc)
+    cards = list(cards)
+    day = getattr(cards[0], "date", None) if cards else None
+    day = day or now.date().isoformat()
+    folder = out_dir / str(day)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{now.strftime('%Y%m%dT%H%M%S%fZ')}-batch.json"
+    payload = {
+        "kind": "generate_batch",
+        "date": str(day),
+        "store_ids": [getattr(c, "store_id", None) for c in cards],
+        "similarity": [dataclasses.asdict(p) if dataclasses.is_dataclass(p) else p
+                       for p in getattr(batch, "similarity", [])],
+        "regenerated": list(getattr(batch, "regenerated", [])),
+        "timestamp": now.isoformat(timespec="seconds"),
+    }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
     return path
 

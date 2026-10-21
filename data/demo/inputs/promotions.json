@@ -8,7 +8,8 @@
     "mechanic": "到店预约体验，活动期内享演示活动价",
     "price_info": {
       "matebook-14-harmonyos": {"label": "演示活动价", "value": "4999", "currency": "CNY", "conditions": "活动期内有效，以门店实际为准"},
-      "matebook-14-2024": {"label": "演示活动价", "value": "6999", "currency": "CNY", "conditions": "活动期内有效，以门店实际为准"}
+      "matebook-14-2024": {"label": "演示活动价", "value": "6999", "currency": "CNY", "conditions": "活动期内有效，以门店实际为准"},
+      "matebook-d-16-se-2024": {"label": "演示活动价", "value": "5299", "currency": "CNY", "conditions": "活动期内有效，以门店实际为准"}
     },
     "source": "DEMO",
     "is_demo": true

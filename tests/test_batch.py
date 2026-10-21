@@ -45,6 +45,17 @@ def test_generate_batch_regenerates_similar_peers_and_reports_before_after():
     assert batch.regenerated, "a high-similarity later store should be regenerated once"
 
 
+def test_generate_batch_never_picks_the_current_hook_or_angle():
+    """Regression: the candidate must exclude the card's own current values, or a 'regeneration' no-ops."""
+    deps = Deps.fake()
+    s01 = dataclasses.replace(_demo_card("S01"), hook=CardHook("scene", "场景开头"))
+    s02 = dataclasses.replace(_demo_card("S02"), hook=CardHook("question", "问题开头"))
+    s03 = dataclasses.replace(_demo_card("S03"), hook=CardHook("myth", "误区澄清"))
+    batch = generate_batch([s01, s02, s03], deps)
+    assert "S02" in batch.regenerated
+    assert batch.results["S02"].task.hook != "question"
+
+
 def test_generate_batch_never_regenerates_a_customer_question_card():
     deps = Deps.fake()
     from agent.recommend.store_data import cards_for

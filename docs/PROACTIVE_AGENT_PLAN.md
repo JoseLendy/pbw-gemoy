@@ -341,7 +341,7 @@ Video moment: same card, **before** (plain LLM) vs **after** (our pipeline), blo
 
 After generating today's posts for all stores:
 - Compare each post with other stores' same-day posts in the same peer group (character 3-gram Jaccard; default threshold 0.55, `SIMILARITY_THRESHOLD` env-configurable).
-- If similarity > threshold → regenerate the later store once with the next hook unused by its peers today, and the next unused angle in the segment's angle list. Model, platform and facts never change; a customer-question card keeps the reserved customer hook. Max one regeneration per store.
+- If similarity > threshold → regenerate the later store once: first with the next hook unused by its peers today; if it is still above the threshold, also with the next unused angle in the segment's angle list. Model, platform and facts never change; a customer-question card keeps the reserved customer hook. Max one regeneration per store.
 
 **Peer-aware hook/angle assignment (Phase 4):** within a peer group (same dominant segment), stores are sorted by `store_id`; hooks and angles rotate by `peer_rank + days_since_epoch + slot_index`, so stores in the same group get distinct non-customer hooks and distinct angles while the segment's pool allows it. The fixed epoch is `2026-01-01`. The customer hook is reserved for 顾客问答 cards. This replaces the older per-store md5 assignment.
 
