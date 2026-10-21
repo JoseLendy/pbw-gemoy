@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from agent.schemas import (
-    CheckReport, Clarification, ImagePlan, Ledger, LockedResult, ModelBundle, NeedsHuman, PLATFORM_LABELS,
+    CheckReport, Clarification, EditBlocked, ImagePlan, Ledger, LockedResult, ModelBundle, NeedsHuman, PLATFORM_LABELS,
     Post, RecommendationCard, RunResult, SCENARIO_LABELS, StaffContext, Strategy, Task,
 )
 
@@ -268,6 +268,8 @@ def _from_write(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_
     timer.lap("write")
     _say(on_progress, "check", f"核验 {len(post.selling_points)} 个事实点…")
     post, report, loops = check_loop(post, task, strategy, ledger, sibling_ledgers, plan, deps, on_progress)
+    from agent.checks.prices import mark_demo_prices
+    post = mark_demo_prices(post, task)      # a DEMO campaign price always shows [演示活动] (added in code)
     timer.lap("check")
     pending = _collect_pending(strategy, plan, report, task)
     result = RunResult(task=task, model=model, strategy=strategy, ledger=ledger, plan=plan, post=post,
@@ -390,8 +392,15 @@ def classify_edit(instruction: str, llm=None) -> tuple[str, dict]:
 
 
 def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
-         on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman:
-    """Quick edit. Ledger and bundle are reused; never refetched. Every path ends in the check loop."""
+         on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman | EditBlocked:
+    """Quick edit. Ledger and bundle are reused; never refetched. Every path ends in the check loop.
+    A price / discount / subsidy / installment / stock ask with no matching active promotion record is
+    blocked here, before any classifier or writer call (price traceability, plan §4.3)."""
+    from agent.checks.prices import price_request_block
+    blocked = price_request_block(instruction, prev.task)
+    if blocked:
+        _say(on_progress, "edit", blocked)
+        return EditBlocked(instruction=instruction, message=blocked, prev=prev)
     deps = deps or default_deps()
     timer = _Timer()
     stage, params = classify_edit(instruction, deps.llm)

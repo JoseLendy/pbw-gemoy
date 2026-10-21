@@ -87,6 +87,7 @@ class Task:
     promo: Optional[dict] = None            # CardPromo.to_dict(): the ONLY allowed price source
     question: Optional[dict] = None         # CardQuestion.to_dict(): the only allowed customer-question source
     staff: Optional[dict] = None            # StaffContext.to_dict() if a person was given
+    card_date: Optional[str] = None         # ISO date of the card: an active-campaign check needs it
     to_dict = _d
 
 
@@ -214,6 +215,16 @@ class Strategy:
     cta_type: str = ""
     pending: list[str] = field(default_factory=list)    # 待确认 lines
     to_dict = _d
+
+
+@dataclass
+class EditBlocked:
+    """pipeline.edit() refused an instruction before calling the writer (e.g. "加上立减500" with no matching
+    promotion record). `prev` is the unchanged previous result, so the UI can keep showing it."""
+    instruction: str
+    message: str                   # Chinese, cites the rule; shown to the user
+    rule: str = "price_traceability"
+    prev: Optional["RunResult"] = None
 
 
 @dataclass

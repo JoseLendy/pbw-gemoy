@@ -69,6 +69,11 @@ def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task
     variant = getattr(task, "variant", None)
     platform = post.platform or getattr(task, "platform", None) or plan.platform
     report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=llm)
+    from agent.checks.prices import valid_price_record
+    if valid_price_record(task) is not None:
+        # An active promotion record exists: 8B's exact price-traceability check owns money claims, and 8A's
+        # generic "no price facts in the KB" rule would otherwise block the one allowed price.
+        report = CheckReport([i for i in report.issues if i.code != "invented_price"])
     report = report.merge(check_compliance(post, ledger, task, llm=llm))
     report = report.merge(check_conformance(post, platform, plan))
     try:  # Phase 2: 8D anti-AI style. A missing/broken style module must never stop a run.

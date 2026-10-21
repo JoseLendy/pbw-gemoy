@@ -73,4 +73,5 @@ def card_to_task(card: RecommendationCard, staff: Optional[StaffContext] = None,
         promo=card.promo.to_dict() if card.promo else None,
         question=card.question.to_dict() if card.question else None,
         staff=staff.to_dict() if staff else None,
+        card_date=card.date,
     )

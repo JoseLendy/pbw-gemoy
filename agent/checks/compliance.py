@@ -11,6 +11,7 @@ Issue codes (stage "8B"):
   boundary_violation a phrase an 表达边界 line forbids (不要写/不得/不能/避免/不要说) appears in the post   warn
   false_promise      (LLM) promise / comparison / misleading price / denigration / faked experience     error
   llm_check_skipped  (LLM) the LLM layer failed; code checks still ran                                  warn
+  price_*            price traceability (agent/checks/prices.py): untraceable / mismatch / conditions   error
 """
 from __future__ import annotations
 
@@ -219,6 +220,8 @@ def check_compliance(post: Post, ledger: Ledger, task: Task, llm=None) -> CheckR
                 if m:
                     issues.append(_issue("fake_experience", reason, field, m.group(0)))
     issues += _check_boundaries(post, ledger)
+    from agent.checks.prices import check_prices     # price traceability (card runs; plan §4.3)
+    issues += check_prices(post, task)
     if llm is not None:
         issues += _llm_layer(post, ledger, llm)
     return CheckReport(issues)
