@@ -1,7 +1,7 @@
 {
   "_doc": "Shape of a fact card. Real cards are produced by the existing fact ledger (temp 0) from the ima KB - never hand-written, never committed with KB text. status gates usage: only 'verified' cards may feed the writer. HQ flips draft -> verified in the HQ tab. The values below are illustrative placeholders, not KB facts.",
-  "model_id": "matebook-fold-ultimate-design",
-  "display_name": "HUAWEI MateBook Fold 非凡大师",
+  "model_id": "matebook-pro-s",
+  "display_name": "HUAWEI MateBook Pro S",
   "status": "draft",
   "generated_at": "2026-10-21T10:00:00",
   "verified_by": null,
@@ -28,7 +28,7 @@
     }
   ],
   "images": [
-    {"image_id": "IMG1", "model_id": "matebook-fold-ultimate-design", "source": "ima", "caption": "示例图片说明"}
+    {"image_id": "IMG1", "model_id": "matebook-pro-s", "source": "ima", "caption": "示例图片说明"}
   ],
   "is_demo": true
 }

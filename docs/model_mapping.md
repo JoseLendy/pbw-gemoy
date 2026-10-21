@@ -1,10 +1,24 @@
 # Demo model mapping
 
-Status: Phase 4 mapping **applied**; Phase 5 proposals below are **pending confirmation** and not applied yet.
+Status: **Phase 5 mapping confirmed by the team and applied** (proposal 1 as written; proposal 2 option (b)). The Phase 4 mapping is kept below for reference.
 
 `why_*` cells and the references below are **references**, not values or quotes: they name fact fields, KB article paths or KB case IDs. This keeps KB text out of the repository (WORKFLOW v4 rule 11).
 
-## Current mapping (Phase 4)
+## Current mapping (Phase 5, applied)
+
+| Demo ID | Real catalog `model_id` | Canonical display name | Archetype | Demo role |
+|---|---|---|---|---|
+| `MODEL_A` | `matebook-14-harmonyos` | HUAWEI MateBook 14（鸿蒙版） | light_student | campus light/portable potential; confusable with `MODEL_F` on purpose |
+| `MODEL_B` | `matebook-x-pro-ultra` | HUAWEI MateBook X Pro 酷睿 Ultra 微绒典藏版 | business | CBD business potential |
+| `MODEL_C` | `matebook-gt-14` | HUAWEI MateBook GT 14 | creator_perf | creator/performance option |
+| `MODEL_D` | `matebook-d-16-se-2024` | HUAWEI MateBook D 16 SE 版 2024 | family_allround | residential family potential |
+| `MODEL_E` | `matebook-d-14-2024` | HUAWEI MateBook D 14 2024 | budget | budget option |
+| `MODEL_F` | `matebook-14-2024` | HUAWEI MateBook 14 酷睿 Ultra | flagship_bestseller | national best-seller; never 潜力款; confusable with `MODEL_A` on purpose |
+| `MODEL_N` | `matebook-pro-s` | HUAWEI MateBook Pro S | new_release | HQ “new release” push; fact card starts `draft`; demo `launch_date` 2026-10-28 schedules the card only |
+
+Recording note: `matebook-x-pro-ultra` resolves with `KB_BACKEND=hybrid` or `local` (mirror index). The cached ima index (`.cache/index.json`, built during a 220021 quota error) does not list it, so `KB_BACKEND=ima` needs that index rebuilt first.
+
+## Previous mapping (Phase 4)
 
 | Demo ID | Real catalog `model_id` | Canonical display name | Archetype | Demo role |
 |---|---|---|---|---|
@@ -39,7 +53,7 @@ Newest first, by the model's earliest dated release record in the KB:
 
 The 45 text-only catalog entries (擎云 commercial PCs, printers, monitors, accessories from P1/07) carry no release information.
 
-## Phase 5 proposal 1 — MODEL_N (needs confirmation)
+## Phase 5 proposal 1 — MODEL_N (confirmed, applied)
 
 Problem: `matebook-fold-ultimate-design` first launched 2025-05-19 per the KB, so presenting it as the HQ “new release” would rest on a false premise.
 
@@ -51,7 +65,7 @@ Knock-on changes:
 - The `launch_date` in `models.csv` stays a **demo scheduling date** (it places the 新品款 card in the ±30-day window). It is never a fact, never reaches the writer, and the card reason reads “总部新品推送（演示流程）” because the KB does not state that date (Task 2).
 - Even with Pro S, public copy will not say 新品 / 首发: no ledger fact supports it (see the key finding above).
 
-## Phase 5 proposal 2 — MODEL_A vs MODEL_F (needs a choice)
+## Phase 5 proposal 2 — MODEL_A vs MODEL_F (confirmed: option (b), applied)
 
 `MODEL_A` (`matebook-14-harmonyos`) and `MODEL_F` (`matebook-14-2024`) are both “MateBook 14”. They are already declared siblings in `config/model_aliases.yaml`, so 8A loads each one’s ledger when checking the other.
 

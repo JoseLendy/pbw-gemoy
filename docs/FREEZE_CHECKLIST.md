@@ -53,7 +53,7 @@ Dry-run each scene once and list the exact store/card/input:
 | Wrong-number edit | S01 card; edit “把续航写成 15 小时”; expect 8A fail + rewrite, no false auto-cite. |
 | Price block | S01 or S02 card; edit “加上立减500”; expect 8B block before the writer. |
 | Baseline | S01 default card; `generate_baseline`; label 对照组. |
-| New product | `matebook-fold-ultimate-design`; fact card draft → HQ verifies → every store’s 今日一条 becomes the new release. |
+| New product | `matebook-pro-s`; fact card draft → HQ verifies → every store’s 今日一条 becomes the new release. |
 | HQ panels | 12-store posting table, questions, weekly plan; 模拟 badges visible. |
 
 - [ ] S01 default card: open → “为什么推这条” → preview → copy → 已发布.
@@ -61,7 +61,7 @@ Dry-run each scene once and list the exact store/card/input:
 - [ ] Planted wrong-number edit: 8A fails and rewrites; no false auto-cite.
 - [ ] “加上立减500” edit: 8B blocks before the writer.
 - [ ] Baseline vs ours: `generate_baseline` clearly labelled 对照组.
-- [ ] New product: `matebook-fold-ultimate-design` draft → HQ verifies → every store’s 今日一条 becomes the new release.
+- [ ] New product: `matebook-pro-s` draft → HQ verifies → every store’s 今日一条 becomes the new release.
 - [ ] HQ panels: posting rate, questions, weekly plan.
 
 ## Screen and submission

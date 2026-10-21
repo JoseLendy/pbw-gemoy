@@ -23,7 +23,7 @@ from agent.recommend.store_data import (
 from agent.schemas import LockedResult, RecommendationCard, RunResult, StaffContext, Task
 
 TODAY = dt.date(2026, 10, 21)
-PLANTED = {("S01", "matebook-14-harmonyos"), ("S04", "matebook-pro-s"),
+PLANTED = {("S01", "matebook-14-harmonyos"), ("S04", "matebook-x-pro-ultra"),
            ("S08", "matebook-d-16-se-2024"), ("S10", "matebook-14-harmonyos")}
 BEST_SELLER = "matebook-14-2024"
 
@@ -281,7 +281,7 @@ def test_set_fact_card_status_unlocks_new_release_and_reload_restores():
     reload()
     locked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
     assert locked.locked and locked.locked_reason == "fact_card_draft"
-    set_fact_card_status("matebook-fold-ultimate-design", "verified")
+    set_fact_card_status("matebook-pro-s", "verified")
     unlocked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
     assert not unlocked.locked and unlocked.locked_reason is None
     # the demo launch_date only schedules the card: the KB does not state it, so no date is shown
@@ -292,9 +292,9 @@ def test_set_fact_card_status_unlocks_new_release_and_reload_restores():
     # the file on disk was never touched
     import csv
     rows = list(csv.DictReader((INPUTS / "models.csv").open(encoding="utf-8")))
-    assert next(r for r in rows if r["model_id"] == "matebook-fold-ultimate-design")["fact_card_status"] == "draft"
+    assert next(r for r in rows if r["model_id"] == "matebook-pro-s")["fact_card_status"] == "draft"
     with pytest.raises(ValueError):
-        set_fact_card_status("matebook-fold-ultimate-design", "published")
+        set_fact_card_status("matebook-pro-s", "published")
     reload()
     assert next(c for c in cards_for("S01", TODAY) if c.slot == "new_release").locked
 

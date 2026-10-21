@@ -30,7 +30,7 @@ def test_log_run_writes_a_full_record_and_latest_run_finds_it(tmp_path):
 
 
 def test_reset_demo_state_clears_fact_card_overrides():
-    set_fact_card_status("matebook-fold-ultimate-design", "verified")
+    set_fact_card_status("matebook-pro-s", "verified")
     assert fact_card_overrides()
     reset_demo_state()
     assert fact_card_overrides() == {}
