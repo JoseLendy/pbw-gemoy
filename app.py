@@ -102,12 +102,19 @@ def llm_configured() -> bool:
 def status_html() -> str:
     s = kb_status()
     checking = bool(s.get("_pending")) or s.get("index_status") == "checking"
-    dot = "mid" if checking else ("on" if s.get("connected") else "off")
+    mode = str(s.get("mode") or "")
+    is_mirror = "镜像" in mode or "本地" in mode
+    dot = "mid" if checking else ("on" if (s.get("connected") or is_mirror) else "off")
     idx = s.get("index_status") or "stale"
     idx_label = {"complete": "完整", "partial": "部分", "stale": "可能过期",
                  "checking": "连接中…"}.get(idx, idx)
     idx_dot = {"complete": "on", "partial": "mid", "checking": "mid"}.get(idx, "off")
-    kb_state = "连接中…" if checking else ("已连接" if s.get("connected") else "未连接")
+    if checking:
+        kb_state = "连接中…"
+    elif is_mirror:
+        kb_state = "本地镜像 · 可用"
+    else:
+        kb_state = "已连接" if s.get("connected") else "未连接"
     parts = [
         f'<span><span class="dot {dot}"></span>知识库：{html.escape(s.get("kb_name") or KB_NAME)}'
         f'（{kb_state}）</span>',
