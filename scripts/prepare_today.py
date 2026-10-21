@@ -70,6 +70,8 @@ def main(argv=None) -> int:
               f"{'; '.join(flags) or '-'}{regen}")
     for sid, why in sorted(day.locked.items()):
         print(f"{sid:6} {'SKIPPED':22} {'-':>8} {'-':>8}  {why}")
+    if day.errors:
+        print(f"NOT stored (crashed; any earlier prepared post is kept): {sorted(day.errors)}")
     print(f"stored: {len(day.paths)} prepared post(s) under {runs_dir or 'runs/'}{day.date}/prepared/")
     print(f"batch wall time: {day.batch.wall_seconds:.1f}s")
     return 0

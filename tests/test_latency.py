@@ -244,3 +244,20 @@ def test_other_errors_are_not_retried(monkeypatch):
     with pytest.raises(ValueError):
         llm.chat_json("s", "u", stage="writer")
     assert llm.rate_retries == 0
+
+
+class _Status(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.status_code = code
+
+
+def test_http_errors_other_than_429_and_5xx_are_final(monkeypatch):
+    import agent.llm as llm_mod
+    monkeypatch.setattr(llm_mod, "RATE_BACKOFF", (0.0, 0.0))
+    llm = _llm_with([_Status(402, "Insufficient Balance (request_id: 3e429f)"), '{"ok": 1}'])
+    with pytest.raises(_Status):
+        llm.chat_json("s", "u", stage="writer")
+    assert llm.rate_retries == 0
+    llm = _llm_with([_Status(503, "busy"), '{"ok": 1}'])
+    assert llm.chat_json("s", "u", stage="writer") == {"ok": 1} and llm.rate_retries == 1

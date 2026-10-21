@@ -716,6 +716,7 @@ class PreparedDay:
     batch: BatchResult
     paths: dict[str, Any]                   # store_id -> prepared record path
     locked: dict[str, str]                  # store_id -> why nothing was generated (locked / no card)
+    errors: dict[str, str] = field(default_factory=dict)   # store_id -> crash; nothing stored, old post kept
 
 
 def prepare_today(date, deps: Deps | None = None, runs_dir=None, on_progress: Progress = None,
@@ -739,14 +740,17 @@ def prepare_today(date, deps: Deps | None = None, runs_dir=None, on_progress: Pr
             cards.append(card_map(card) if card_map else card)
     batch = generate_batch(cards, deps, on_progress=on_progress)
     by_store = {c.store_id: c for c in cards}
-    paths = {}
+    paths, errors = {}, {}
     for sid, result in batch.results.items():
+        if isinstance(result, Exception):     # never overwrite a stored post with a crash (e.g. LLM 402)
+            errors[sid] = f"{type(result).__name__}: {str(result)[:160]}"
+            continue
         # The morning card is stored; if 8E changed hook / angle, result.task records what actually ran.
         sims = [dict(p.__dict__) for p in batch.similarity if sid in (p.store_a, p.store_b)]
         paths[sid] = log_prepared(by_store[sid], result, seconds=batch.seconds.get(sid), similarity=sims,
                                   regenerated=sid in batch.regenerated, dev_mode=deps.is_dev_mode,
                                   runs_dir=runs_dir)
-    return PreparedDay(date=str(date), batch=batch, paths=paths, locked=locked)
+    return PreparedDay(date=str(date), batch=batch, paths=paths, locked=locked, errors=errors)
 
 
 # ---------------------------------------------------------------- edit

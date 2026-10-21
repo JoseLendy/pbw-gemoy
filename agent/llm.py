@@ -285,10 +285,10 @@ class LLM:
 def _is_transient(e: Exception) -> bool:
     """Rate limit (429), timeout / connection error or a 5xx: worth retrying after a pause."""
     status = getattr(e, "status_code", None)
-    if status == 429 or (isinstance(status, int) and status >= 500):
-        return True
+    if isinstance(status, int):                 # an HTTP answer: only 429 and 5xx are worth retrying
+        return status == 429 or status >= 500   # (402 balance / 4xx are final; "429" may sit in a request id)
     name = type(e).__name__.lower()
-    return any(k in name for k in ("ratelimit", "timeout", "connection")) or "429" in str(e)
+    return any(k in name for k in ("ratelimit", "timeout", "connection"))
 
 
 def _looks_like_unsupported_param(e: Exception) -> bool:

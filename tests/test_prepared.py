@@ -49,9 +49,14 @@ def test_prepared_post_returns_the_default_cards_result_or_none(tmp_path):
 
 
 def test_prepared_post_without_ids_checks_the_current_default_card(tmp_path):
-    prepare_today(TODAY, Deps.fake(), runs_dir=tmp_path)           # real model ids: the fakes raise
+    from agent.pipeline import run_from_card
+    from agent.runs import log_prepared
+    card = default_card("S01", TODAY)
+    log_prepared(card, run_from_card(demo(card), Deps.fake()), runs_dir=tmp_path)    # stored under the real card
     rec = prepared_post("S01", TODAY, runs_dir=tmp_path)
-    assert rec is not None and rec["model"] == default_card("S01", TODAY).model_id
+    assert rec is not None and rec["model"] == card.model_id
+    prepare_today(TODAY, Deps.fake(), runs_dir=tmp_path, card_map=demo)               # now stored as DemoBook
+    assert prepared_post("S01", TODAY, runs_dir=tmp_path) is None                     # no longer the default
 
 
 def test_locked_stores_are_listed_not_generated(tmp_path, monkeypatch):
@@ -107,3 +112,18 @@ def test_cli_fake_rehearsal_writes_to_the_rehearsal_dir(tmp_path, monkeypatch, c
     assert "S01" in out and "S12" in out and "rehearsal" in out
     assert len(list((tmp_path / "_rehearsal" / TODAY / "prepared").glob("*.json"))) == len(stores())
     assert not (tmp_path / "real").exists()
+
+
+def test_a_crashed_store_never_overwrites_its_prepared_post(tmp_path):
+    prepare_today(TODAY, Deps.fake(), runs_dir=tmp_path, card_map=demo)
+    card_id = default_card("S01", TODAY).card_id
+    before = prepared_post("S01", TODAY, card_id=card_id, runs_dir=tmp_path)
+    deps = Deps.fake()
+
+    def boom(*a, **k):
+        raise RuntimeError("Error code: 402 - Insufficient Balance")
+
+    deps.write_post = boom
+    day = prepare_today(TODAY, deps, runs_dir=tmp_path, card_map=demo)
+    assert set(day.errors) == set(stores()) and day.paths == {}
+    assert prepared_post("S01", TODAY, card_id=card_id, runs_dir=tmp_path) == before
