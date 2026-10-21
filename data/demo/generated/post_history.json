@@ -4,7 +4,7 @@
     "store_id": "S01",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_F",
+    "model_id": "matebook-14-2024",
     "is_demo": "true"
   },
   {
@@ -12,7 +12,7 @@
     "store_id": "S01",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_B",
+    "model_id": "matebook-pro-s",
     "is_demo": "true"
   },
   {
@@ -20,7 +20,7 @@
     "store_id": "S01",
     "platform": "公众号",
     "posted": "true",
-    "model_id": "MODEL_D",
+    "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
   },
   {
@@ -28,7 +28,7 @@
     "store_id": "S01",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -36,7 +36,7 @@
     "store_id": "S01",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   },
   {
@@ -44,7 +44,7 @@
     "store_id": "S01",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -52,7 +52,7 @@
     "store_id": "S01",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_D",
+    "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
   },
   {
@@ -60,7 +60,7 @@
     "store_id": "S02",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   },
   {
@@ -68,7 +68,7 @@
     "store_id": "S02",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_B",
+    "model_id": "matebook-pro-s",
     "is_demo": "true"
   },
   {
@@ -76,7 +76,7 @@
     "store_id": "S02",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   },
   {
@@ -84,7 +84,7 @@
     "store_id": "S02",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_F",
+    "model_id": "matebook-14-2024",
     "is_demo": "true"
   },
   {
@@ -92,7 +92,7 @@
     "store_id": "S03",
     "platform": "公众号",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -100,7 +100,7 @@
     "store_id": "S03",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_B",
+    "model_id": "matebook-pro-s",
     "is_demo": "true"
   },
   {
@@ -108,7 +108,7 @@
     "store_id": "S04",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -116,7 +116,7 @@
     "store_id": "S04",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -124,7 +124,7 @@
     "store_id": "S04",
     "platform": "公众号",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -132,7 +132,7 @@
     "store_id": "S04",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   },
   {
@@ -140,7 +140,7 @@
     "store_id": "S04",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_F",
+    "model_id": "matebook-14-2024",
     "is_demo": "true"
   },
   {
@@ -148,7 +148,7 @@
     "store_id": "S05",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -156,7 +156,7 @@
     "store_id": "S05",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -164,7 +164,7 @@
     "store_id": "S05",
     "platform": "公众号",
     "posted": "true",
-    "model_id": "MODEL_D",
+    "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
   },
   {
@@ -172,7 +172,7 @@
     "store_id": "S05",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   },
   {
@@ -180,7 +180,7 @@
     "store_id": "S05",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_B",
+    "model_id": "matebook-pro-s",
     "is_demo": "true"
   },
   {
@@ -188,7 +188,7 @@
     "store_id": "S06",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -196,7 +196,7 @@
     "store_id": "S06",
     "platform": "公众号",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -204,7 +204,7 @@
     "store_id": "S06",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -212,7 +212,7 @@
     "store_id": "S07",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_D",
+    "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
   },
   {
@@ -220,7 +220,7 @@
     "store_id": "S07",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -228,7 +228,7 @@
     "store_id": "S07",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_F",
+    "model_id": "matebook-14-2024",
     "is_demo": "true"
   },
   {
@@ -236,7 +236,7 @@
     "store_id": "S08",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -244,7 +244,7 @@
     "store_id": "S09",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_F",
+    "model_id": "matebook-14-2024",
     "is_demo": "true"
   },
   {
@@ -252,7 +252,7 @@
     "store_id": "S09",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_D",
+    "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
   },
   {
@@ -260,7 +260,7 @@
     "store_id": "S09",
     "platform": "公众号",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   },
   {
@@ -268,7 +268,7 @@
     "store_id": "S09",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -276,7 +276,7 @@
     "store_id": "S09",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   },
   {
@@ -284,7 +284,7 @@
     "store_id": "S10",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_F",
+    "model_id": "matebook-14-2024",
     "is_demo": "true"
   },
   {
@@ -292,7 +292,7 @@
     "store_id": "S10",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_B",
+    "model_id": "matebook-pro-s",
     "is_demo": "true"
   },
   {
@@ -300,7 +300,7 @@
     "store_id": "S10",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_D",
+    "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
   },
   {
@@ -308,7 +308,7 @@
     "store_id": "S10",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_D",
+    "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
   },
   {
@@ -316,7 +316,7 @@
     "store_id": "S10",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -324,7 +324,7 @@
     "store_id": "S11",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_E",
+    "model_id": "matebook-d-14-2024",
     "is_demo": "true"
   },
   {
@@ -332,7 +332,7 @@
     "store_id": "S11",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_A",
+    "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
   },
   {
@@ -340,7 +340,7 @@
     "store_id": "S11",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_B",
+    "model_id": "matebook-pro-s",
     "is_demo": "true"
   },
   {
@@ -348,7 +348,7 @@
     "store_id": "S11",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_F",
+    "model_id": "matebook-14-2024",
     "is_demo": "true"
   },
   {
@@ -356,7 +356,7 @@
     "store_id": "S12",
     "platform": "小红书",
     "posted": "true",
-    "model_id": "MODEL_B",
+    "model_id": "matebook-pro-s",
     "is_demo": "true"
   },
   {
@@ -364,7 +364,7 @@
     "store_id": "S12",
     "platform": "朋友圈",
     "posted": "true",
-    "model_id": "MODEL_C",
+    "model_id": "matebook-gt-14",
     "is_demo": "true"
   }
 ]

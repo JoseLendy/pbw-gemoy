@@ -130,11 +130,11 @@ def similarity_groups(evals: list[StoreEval]) -> dict[str, list[tuple[str, str, 
     return out
 
 
-def build_report(evals: list[StoreEval], today, mode: str) -> str:
+def build_report(evals: list[StoreEval], today, mode: str, pairs=None) -> str:
     mark = {True: "✅", False: "❌"}
     lines = [f"# 卡片评测报告 · {today} · {mode}", "",
              "每家店的今日一条走完整流程（台账 → 写作 → 8A/8B/8C/8D 核验循环）。数值仅供内部调参。", "",
-             "| 门店 | 客群 | 卡片 | 型号 | 状态 | 8A | 8B | 8C | 8D | 改写轮数 | 8D 命中（循环中） | 事实编号 |",
+             "| 门店 | 客群 | 卡片 | 型号 | 状态 | 8A | 8B | 8C | 8D | 改写轮数 | 8D 命中（最终） | 事实编号 |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for e in evals:
         sp = [mark[e.stage_pass[s]] if e.status == "ok" else "—" for s in STAGES]
@@ -147,18 +147,31 @@ def build_report(evals: list[StoreEval], today, mode: str) -> str:
     all_pass = sum(all(e.stage_pass.values()) for e in ok)
     lines += ["", f"- 生成成功：{len(ok)} / {len(evals)} 家；四项核验全部通过：{all_pass} 家",
               f"- 平均改写轮数：{(sum(e.rewrites for e in ok) / len(ok)) if ok else 0:.2f}", ""]
+    if pairs:
+        lines += ["## 8E 跨店去重（before → after）", "",
+                  "| 门店 A | 门店 B | before | after | 处理 |", "|---|---|---|---|---|"]
+        for p in pairs:
+            before, after = getattr(p, "before", None), getattr(p, "after", None)
+            if before is None and isinstance(p, dict):
+                before, after = p.get("before"), p.get("after")
+            seg = getattr(p, "segment", "") or (p.get("segment") if isinstance(p, dict) else "")
+            a = getattr(p, "store_a", "") or (p.get("store_a") if isinstance(p, dict) else "")
+            b = getattr(p, "store_b", "") or (p.get("store_b") if isinstance(p, dict) else "")
+            regen = getattr(p, "regenerated", False) or (p.get("regenerated") if isinstance(p, dict) else False)
+            lines.append(f"| {a} | {b} | {before} | {after} | {'已换 hook/angle' if regen else '保持'} |")
+        lines.append("")
     lines += ["## 同客群门店相似度（字符 3-gram Jaccard）", "",
-              f"超过 {SIMILARITY_FLAG} 标 ⚠️（8E 重写在 Phase 4 实现，这里只报告）。", ""]
+              f"超过 {SIMILARITY_FLAG} 标 ⚠️；8E 已对超阈值门店换 hook/angle 后重算。", ""]
     groups = similarity_groups(evals)
     if not groups:
         lines.append("（没有可比较的文案）")
-    for seg, pairs in sorted(groups.items()):
+    for seg, seg_pairs in sorted(groups.items()):
         lines += [f"**{seg}**", ""]
-        if not pairs:
+        if not seg_pairs:
             lines += ["- 该客群只有一家成功生成，无需比较", ""]
             continue
         lines += ["| 门店 A | 门店 B | 相似度 |", "|---|---|---|"]
-        lines += [f"| {a} | {b} | {s}{' ⚠️' if s > SIMILARITY_FLAG else ''} |" for a, b, s in pairs]
+        lines += [f"| {a} | {b} | {s}{' ⚠️' if s > SIMILARITY_FLAG else ''} |" for a, b, s in seg_pairs]
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -173,12 +186,44 @@ def main(argv=None) -> int:
     if not args.fake and os.environ.get("RUN_E2E") != "1":
         print("eval_cards.py uses real deps (ima + LLM). Set RUN_E2E=1 to run it, or pass --fake.")
         return 2
-    from agent.pipeline import Deps
+    from agent.pipeline import Deps, generate_batch
     deps = Deps.fake() if args.fake else Deps.real()
     today = dt.date.fromisoformat(args.today)
     data = load_store_data()
-    evals = [eval_store(st, today, deps, data, fake=args.fake) for st in data.stores]
-    report = build_report(evals, today, "fakes（合成数据）" if args.fake else "真实依赖")
+    cards = []
+    for st in data.stores:
+        card = default_card(st["store_id"], today, data)
+        if card is not None and args.fake:
+            card = dataclasses.replace(card, model_id="demobook-14", display_name="DemoBook 14（演示版）")
+        cards.append((st, card))
+    batch = generate_batch([c for _, c in cards if c is not None], deps)
+    evals: list[StoreEval] = []
+    for st, card in cards:
+        sid = st["store_id"]
+        ev = StoreEval(store_id=sid, store_name=st["store_name"], segment=data.signals[sid]["dominant"])
+        if card is None:
+            ev.status, ev.message = "no_card", "今日无可生成的卡片"
+            evals.append(ev)
+            continue
+        ev.card_id, ev.slot, ev.model_id = card.card_id, card.slot, card.model_id or ""
+        r = batch.results.get(sid)
+        if isinstance(r, LockedResult):
+            ev.status, ev.message = "locked", r.message
+        elif isinstance(r, NeedsHuman):
+            ev.status, ev.message = "needs_human", r.message
+        elif isinstance(r, Exception):
+            ev.status, ev.message = "error", f"{type(r).__name__}: {str(r)[:160]}"
+        elif isinstance(r, RunResult):
+            final = r.report
+            ev.stage_pass = {s: not any(i.stage == s and i.severity == "error" for i in final.issues) for s in STAGES}
+            ev.rewrites = r.loops
+            ev.hits_8d = [(i.code, i.span) for i in final.issues if i.stage == "8D"]
+            ev.tags = list(dict.fromkeys(r.post.selling_points))
+            ev.text = render_publishable(r.post)
+        else:
+            ev.status, ev.message = "no_result", "没有返回结果"
+        evals.append(ev)
+    report = build_report(evals, today, "fakes（合成数据）" if args.fake else "真实依赖", batch.similarity)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")

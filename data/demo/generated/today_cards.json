@@ -10,17 +10,17 @@
         "date": "2026-10-21",
         "slot": "potential",
         "slot_label": "潜力款",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
-        "angle": "宿舍/图书馆场景",
+        "angle": "全天续航",
         "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "myth",
-          "label": "误区澄清"
+          "id": "question",
+          "label": "问题开头"
         },
         "voice": {
           "id": "senior",
@@ -66,17 +66,17 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
-        "angle": "上课携带",
+        "angle": "手机平板电脑多设备协同",
         "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "scene",
-          "label": "场景开头"
+          "id": "myth",
+          "label": "误区澄清"
         },
         "voice": {
           "id": "senior",
@@ -129,17 +129,17 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
-        "angle": "手机平板电脑多设备协同",
+        "angle": "宿舍/图书馆场景",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "scene",
-          "label": "场景开头"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "senior",
@@ -181,8 +181,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
@@ -239,17 +239,17 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
-        "angle": "手机平板电脑多设备协同",
+        "angle": "宿舍/图书馆场景",
         "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "myth",
-          "label": "误区澄清"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "techie",
@@ -302,17 +302,17 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
-        "angle": "手机平板电脑多设备协同",
+        "angle": "上课携带",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "checklist",
-          "label": "清单式"
+          "id": "scene",
+          "label": "场景开头"
         },
         "voice": {
           "id": "techie",
@@ -354,8 +354,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
@@ -412,17 +412,17 @@
         "date": "2026-10-21",
         "slot": "potential",
         "slot_label": "潜力款",
-        "model_id": "MODEL_E",
-        "display_name": "<入门型号 — 从catalog填写>",
+        "model_id": "matebook-d-14-2024",
+        "display_name": "HUAWEI MateBook D 14 2024",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
-        "angle": "上课携带",
+        "angle": "宿舍/图书馆场景",
         "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "myth",
-          "label": "误区澄清"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "techie",
@@ -468,12 +468,12 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
-        "angle": "宿舍/图书馆场景",
+        "angle": "上课携带",
         "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
@@ -531,8 +531,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
@@ -540,8 +540,8 @@
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "myth",
-          "label": "误区澄清"
+          "id": "question",
+          "label": "问题开头"
         },
         "voice": {
           "id": "techie",
@@ -583,8 +583,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
@@ -641,17 +641,17 @@
         "date": "2026-10-21",
         "slot": "potential",
         "slot_label": "潜力款",
-        "model_id": "MODEL_B",
-        "display_name": "<商务型号 — 从catalog填写>",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
-        "angle": "数据安全",
+        "angle": "多任务处理",
         "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "scene",
-          "label": "场景开头"
+          "id": "question",
+          "label": "问题开头"
         },
         "voice": {
           "id": "manager",
@@ -697,17 +697,17 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
-        "angle": "多任务处理",
+        "angle": "文档效率",
         "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "myth",
+          "label": "误区澄清"
         },
         "voice": {
           "id": "manager",
@@ -760,17 +760,17 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
-        "angle": "多任务处理",
+        "angle": "数据安全",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "manager",
@@ -812,8 +812,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_B",
-        "display_name": "<商务型号 — 从catalog填写>",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -870,17 +870,17 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
-        "angle": "会议与差旅",
+        "angle": "数据安全",
         "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "techie",
@@ -933,8 +933,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -942,8 +942,8 @@
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "checklist",
-          "label": "清单式"
+          "id": "scene",
+          "label": "场景开头"
         },
         "voice": {
           "id": "techie",
@@ -985,8 +985,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_B",
-        "display_name": "<商务型号 — 从catalog填写>",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -1043,17 +1043,17 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
-        "angle": "多任务处理",
+        "angle": "会议与差旅",
         "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "scene",
+          "label": "场景开头"
         },
         "voice": {
           "id": "manager",
@@ -1106,17 +1106,17 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
-        "angle": "会议与差旅",
+        "angle": "多任务处理",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "scene",
-          "label": "场景开头"
+          "id": "question",
+          "label": "问题开头"
         },
         "voice": {
           "id": "manager",
@@ -1158,8 +1158,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_B",
-        "display_name": "<商务型号 — 从catalog填写>",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -1216,17 +1216,17 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_D",
-        "display_name": "<家用全能型号 — 从catalog填写>",
+        "model_id": "matebook-d-16-se-2024",
+        "display_name": "HUAWEI MateBook D 16 SE 版 2024",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
-        "angle": "上手简单",
+        "angle": "旧电脑资料迁移",
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "myth",
+          "label": "误区澄清"
         },
         "voice": {
           "id": "manager",
@@ -1274,17 +1274,17 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
-        "angle": "上手简单",
+        "angle": "长期耐用",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "manager",
@@ -1326,8 +1326,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_D",
-        "display_name": "<家用全能型号 — 从catalog填写>",
+        "model_id": "matebook-d-16-se-2024",
+        "display_name": "HUAWEI MateBook D 16 SE 版 2024",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
@@ -1384,12 +1384,12 @@
         "date": "2026-10-21",
         "slot": "potential",
         "slot_label": "潜力款",
-        "model_id": "MODEL_D",
-        "display_name": "<家用全能型号 — 从catalog填写>",
+        "model_id": "matebook-d-16-se-2024",
+        "display_name": "HUAWEI MateBook D 16 SE 版 2024",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
-        "angle": "全家共用",
+        "angle": "旧电脑资料迁移",
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
@@ -1440,17 +1440,17 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_D",
-        "display_name": "<家用全能型号 — 从catalog填写>",
+        "model_id": "matebook-d-16-se-2024",
+        "display_name": "HUAWEI MateBook D 16 SE 版 2024",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
-        "angle": "全家共用",
+        "angle": "长期耐用",
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "manager",
@@ -1498,12 +1498,12 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
-        "angle": "全家共用",
+        "angle": "上手简单",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
@@ -1550,8 +1550,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_D",
-        "display_name": "<家用全能型号 — 从catalog填写>",
+        "model_id": "matebook-d-16-se-2024",
+        "display_name": "HUAWEI MateBook D 16 SE 版 2024",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
@@ -1608,12 +1608,12 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_D",
-        "display_name": "<家用全能型号 — 从catalog填写>",
+        "model_id": "matebook-d-16-se-2024",
+        "display_name": "HUAWEI MateBook D 16 SE 版 2024",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
-        "angle": "长期耐用",
+        "angle": "上手简单",
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
@@ -1666,17 +1666,17 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
-        "angle": "旧电脑资料迁移",
+        "angle": "全家共用",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "checklist",
-          "label": "清单式"
+          "id": "question",
+          "label": "问题开头"
         },
         "voice": {
           "id": "manager",
@@ -1718,8 +1718,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_D",
-        "display_name": "<家用全能型号 — 从catalog填写>",
+        "model_id": "matebook-d-16-se-2024",
+        "display_name": "HUAWEI MateBook D 16 SE 版 2024",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
@@ -1776,17 +1776,17 @@
         "date": "2026-10-21",
         "slot": "potential",
         "slot_label": "潜力款",
-        "model_id": "MODEL_A",
-        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "model_id": "matebook-14-harmonyos",
+        "display_name": "HUAWEI MateBook 14（鸿蒙版）",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
-        "angle": "送礼怎么选",
+        "angle": "到店体验理由",
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "myth",
-          "label": "误区澄清"
+          "id": "question",
+          "label": "问题开头"
         },
         "voice": {
           "id": "techie",
@@ -1832,8 +1832,8 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -1841,8 +1841,8 @@
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "myth",
+          "label": "误区澄清"
         },
         "voice": {
           "id": "techie",
@@ -1895,8 +1895,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -1904,8 +1904,8 @@
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "scene",
-          "label": "场景开头"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "techie",
@@ -1947,8 +1947,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -2005,8 +2005,8 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -2014,8 +2014,8 @@
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "checklist",
+          "label": "清单式"
         },
         "voice": {
           "id": "techie",
@@ -2068,17 +2068,17 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
-        "angle": "到店体验理由",
+        "angle": "送礼怎么选",
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "question",
-          "label": "问题开头"
+          "id": "scene",
+          "label": "场景开头"
         },
         "voice": {
           "id": "techie",
@@ -2120,8 +2120,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -2178,8 +2178,8 @@
         "date": "2026-10-21",
         "slot": "promo",
         "slot_label": "活动款",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -2187,8 +2187,8 @@
         "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "checklist",
-          "label": "清单式"
+          "id": "scene",
+          "label": "场景开头"
         },
         "voice": {
           "id": "techie",
@@ -2241,8 +2241,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "MODEL_N",
-        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "model_id": "matebook-fold-ultimate-design",
+        "display_name": "HUAWEI MateBook Fold 非凡大师",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -2250,8 +2250,8 @@
         "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
-          "id": "checklist",
-          "label": "清单式"
+          "id": "question",
+          "label": "问题开头"
         },
         "voice": {
           "id": "techie",
@@ -2293,8 +2293,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "MODEL_F",
-        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "model_id": "matebook-14-2024",
+        "display_name": "HUAWEI MateBook 14 酷睿 Ultra",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",

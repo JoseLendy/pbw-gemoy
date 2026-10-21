@@ -46,12 +46,12 @@ TOTAL_UNITS = {1: 15, 2: 30, 3: 50}          # avg weekly units per store tier
 # Planted stories: (store, model) -> sales multiplier. These make the demo surface
 # clear, explainable 潜力款 picks. Change freely, then re-run and read the sanity table.
 PLANTED = {
-    ("S01", "MODEL_A"): 0.40,   # campus store under-sells the light/long-battery model
-    ("S04", "MODEL_B"): 0.45,   # CBD store under-sells the business model
-    ("S08", "MODEL_D"): 0.50,   # residential store under-sells the family model
-    ("S10", "MODEL_A"): 0.45,   # mall store under-sells the same light model (gift angle, not study angle)
+    ("S01", "matebook-14-harmonyos"): 0.40,   # campus store under-sells the light/long-battery model
+    ("S04", "matebook-pro-s"): 0.45,          # CBD store under-sells the business model
+    ("S08", "matebook-d-16-se-2024"): 0.50,   # residential store under-sells the family model
+    ("S10", "matebook-14-harmonyos"): 0.45,   # mall store under-sells the same light model (gift angle, not study angle)
 }
-STOCKOUT = {("S02", "MODEL_A")}  # shows the stock filter: high fit, but nothing to sell
+STOCKOUT = {("S02", "matebook-14-harmonyos")}  # shows the stock filter: high fit, but nothing to sell
 # Recommender thresholds (MIN_FIT, MAX_INDEX, ...) are imported from agent/recommend/scoring.py.
 
 # Fake POI layout per intended type: category -> (count range, distance range in m)
@@ -179,55 +179,9 @@ def gen_questions(stores, signals, pool, today, rng):
     return rows
 
 
-# ---------------------------------------------------------------- main
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--today", default="2026-10-21")
-    ap.add_argument("--seed", type=int, default=42)
-    args = ap.parse_args()
-    today = parse_date(args.today)
-    rng = random.Random(args.seed)
-
-    stores = load_csv(INPUTS / "stores.csv")
-    models = load_csv(INPUTS / "models.csv")
-    seg_cfg = load_json(INPUTS / "segments.json")
-    promos = load_json(INPUTS / "promotions.json")
-    calendar = load_json(INPUTS / "calendar.json")
-    quota = load_json(INPUTS / "platform_quota.json")
-    angles = load_json(INPUTS / "angles.json")
-    pool = load_json(INPUTS / "question_pool.json")
-    OUT.mkdir(parents=True, exist_ok=True)
-
-    # 1. location -> audience (real Amap cache wins; else a fake fixture is built and written here)
-    signals = poi.store_signals(stores, seg_cfg, INPUTS, OUT,
-                                make_fixture=lambda st: fake_pois(st, rng, seg_cfg))
-    write_json(OUT / "store_signals.json", signals)
-
-    # 2. sales + under-index
-    sales = gen_sales(stores, models, today, rng)
-    write_csv(OUT / "sales_weekly.csv", sales)
-    idx = sales_mod.under_index(sales, signals, today)
-
-    # 3. other logs
-    overrides = {k: v for k, v in load_json(INPUTS / "store_profile_overrides.json").items() if not k.startswith("_")}
-    profiles = build_profiles(stores, signals, angles, overrides)
-    write_json(OUT / "store_profiles.json", profiles)
-    publish = gen_publish_log(stores, models, quota, today, rng)
-    write_csv(OUT / "publish_log.csv", publish)
-    write_json(OUT / "post_history.json",
-               [r for r in publish if r["posted"] == "true"
-                and (today - parse_date(r["date"])).days <= RECENT_POST_DAYS])
-    write_csv(OUT / "engagement_log.csv", gen_engagement(publish, rng))
-    questions = gen_questions(stores, signals, pool, today, rng)
-    write_json(OUT / "customer_questions.json", questions)
-
-    # 4. today's cards (what the store screen shows)
-    cards = slots.build_cards(stores, models, signals, idx, promos, calendar, quota, angles, profiles,
-                              questions, publish, seg_cfg, pool, today)
-    write_json(OUT / "today_cards.json", {"date": today.isoformat(), "seed": args.seed, "cards": cards})
-
-    # 5. sanity table
-    lines = [f"pbw gemoy demo data · today={today} · seed={args.seed} · platform today="
+# ---------------------------------------------------------------- summary
+def build_summary(stores, models, signals, idx, cards, quota, today, seed) -> str:
+    lines = [f"pbw gemoy demo data · today={today} · seed={seed} · platform today="
              f"{quota['rotation'][today.weekday()]}", ""]
     lines.append(f"{'store':<5}{'type':<12}{'POI':<9}{'dominant':<9}{'w':<6}{'潜力款':<9}{'index':<7}{'default card':<14}")
     problems = []
@@ -252,7 +206,74 @@ def main():
     for (sid, mid) in STOCKOUT:
         lines.append(f"stock-out check: {sid}/{mid} stock={idx[(sid, mid)]['stock']} (must not be 潜力款)")
     lines += ["", "PROBLEMS:" if problems else "All checks passed."] + [f"  - {p}" for p in problems]
-    summary = "\n".join(lines)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--today", default="2026-10-21")
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--check-only", action="store_true",
+                    help="recompute with current inputs (incl. poi_cache/) and print the sanity table; write nothing")
+    args = ap.parse_args()
+    today = parse_date(args.today)
+    rng = random.Random(args.seed)
+
+    stores = load_csv(INPUTS / "stores.csv")
+    models = load_csv(INPUTS / "models.csv")
+    seg_cfg = load_json(INPUTS / "segments.json")
+    promos = load_json(INPUTS / "promotions.json")
+    calendar = load_json(INPUTS / "calendar.json")
+    quota = load_json(INPUTS / "platform_quota.json")
+    angles = load_json(INPUTS / "angles.json")
+    pool = load_json(INPUTS / "question_pool.json")
+    OUT.mkdir(parents=True, exist_ok=True)
+
+    # 1. location -> audience (real Amap cache wins; --check-only computes fixtures in memory)
+    signals = poi.store_signals(stores, seg_cfg, INPUTS, OUT,
+                                make_fixture=lambda st: fake_pois(st, rng, seg_cfg),
+                                write_fixture=not args.check_only)
+    overrides = {k: v for k, v in load_json(INPUTS / "store_profile_overrides.json").items() if not k.startswith("_")}
+    profiles = build_profiles(stores, signals, angles, overrides)
+
+    if args.check_only:
+        # Recompute cards from the last generated sales/logs + current inputs/poi_cache. Never write.
+        sales = load_csv(OUT / "sales_weekly.csv")
+        publish = load_csv(OUT / "publish_log.csv")
+        questions = load_json(OUT / "customer_questions.json")
+        idx = sales_mod.under_index(sales, signals, today)
+        cards = slots.build_cards(stores, models, signals, idx, promos, calendar, quota, angles, profiles,
+                                  questions, publish, seg_cfg, pool, today)
+        print(build_summary(stores, models, signals, idx, cards, quota, today, args.seed))
+        print("\ncheck-only: no files were written.")
+        return
+
+    write_json(OUT / "store_signals.json", signals)
+
+    # 2. sales + under-index
+    sales = gen_sales(stores, models, today, rng)
+    write_csv(OUT / "sales_weekly.csv", sales)
+    idx = sales_mod.under_index(sales, signals, today)
+
+    # 3. other logs
+    write_json(OUT / "store_profiles.json", profiles)
+    publish = gen_publish_log(stores, models, quota, today, rng)
+    write_csv(OUT / "publish_log.csv", publish)
+    write_json(OUT / "post_history.json",
+               [r for r in publish if r["posted"] == "true"
+                and (today - parse_date(r["date"])).days <= RECENT_POST_DAYS])
+    write_csv(OUT / "engagement_log.csv", gen_engagement(publish, rng))
+    questions = gen_questions(stores, signals, pool, today, rng)
+    write_json(OUT / "customer_questions.json", questions)
+
+    # 4. today's cards (what the store screen shows)
+    cards = slots.build_cards(stores, models, signals, idx, promos, calendar, quota, angles, profiles,
+                              questions, publish, seg_cfg, pool, today)
+    write_json(OUT / "today_cards.json", {"date": today.isoformat(), "seed": args.seed, "cards": cards})
+
+    # 5. sanity table
+    summary = build_summary(stores, models, signals, idx, cards, quota, today, args.seed)
     (OUT / "summary.txt").write_text(summary + "\n", encoding="utf-8")
     print(summary)
 

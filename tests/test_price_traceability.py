@@ -77,10 +77,31 @@ def test_price_without_conditions_fails():
     assert "price_conditions_missing" in codes(check_prices(post_with("演示活动价 4999 元。"), promo_task()))
 
 
-@pytest.mark.parametrize("claim", ["到店立减500", "再享国家补贴", "支持12期免息", "现货充足", "限量 50 台"])
+@pytest.mark.parametrize("claim", ["到店立减500", "再享国家补贴", "支持12期免息", "现货充足", "限量 50 台",
+                                   "赠品随箱", "库存有限"])
 def test_unrecorded_mechanics_fail_even_with_a_record(claim):
     assert "price_untraceable" in codes(check_prices(post_with(f"演示活动价 4999 元，{COND}，{claim}。"),
                                                      promo_task()))
+
+
+@pytest.mark.parametrize("claim", ["立减500", "国家补贴", "12期免息", "赠品", "库存有限"])
+def test_unrecorded_mechanics_fail_without_a_record(claim):
+    assert "price_untraceable" in codes(check_prices(post_with(f"{claim}。"), no_promo_task()))
+
+
+def test_matching_price_on_a_different_model_fails():
+    t = promo_task()
+    t.model_id = "matebook-d-14-2024"       # the record does not carry a price for this model
+    assert "price_untraceable" in codes(check_prices(post_with(f"演示活动价 4999 元，{COND}。"), t))
+
+
+def test_money_terms_cover_the_old_8a_price_rule():
+    """8B's card price rule must be at least as broad as the old 8A price pattern set."""
+    from agent.checks.prices import TERM_RE
+    terms = ["免费送", "低价", "仅售", "售价", "起售", "起价", "定价", "价格", "报价", "优惠", "补贴",
+             "立减", "直降", "降价", "到手价", "特价", "折扣", "打折", "满减", "买赠", "赠送", "赠品",
+             "分期", "免息", "库存", "现货", "仅剩", "限量"]
+    assert [t for t in terms if not TERM_RE.search(t)] == []
 
 
 def test_card_without_a_record_blocks_any_price():
@@ -139,15 +160,16 @@ def test_price_request_matching_the_record_is_allowed():
 
 
 def test_card_run_end_to_end_marks_the_demo_price():
-    """Real promo card (MODEL_A, DEMO 4999) through run_from_card; the fake catalog is taught MODEL_A, with
-    synthetic DemoBook facts standing in for its KB data."""
+    """Real promo card (MateBook 14 HarmonyOS, DEMO 4999) through run_from_card; the fake catalog is taught
+    that model id, with synthetic DemoBook facts standing in for its KB data."""
     from tests import fakes as F
     card = next(c for c in cards_for("S02", TODAY) if c.slot == "promo")
+    mid = card.model_id
     deps = Deps.fake()
-    model_a = dataclasses.replace(F.DEMO, model_id="MODEL_A", siblings=[])
-    deps.catalog = F.FakeCatalog({**F.MODELS, "MODEL_A": model_a})
-    deps.get_bundle = lambda mid, catalog=None: dataclasses.replace(F.fake_bundle("demobook-14"),
-                                                                    model=deps.catalog.get(mid))
+    model_a = dataclasses.replace(F.DEMO, model_id=mid, siblings=[])
+    deps.catalog = F.FakeCatalog({**F.MODELS, mid: model_a})
+    deps.get_bundle = lambda model_id, catalog=None: dataclasses.replace(F.fake_bundle("demobook-14"),
+                                                                        model=deps.catalog.get(model_id))
     deps.build_ledger = lambda bundle, llm=None, use_cache=True: F.fake_ledger("demobook-14")
     base_write = deps.write_post
 
@@ -158,6 +180,6 @@ def test_card_run_end_to_end_marks_the_demo_price():
 
     deps.write_post = write
     r = run_from_card(card, deps)
-    assert isinstance(r, RunResult) and r.task.model_id == "MODEL_A"
+    assert isinstance(r, RunResult) and r.task.model_id == mid
     pub = render_publishable(r.post)
     assert f"4999 元 {DEMO_TAG}" in pub and pub.count(DEMO_TAG) == 1

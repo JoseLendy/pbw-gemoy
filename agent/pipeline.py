@@ -16,12 +16,13 @@ import importlib
 import logging
 import re
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from agent.schemas import (
-    CheckReport, Clarification, EditBlocked, ImagePlan, Ledger, LockedResult, ModelBundle, NeedsHuman, PLATFORM_LABELS,
-    Post, RecommendationCard, RunResult, SCENARIO_LABELS, StaffContext, Strategy, Task,
+    CardHook, CheckReport, Clarification, EditBlocked, ImagePlan, Ledger, LockedResult, ModelBundle, NeedsHuman,
+    PLATFORM_LABELS, Post, RecommendationCard, RunResult, SCENARIO_LABELS, StaffContext, Strategy, Task,
 )
 
 log = logging.getLogger("agent.pipeline")
@@ -337,6 +338,17 @@ def _from_retrieval(task: Task, deps: Deps, on_progress: Progress, timer: _Timer
     return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
 
 
+def _log_real(card, result, staff, deps, kind: str = "run_from_card") -> None:
+    """Append a full run record only for real deps (fake/demo runs are never logged)."""
+    if deps is None or getattr(deps, "is_dev_mode", True):
+        return
+    try:
+        from agent.runs import log_run
+        log_run(card, result, staff, kind=kind)
+    except Exception as e:  # noqa: BLE001 - logging must never break a run
+        log.warning("run log failed: %s", e)
+
+
 def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: StaffContext | None = None,
                   on_progress: Progress = None) -> RunResult | LockedResult | NeedsHuman:
     """Proactive entry (PROACTIVE_AGENT_PLAN §3): the card replaces the user sentence, so intake and model
@@ -346,14 +358,137 @@ def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: Sta
         reason = card.locked_reason or "locked"
         msg = LOCKED_MESSAGES.get(reason, "该推荐暂不可生成，请等待总部确认")
         _say(on_progress, "card", msg)
-        return LockedResult(card=card, reason=reason, message=msg)
+        result = LockedResult(card=card, reason=reason, message=msg)
+        _log_real(card, result, staff, deps)
+        return result
     from agent.recommend.to_task import card_to_task
     deps = deps or default_deps()
     timer = _Timer()
     _say(on_progress, "card", f"今日推荐：{card.slot_label} {card.display_name or card.model_id} → {card.platform}")
     task = card_to_task(card, staff)       # raises ValueError on a staff voice the segment does not allow
     timer.lap("intake")
-    return _from_retrieval(task, deps, on_progress, timer)
+    result = _from_retrieval(task, deps, on_progress, timer)
+    _log_real(card, result, staff, deps)
+    return result
+
+
+@dataclass
+class SimilarityPair:
+    segment: str
+    store_a: str
+    store_b: str
+    before: float
+    after: float
+    regenerated: bool = False
+
+
+@dataclass
+class BatchResult:
+    results: dict[str, Any]                 # store_id -> RunResult | LockedResult | NeedsHuman | Exception
+    similarity: list[SimilarityPair]
+    regenerated: list[str] = field(default_factory=list)
+
+
+def _batch_text(result) -> str:
+    if not isinstance(result, RunResult):
+        return ""
+    from agent.formatter import render_publishable
+    return render_publishable(result.post)
+
+
+def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = None,
+                   on_progress: Progress = None) -> BatchResult:
+    """Run several recommendation cards and enforce 8E cross-store variety.
+
+    Same-peer stores whose publishable text exceeds SIMILARITY_THRESHOLD are regenerated once (the later
+    store id), first with the next hook unused by peers today and, in the same rerun, the next unused angle.
+    Model, platform and facts never change; customer-question cards keep the reserved customer hook.
+    Returns final results plus before/after similarity pairs for the UI / eval report.
+    """
+    from agent.formatter import render_publishable   # noqa: F401  (used by _batch_text)
+    from agent.recommend.common import INPUTS, load_json
+    from agent.style.similarity import jaccard, similarity_threshold
+
+    deps = deps or default_deps()
+    staff_map = staff_map or {}
+    raw = list(cards.values()) if isinstance(cards, dict) else list(cards)
+    items = [c if isinstance(c, RecommendationCard) else RecommendationCard.from_dict(c) for c in raw]
+    by_store = {c.store_id: c for c in items}
+    results: dict[str, Any] = {}
+    for card in items:
+        try:
+            results[card.store_id] = run_from_card(card, deps, staff_map.get(card.store_id), on_progress)
+        except Exception as e:  # noqa: BLE001 - one store must not abort the batch
+            results[card.store_id] = e
+
+    groups: dict[str, list[str]] = defaultdict(list)
+    for card in items:
+        groups[card.segment].append(card.store_id)
+    for group in groups.values():
+        group.sort()
+    initial = {sid: _batch_text(r) for sid, r in results.items()}
+    threshold = similarity_threshold()
+    angles_cfg = load_json(INPUTS / "angles.json")
+    regenerated: list[str] = []
+
+    def peer_text(sid: str) -> str:
+        return _batch_text(results.get(sid))
+
+    changed = True
+    while changed:
+        changed = False
+        for seg, sids in groups.items():
+            for i, a in enumerate(sids):
+                for b in sids[i + 1:]:
+                    ta, tb = peer_text(a), peer_text(b)
+                    if not ta or not tb or jaccard(ta, tb) <= threshold:
+                        continue
+                    later = b                         # sids are sorted, so b is the later store
+                    if later in regenerated:
+                        continue
+                    card = by_store[later]
+                    if card.slot == "customer_question":   # customer hook is reserved for the logged question
+                        continue
+                    peer_cards = [by_store[s] for s in sids if s != later]
+                    used_hooks = {c.hook.id for c in peer_cards if c.hook}
+                    used_angles = {c.angle for c in peer_cards if c.angle}
+                    hooks = [h for h in angles_cfg["hooks"] if not h.get("requires_logged_question")]
+                    next_hook = next((h for h in hooks if h["id"] not in used_hooks), None)
+                    seg_angles = angles_cfg["segment_angles"][seg]
+                    next_angle = next((x for x in seg_angles if x not in used_angles), None)
+                    if next_hook is None and next_angle is None:
+                        continue
+                    new_card = copy.deepcopy(card)
+                    if next_hook is not None:
+                        new_card.hook = CardHook(next_hook["id"], next_hook["label"])
+                    if next_angle is not None:
+                        new_card.angle = next_angle
+                    try:
+                        new_result = run_from_card(new_card, deps, staff_map.get(later), on_progress)
+                    except Exception:  # noqa: BLE001 - keep the original result if the rerun fails
+                        continue
+                    if not isinstance(new_result, RunResult):
+                        continue
+                    by_store[later] = new_card
+                    results[later] = new_result
+                    regenerated.append(later)
+                    changed = True
+                    break
+                if changed:
+                    break
+            if changed:
+                break
+
+    pairs: list[SimilarityPair] = []
+    for seg, sids in groups.items():
+        for i, a in enumerate(sids):
+            for b in sids[i + 1:]:
+                before, after = initial.get(a, ""), initial.get(b, "")
+                if not before and not after:
+                    continue
+                pairs.append(SimilarityPair(seg, a, b, round(jaccard(before, after), 3),
+                                            round(jaccard(peer_text(a), peer_text(b)), 3), b in regenerated))
+    return BatchResult(results=results, similarity=pairs, regenerated=regenerated)
 
 
 # ---------------------------------------------------------------- edit

@@ -395,6 +395,27 @@ def _set_field(post: Post, field: str, text: str) -> None:
         post.body[int(m.group(2))] = text
 
 
+def _sentence_numbers_supported(ledger: Ledger, sentence: str) -> bool:
+    """Auto-cite may only attach a tag when every number in the sentence is supported by SOME ledger fact.
+    A number that matches no fact would otherwise become a "verified" claim. Numbers belonging to another
+    fact in the same sentence are fine; that fact gets its own tag in the same loop."""
+    masked = mask_whitelisted(sentence)
+    for _span, value, unit in units.find_all(masked):
+        if not _matching_facts(ledger, value, unit):
+            return False
+    for m in list(SPEC_NUM_RE.finditer(masked)) + list(RESOLUTION_RE.finditer(masked)):
+        span = m.group(0).strip()
+        if any(units.find_all(span)):
+            continue
+        if m.re is RESOLUTION_RE:
+            if not _fact_has_text(ledger, re.sub(r"\s*[×xX*]\s*", "×", span)):
+                return False
+        else:
+            if not _spec_count_supported(ledger, m.group(1), m.group(2)):
+                return False
+    return True
+
+
 def _cite_in(text: str, sentence: str, fid: str) -> str | None:
     """Append [fid] to the sentence of `text` that matches `sentence`; None if not found or already cited."""
     want = _norm(FACT_TAG_RE.sub("", sentence)).rstrip("。！？!?；;")
@@ -429,6 +450,8 @@ def auto_cite(post: Post, issues: list[CheckIssue], ledger: Ledger) -> tuple[Pos
         key = _norm(FACT_TAG_RE.sub("", i.span)).rstrip("。！？!?；;")
         done = False
         for fid in fids:
+            if not _sentence_numbers_supported(ledger, i.span):
+                continue
             if any((field, key, fid) in added for field in fields):
                 done = True          # an earlier issue in this pass already added exactly this tag
                 break

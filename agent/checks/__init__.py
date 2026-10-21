@@ -58,6 +58,29 @@ def load_yaml(name: str) -> dict:
     return yaml.safe_load(p.read_text("utf-8")) or {}
 
 
+def _norm_span(span: str) -> str:
+    return re.sub(r"\s+", "", span or "")
+
+
+def dedupe_style_hits(report: "CheckReport") -> "CheckReport":
+    """8C's ai_tell and 8D's ai_cliche/ai_pattern can flag the same phrase twice. Keep one line, using
+    the 8D issue as primary and recording 8C in also_stages so 四、核验结果 shows `[8D/8C]`."""
+    d_hits: dict[tuple[str, str], object] = {}
+    for i in report.issues:
+        if i.stage == "8D" and i.code in ("ai_cliche", "ai_pattern") and i.span:
+            d_hits.setdefault((i.field, _norm_span(i.span)), i)
+    out = []
+    for i in report.issues:
+        if i.stage == "8C" and i.code == "ai_tell" and i.span:
+            primary = d_hits.get((i.field, _norm_span(i.span)))
+            if primary is not None:
+                if "8C" not in primary.also_stages:
+                    primary.also_stages.append("8C")
+                continue
+        out.append(i)
+    return CheckReport(out)
+
+
 def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task: Task,
             plan: ImagePlan, llm=None) -> CheckReport:
     """8A → 8B → 8C → 8D, merged into one report (8C before 8D because stripping in 8A/8B can break
@@ -82,7 +105,7 @@ def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task
     except Exception as e:  # noqa: BLE001
         import logging
         logging.getLogger("agent.checks").warning("8D unavailable: %s", e)
-    return report
+    return dedupe_style_hits(report)
 
 
 __all__ = ["run_all", "strip_fact_tags", "load_lines", "load_yaml", "CONFIG_DIR", "FACT_TAG_RE"]

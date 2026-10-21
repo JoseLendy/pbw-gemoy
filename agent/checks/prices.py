@@ -37,7 +37,8 @@ MONEY_RE = re.compile(
     rf"[¥￥]\s*{_NUM}|(?:价|售价|活动价|到手价|特价)\s*[:：]?\s*{_NUM}(?:\s*(?:元|块钱|块|CNY|RMB|rmb))?"
     rf"|{_NUM}\s*(?:元|块钱|块|CNY|RMB|rmb)")
 # Money-adjacent mechanics the demo records never carry (a record only has label + value + conditions).
-TERM_RE = re.compile(r"(立减|直降|降价|优惠|补贴|折扣|打折|\d+\s*折|满减|分期|免息|到手价|特价|赠品|赠送|买赠|"
+TERM_RE = re.compile(r"(立减|直降|降价|优惠|补贴|折扣|打折|\d+\s*折|[一二三四五六七八九]\s*折|满减|分期|免息|"
+                     r"到手价|特价|赠品|赠送|买赠|免费送|低价|仅售|售价|起售|起价|定价|价格|报价|"
                      r"库存|现货|仅剩|限量|手慢无|售罄)")
 _WS_RE = re.compile(r"\s+")
 

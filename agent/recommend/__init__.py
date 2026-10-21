@@ -15,6 +15,6 @@ and data/demo/generated/ and never calls ima, the LLM or the network.
     to_task.py    RecommendationCard (+ optional StaffContext) → Task for the existing pipeline
 """
 from agent.recommend.store_data import (  # noqa: F401
-    StoreData, cards_for, default_card, load_store_data, reload, set_fact_card_status,
+    StoreData, cards_for, default_card, load_store_data, reload, reset_demo_state, set_fact_card_status,
 )
 from agent.recommend.to_task import card_to_task  # noqa: F401

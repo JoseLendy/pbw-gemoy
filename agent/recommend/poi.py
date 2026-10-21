@@ -37,10 +37,11 @@ def fixture_path(store_id: str, generated_dir: Path = GENERATED) -> Path:
 
 
 def load_pois(store: dict, seg_cfg: dict, inputs_dir: Path = INPUTS, generated_dir: Path = GENERATED,
-              make_fixture: FixtureFactory | None = None) -> tuple[list[dict], str]:
+              make_fixture: FixtureFactory | None = None, write_fixture: bool = True) -> tuple[list[dict], str]:
     """(pois, source). A real Amap cache (scripts/fetch_poi.py) always wins → "amap".
     Otherwise the generated fixture → "fixture": the generator passes `make_fixture` to build and
-    write it; the app leaves it None and reads the file the generator wrote."""
+    write it; the app leaves it None and reads the file the generator wrote. `write_fixture=False`
+    computes a fixture in memory for --check-only (no generated files touched)."""
     sid = store["store_id"]
     cache = cache_path(sid, inputs_dir)
     if cache.exists():
@@ -54,7 +55,8 @@ def load_pois(store: dict, seg_cfg: dict, inputs_dir: Path = INPUTS, generated_d
     fixture = fixture_path(sid, generated_dir)
     if make_fixture is not None:
         pois = make_fixture(store)
-        write_json(fixture, {"store_id": sid, "pois": pois})
+        if write_fixture:
+            write_json(fixture, {"store_id": sid, "pois": pois})
         return pois, "fixture"
     if fixture.exists():
         return load_json(fixture)["pois"], "fixture"
@@ -92,11 +94,12 @@ def segment_weights(pois: list[dict], seg_cfg: dict) -> dict:
 
 
 def store_signals(stores: list[dict], seg_cfg: dict, inputs_dir: Path = INPUTS,
-                  generated_dir: Path = GENERATED, make_fixture: FixtureFactory | None = None) -> dict:
+                  generated_dir: Path = GENERATED, make_fixture: FixtureFactory | None = None,
+                  write_fixture: bool = True) -> dict:
     """{store_id: segment_weights(...) + poi_source} for every store, in stores.csv order."""
     signals = {}
     for st in stores:
-        pois, src = load_pois(st, seg_cfg, inputs_dir, generated_dir, make_fixture)
+        pois, src = load_pois(st, seg_cfg, inputs_dir, generated_dir, make_fixture, write_fixture)
         sig = segment_weights(pois, seg_cfg)
         sig["poi_source"] = src
         signals[st["store_id"]] = sig

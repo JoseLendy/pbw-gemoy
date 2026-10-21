@@ -1,10 +1,11 @@
 # pbw gemoy — Proactive Store Post Agent (复赛 plan)
 
 > Team design doc for the 复赛 (semi-final → final) round.
-> Status: **v2, for team review**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
+> Status: **v2.3, Phase 4 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
 > Deadline: **video submission, Fri Oct 23, 17:00**.
 
 **Changelog**
+- **v2.3 (Wed Oct 21, Phase 4):** real model mapping applied (`docs/model_mapping.md`); peer-aware hook/angle assignment replaces per-store md5 rotation (§6.4); `generate_batch` adds 8E regeneration and before/after similarity; 8C/8D duplicate hits are merged into one line with both checker IDs; `reset_demo_state`, `runs/` real-run logs and `latest_run` added (Phase 3 UI can call them); `gen_fake_data.py --check-only` supports a safe Amap swap. 8A auto-cite now refuses sentences with unsupported numbers; 8B money patterns are as broad as the old 8A price rule.
 - **v2.2 (Wed Oct 21, Phase 2):** the 8D blocklist drops its `absolute` group (absolute claims are 8B's job; a bare 最/第一 substring match would false-flag 最近/第一次). Customer-hook wording loses its 最 ("这几天好几位顾客都在问……"). Recommendation cards gain an explicit, calendar-aware `scenario` field (§10.7), so the pipeline no longer guesses a stage from the segment.
 - **v2 (Wed Oct 21):** organizer confirmed we may use fake data. §10 rewritten around a ready-to-run data kit (`scripts/gen_fake_data.py` + templates in `data/demo/inputs/`). Demo promos may now carry demo prices, with a new price-traceability rule (§4.3, §6.5). Affinity scores moved into `models.csv`. Configs are JSON. Amap POI codes verified. Timeline updated.
 - v1 (Tue Oct 20): initial proposal.
@@ -339,10 +340,10 @@ Video moment: same card, **before** (plain LLM) vs **after** (our pipeline), blo
 ### 6.4 Cross-store similarity check (8E)
 
 After generating today's posts for all stores:
-- Compare each post with other stores' same-day posts in the same peer group (character 3-gram Jaccard or TF-IDF cosine).
-- If similarity > threshold (start at 0.55, tune) → regenerate with a different hook.
+- Compare each post with other stores' same-day posts in the same peer group (character 3-gram Jaccard; default threshold 0.55, `SIMILARITY_THRESHOLD` env-configurable).
+- If similarity > threshold → regenerate the later store once with the next hook unused by its peers today, and the next unused angle in the segment's angle list. Model, platform and facts never change; a customer-question card keeps the reserved customer hook. Max one regeneration per store.
 
-Hook pool (`angles.json`), assigned by `md5(store_id, date, slot)`: 场景开头 · 问题开头 · 误区澄清 · 清单式; 顾客问答开头 is reserved for 顾客问答 cards.
+**Peer-aware hook/angle assignment (Phase 4):** within a peer group (same dominant segment), stores are sorted by `store_id`; hooks and angles rotate by `peer_rank + days_since_epoch + slot_index`, so stores in the same group get distinct non-customer hooks and distinct angles while the segment's pool allows it. The fixed epoch is `2026-01-01`. The customer hook is reserved for 顾客问答 cards. This replaces the older per-store md5 assignment.
 
 ### 6.5 Hard rules (system prompt + checkers)
 
@@ -373,6 +374,7 @@ All stores: 新品款 cards unlocked; writers may use ONLY verified card facts
 - Draft cards are never used for store posts (`locked: true` on the card).
 - If KB sources conflict on a fact → that fact stays unverified and is excluded (existing conflict gate; see `conflict` in the fact-card template).
 - Demo: `MODEL_N` (launch Oct 28) is `draft`. Verify it live in the HQ tab; with the video date set to Oct 23 it is within 7 days of launch, so it becomes the default card for every store.
+- `agent.recommend.reset_demo_state()` clears the in-memory fact-card overrides and data cache between takes; the UI must also clear its session-level 已发布 / question chips.
 - Pitch line: *one verification, thousands of accurate posts.*
 
 ---
@@ -398,6 +400,8 @@ The last panel was roadmap in v1. Since fake data is allowed, it can be shown ch
 2. **三店对比** — same product, same day, side by side as phone previews: S01 campus, S04 CBD, S08 residential, plus **S02, a second campus store**, to show same-type stores still differ. *The key video shot.*
 3. **总部端** — panels from §8, including verifying `MODEL_N` live.
 4. **手动输入** — existing pull-based flow, kept as fallback.
+
+Retakes: call `agent.recommend.reset_demo_state()` (clears fact-card overrides + data cache) and clear the app session’s 已发布 / question state. Real runs also append `runs/<date>/<timestamp>-<store>-<slot>.json`; `agent.runs.latest_run(card_id)` returns the newest real output for a fallback display. The `runs/` directory is gitignored; these are real outputs and must never be hand-edited.
 
 ---
 
@@ -528,6 +532,7 @@ Full example: `templates/recommendation_card.example.json`. Fields:
 | `model_id, display_name` | product; writer must fetch facts for exactly this ID |
 | `platform` | from weekly rotation |
 | `segment, segment_label, angle, calendar_theme` | targeting → writer brief |
+| `scenario` | explicit Scenario key (calendar-aware; e.g. `campus_daily`, `holiday`, `new_launch`) |
 | `hook{id,label}, voice{id,label}, landmark, nickname` | variation → writer brief |
 | `reasons[{text, source, is_demo}]` | explanation card; `is_demo` → 模拟 badge |
 | `promo{campaign_id, name, mechanic, price_info, source}` | the **only** allowed price source |

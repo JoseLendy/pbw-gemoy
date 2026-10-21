@@ -8,6 +8,7 @@ import dataclasses
 import datetime as dt
 import json
 import shutil
+from collections import defaultdict
 
 import pytest
 
@@ -22,8 +23,9 @@ from agent.recommend.store_data import (
 from agent.schemas import LockedResult, RecommendationCard, RunResult, StaffContext, Task
 
 TODAY = dt.date(2026, 10, 21)
-PLANTED = {("S01", "MODEL_A"), ("S04", "MODEL_B"), ("S08", "MODEL_D"), ("S10", "MODEL_A")}
-BEST_SELLER = "MODEL_F"
+PLANTED = {("S01", "matebook-14-harmonyos"), ("S04", "matebook-pro-s"),
+           ("S08", "matebook-d-16-se-2024"), ("S10", "matebook-14-harmonyos")}
+BEST_SELLER = "matebook-14-2024"
 
 
 @pytest.fixture(scope="module")
@@ -59,11 +61,11 @@ def test_best_seller_is_never_potential(cards):
 
 def test_stock_out_store_has_no_potential_for_that_model(cards, data):
     pot = _potential(cards, "S02")
-    assert pot is None or pot["model_id"] != "MODEL_A"
+    assert pot is None or pot["model_id"] != "matebook-14-harmonyos"
     # and the reason is really the stock filter: high fit, nothing to sell
     from agent.recommend.sales import under_index
     idx = under_index(data.sales, data.signals, TODAY)
-    assert idx[("S02", "MODEL_A")]["stock"] == 0
+    assert idx[("S02", "matebook-14-harmonyos")]["stock"] == 0
 
 
 def test_thresholds_are_the_single_source_of_truth():
@@ -107,9 +109,34 @@ def test_reasons_are_ordered_where_why_when(cards):
 
 def test_same_model_gets_different_angles_at_campus_and_mall(cards):
     s01, s10 = _potential(cards, "S01"), _potential(cards, "S10")
-    assert s01["model_id"] == s10["model_id"] == "MODEL_A"
+    assert s01["model_id"] == s10["model_id"] == "matebook-14-harmonyos"
     assert s01["segment"] == "student" and s10["segment"] == "shopper"
     assert s01["angle"] != s10["angle"]
+
+
+def test_peer_group_hooks_and_angles_are_distinct(cards, data):
+    """Within a peer group and the same slot, stores get distinct non-customer hooks and angles while
+    the segment's pool allows it; the customer hook is reserved for 顾客问答 cards."""
+    groups = defaultdict(list)
+    for st in data.stores:
+        groups[data.signals[st["store_id"]]["dominant"]].append(st["store_id"])
+    hooks = [h["id"] for h in data.angles["hooks"] if not h.get("requires_logged_question")]
+    for seg, sids in groups.items():
+        angles = data.angles["segment_angles"][seg]
+        for slot in ("potential", "promo", "new_release", "customer_question"):
+            picked = [(sid, c) for sid in sids for c in cards[sid] if c["slot"] == slot]
+            if not picked:
+                continue
+            if slot == "customer_question":
+                assert all(c["hook"]["id"] == "customer" for _, c in picked)
+                continue
+            hook_ids = [c["hook"]["id"] for _, c in picked]
+            assert "customer" not in hook_ids
+            if len(picked) <= len(hooks):
+                assert len(hook_ids) == len(set(hook_ids)), (seg, slot, hook_ids)
+            angle_values = [c["angle"] for _, c in picked]
+            if len(picked) <= len(angles):
+                assert len(angle_values) == len(set(angle_values)), (seg, slot, angle_values)
 
 
 # ---------------------------------------------------------------- voice profile
@@ -170,7 +197,7 @@ def test_card_to_task_fills_the_intake_fields(data):
     assert isinstance(t, Task)
     assert t.model_id == card.model_id and t.platform == "moments" and t.scenario == "campus_daily"
     assert t.audience and t.raw_text and t.source == "card" and t.card_id == card.card_id
-    assert (t.hook, t.voice, t.landmark, t.nickname) == ("myth", "senior", "紫金港校区东门对面", card.nickname)
+    assert (t.hook, t.voice, t.landmark, t.nickname) == (card.hook.id, "senior", "紫金港校区东门对面", card.nickname)
     assert t.angle == card.angle and t.calendar_theme == "购物节前做功课"
     assert t.promo is None and t.question is None and t.staff is None
     # the manual-flow defaults are untouched
@@ -254,7 +281,7 @@ def test_set_fact_card_status_unlocks_new_release_and_reload_restores():
     reload()
     locked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
     assert locked.locked and locked.locked_reason == "fact_card_draft"
-    set_fact_card_status("MODEL_N", "verified")
+    set_fact_card_status("matebook-fold-ultimate-design", "verified")
     unlocked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
     assert not unlocked.locked and unlocked.locked_reason is None
     assert unlocked.reasons[1].text.startswith("新品 2026-10-28 上市")
@@ -264,9 +291,9 @@ def test_set_fact_card_status_unlocks_new_release_and_reload_restores():
     # the file on disk was never touched
     import csv
     rows = list(csv.DictReader((INPUTS / "models.csv").open(encoding="utf-8")))
-    assert next(r for r in rows if r["model_id"] == "MODEL_N")["fact_card_status"] == "draft"
+    assert next(r for r in rows if r["model_id"] == "matebook-fold-ultimate-design")["fact_card_status"] == "draft"
     with pytest.raises(ValueError):
-        set_fact_card_status("MODEL_N", "published")
+        set_fact_card_status("matebook-fold-ultimate-design", "published")
     reload()
     assert next(c for c in cards_for("S01", TODAY) if c.slot == "new_release").locked
 

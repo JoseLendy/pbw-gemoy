@@ -73,6 +73,19 @@ def test_tag_mismatch_is_fixed_in_code_by_auto_cite():
     assert "tag_mismatch" not in codes(check_facts(new, led, {}))
 
 
+def test_auto_cite_never_fixes_an_unsupported_number():
+    """An LLM issue may name a fact, but auto-cite must not bless a number that no ledger fact supports."""
+    from agent.schemas import CheckIssue
+    post = with_body("续航可达约 15 小时。")
+    led = fake_ledger()
+    issue = CheckIssue("8A", "error", "uncited_claim", "x", field="body[0]",
+                       span="续航可达约 15 小时", fact_id="F7")
+    new, fixed = auto_cite(post, [issue], led)
+    assert fixed == [] and "[F7]" not in new.body[0]
+    report = check_facts(post, led, {})
+    assert "unsupported_number" in codes(report, "error") or "untagged_claim" in codes(report, "error")
+
+
 # ------------------------------------------------------------------ conflict gate
 def test_tag_to_an_excluded_fact_fails():
     led = conflicted_ledger()

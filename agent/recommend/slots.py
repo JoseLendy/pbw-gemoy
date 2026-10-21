@@ -11,13 +11,15 @@ import datetime as dt
 from collections import defaultdict
 
 from agent.recommend import explain
-from agent.recommend.common import parse_date, stable_hash
+from agent.recommend.common import parse_date
 from agent.recommend.scoring import (
     CALENDAR_LOOKAHEAD_DAYS, NEW_RELEASE_PRIORITY_DAYS, NEW_RELEASE_WINDOW_DAYS, RECENT_POST_DAYS, eligible,
     fit_table, potential,
 )
 
 SLOT_LABELS = {"potential": "潜力款", "promo": "活动款", "new_release": "新品款", "customer_question": "顾客问答"}
+SLOT_ORDER = ("potential", "promo", "new_release", "customer_question")
+HOOK_EPOCH = dt.date(2026, 1, 1)      # fixed epoch for the peer-aware daily rotation
 
 # Scenario keys (agent/schemas.Scenario) by segment outside any calendar window.
 SEGMENT_SCENARIO = {"student": "campus_daily", "office": "office", "family": "family_upgrade",
@@ -52,17 +54,23 @@ def scenario_for(slot: str, segment: str, calendar: list[dict], today: dt.date) 
 _SLOT_PRIORITY = {"potential": 1, "promo": 2, "customer_question": 3, "new_release": 4}
 
 
-def pick_hook(angles: dict, store_id: str, today: dt.date, slot: str) -> dict:
-    """A logged question always opens with the customer hook; other slots rotate by md5(store, date, slot)."""
+def pick_hook(angles: dict, store_id: str, today: dt.date, slot: str,
+              peer_rank: int = 0, day_offset: int = 0) -> dict:
+    """A logged question always opens with the customer hook; other slots rotate by peer rank + date + slot.
+    Stores in the same peer group get distinct non-customer hooks while the pool allows it."""
     if slot == "customer_question":
         return next(h for h in angles["hooks"] if h.get("requires_logged_question"))
     hooks = [h for h in angles["hooks"] if not h.get("requires_logged_question")]
-    return hooks[stable_hash(store_id, today.isoformat(), slot) % len(hooks)]
+    idx = (peer_rank + day_offset + SLOT_ORDER.index(slot)) % len(hooks)
+    return hooks[idx]
 
 
-def pick_angle(angles: dict, segment: str, store_id: str, today: dt.date, slot: str) -> str:
+def pick_angle(angles: dict, segment: str, store_id: str, today: dt.date, slot: str,
+               peer_rank: int = 0, day_offset: int = 0) -> str:
+    """Peer-aware angle assignment: distinct within a peer group while the segment's angle list allows."""
     seg_angles = angles["segment_angles"][segment]
-    return seg_angles[stable_hash(store_id, today.isoformat(), slot, "angle") % len(seg_angles)]
+    idx = (peer_rank + day_offset + SLOT_ORDER.index(slot)) % len(seg_angles)
+    return seg_angles[idx]
 
 
 def recent_models(publish_rows: list[dict], today: dt.date) -> dict[str, set]:
@@ -87,6 +95,12 @@ def build_cards(stores, models, signals, idx, promos, calendar, quota, angles, p
     platform = quota["rotation"][today.weekday()]
     recent = recent_models(publish_rows, today)
     q_counts = question_counts(questions)
+    peers = defaultdict(list)
+    for st in stores:
+        peers[signals[st["store_id"]]["dominant"]].append(st["store_id"])
+    for group in peers.values():
+        group.sort()
+    day_offset = (today - HOOK_EPOCH).days
 
     all_cards = {}
     for st in stores:
@@ -97,15 +111,16 @@ def build_cards(stores, models, signals, idx, promos, calendar, quota, angles, p
         cal = explain.calendar_reason(calendar, dom, today)
         poi_r = [explain.reason(explain.poi_reason(sig, seg_cfg), "poi", sig["poi_source"] != "amap")]
         cal_r = [explain.reason(cal["text"], "calendar", False)] if cal else []
+        rank = peers[dom].index(sid)
 
         def card(slot, model_id, reasons, **extra):
-            hook = pick_hook(angles, sid, today, slot)
+            hook = pick_hook(angles, sid, today, slot, peer_rank=rank, day_offset=day_offset)
             c = {
                 "card_id": f"{sid}-{today.isoformat()}-{slot}", "store_id": sid, "store_name": st["store_name"],
                 "date": today.isoformat(), "slot": slot, "slot_label": SLOT_LABELS[slot],
                 "model_id": model_id, "display_name": mby[model_id]["display_name"] if model_id else None,
                 "platform": platform, "segment": dom, "segment_label": seg_cfg["segment_labels"][dom],
-                "angle": pick_angle(angles, dom, sid, today, slot),
+                "angle": pick_angle(angles, dom, sid, today, slot, peer_rank=rank, day_offset=day_offset),
                 "scenario": scenario_for(slot, dom, calendar, today),
                 "calendar_theme": cal["theme"] if cal else None,
                 "hook": {"id": hook["id"], "label": hook["label"]},

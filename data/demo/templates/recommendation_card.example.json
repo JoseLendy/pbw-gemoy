@@ -5,17 +5,17 @@
   "date": "2026-10-21",
   "slot": "potential",
   "slot_label": "潜力款",
-  "model_id": "MODEL_A",
-  "display_name": "<轻薄长续航型号 — 从catalog填写>",
+  "model_id": "matebook-14-harmonyos",
+  "display_name": "HUAWEI MateBook 14（鸿蒙版）",
   "platform": "朋友圈",
   "segment": "student",
   "segment_label": "学生客群",
-  "angle": "宿舍/图书馆场景",
+  "angle": "全天续航",
   "scenario": "campus_daily",
   "calendar_theme": "购物节前做功课",
   "hook": {
-    "id": "myth",
-    "label": "误区澄清"
+    "id": "question",
+    "label": "问题开头"
   },
   "voice": {
     "id": "senior",

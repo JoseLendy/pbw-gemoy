@@ -10,6 +10,7 @@ final; add new optional fields only via the lead.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from dataclasses import field as dc_field
 from typing import Literal, Optional
 
 # ---------------------------------------------------------------- enums / keys
@@ -284,6 +285,7 @@ class CheckIssue:
     field: str = ""                # "title" | "intro" | "body[2]" | "cta" | "tags" | "images" | ""
     span: str = ""                 # offending text
     fact_id: str = ""
+    also_stages: list[str] = dc_field(default_factory=list)  # e.g. 8C + 8D dedupe: primary 8D, also 8C
 
 
 @dataclass

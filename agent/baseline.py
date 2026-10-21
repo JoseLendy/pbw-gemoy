@@ -46,8 +46,15 @@ def generate_baseline(card: RecommendationCard, deps=None, llm=None) -> Baseline
         hits = check_style(post, task=None, llm=None).issues
     except Exception:  # noqa: BLE001 - highlighting must never break the control group
         hits = []
-    return BaselineResult(card_id=card.card_id, model_id=card.model_id, platform=card.platform, prompt=prompt,
-                          text=text, display_text=wrap(text), hits=hits)
+    result = BaselineResult(card_id=card.card_id, model_id=card.model_id, platform=card.platform, prompt=prompt,
+                            text=text, display_text=wrap(text), hits=hits)
+    if deps is not None and not getattr(deps, "is_dev_mode", True):
+        try:
+            from agent.runs import log_run
+            log_run(card, result, kind="generate_baseline")
+        except Exception:  # noqa: BLE001 - logging must never break the video run
+            pass
+    return result
 
 
 __all__ = ["generate_baseline", "naive_prompt", "wrap", "BASELINE_LABEL"]

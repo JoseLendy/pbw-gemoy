@@ -6,4 +6,4 @@ Style / variation layer (plan §3, §6). Phase 2 ships the writer brief + 8D ant
 """
 from __future__ import annotations
 
-__all__ = ["profile", "antiai"]
+__all__ = ["profile", "antiai", "similarity"]

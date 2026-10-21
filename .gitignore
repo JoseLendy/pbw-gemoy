@@ -18,6 +18,7 @@ venv/
 logs/
 *.log
 outputs/
+runs/
 .DS_Store
 __MACOSX/
 

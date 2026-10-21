@@ -57,9 +57,10 @@ def _label(d: dict, key: str | None) -> str:
 
 def _issue_line(i: CheckIssue) -> str:
     mark = "❌" if i.severity == "error" else "⚠️"
+    stages = "/".join([i.stage, *i.also_stages])
     where = f"（{i.field}）" if i.field else ""
     span = f"：「{i.span}」" if i.span else ""
-    return f"- {mark} [{i.stage}] {i.message}{where}{span}"
+    return f"- {mark} [{stages}] {i.message}{where}{span}"
 
 
 def _stage_block(r: RunResult, stage: str, title: str, extra_ok: str = "") -> list[str]:

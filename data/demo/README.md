@@ -33,9 +33,35 @@ python scripts/gen_fake_data.py     # cached real POI now replaces fake fixtures
 
 ## Before first real use (WS-A, ~30 min)
 
-1. In `inputs/models.csv`, replace `<...从catalog填写>` with real catalog names, and keep or rename the `MODEL_*` IDs to match `agent/catalog.py`.
-2. Fill the `why_*` columns with the KB fact behind each affinity score.
-3. Re-run and check the sanity table.
+On `feat/proactive-phase4` the mapping is already applied (see `docs/model_mapping.md`):
+
+1. `inputs/models.csv` uses real catalog IDs and canonical names.
+2. `why_*` columns point at the KB article paths (no values or quotes in the repo).
+3. The generator sanity table passes.
+
+If the data owner changes a mapping, update `models.csv`, `promotions.json`, `PLANTED`/`STOCKOUT` in
+`scripts/gen_fake_data.py`, then re-run the generator and the catalog guard test.
+
+## Check a real-POI swap without writing files
+
+Run the generator once, add the Amap cache, then:
+
+```bash
+python scripts/fetch_poi.py S01     # test one store first
+python scripts/gen_fake_data.py --check-only
+```
+
+`--check-only` recomputes from `inputs/` (including `inputs/poi_cache/`) and the **existing**
+`generated/` sales/logs, prints the sanity table, and writes nothing. It is safe to run repeatedly.
+
+**Swap acceptance criteria**
+
+- The sanity table still ends with `All checks passed.`
+- Each store type still has one clear planted story (`S01`, `S04`, `S08`, `S10`).
+- No `PROBLEMS:` line. If a real POI flips a store's dominant segment and breaks a planted story, either
+  adjust `PLANTED` for that store or keep that store on its fixture.
+- **Go/no-go: Thu 18:00.** If the table is not clean, keep fixtures for the recording; do not edit
+  `generated/` by hand.
 
 ## Rules
 

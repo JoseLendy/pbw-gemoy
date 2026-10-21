@@ -72,6 +72,12 @@ def reload() -> None:
     _CACHE.clear()
 
 
+def reset_demo_state() -> None:
+    """Retake reset: clear HQ fact-card overrides and the data cache. The UI must also clear its own
+    session-level 已发布 / question chips; those live in the app session, not in this module."""
+    reload()
+
+
 def load_store_data(inputs_dir: Path = INPUTS, generated_dir: Path = GENERATED, use_cache: bool = True) -> StoreData:
     """Reads inputs/ (templates) and generated/ (sales + logs). POI: real cache first, else the fixture.
     Cached per (inputs_dir, generated_dir) for the process; HQ fact-card overrides are applied on load."""
