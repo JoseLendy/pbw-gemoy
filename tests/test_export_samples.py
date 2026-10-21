@@ -78,3 +78,31 @@ def test_leak_aborts_without_writing(runs, tmp_path, monkeypatch):
     with pytest.raises(ex.LeakError):
         ex.build(DAY, runs, tmp_path / "s", allow_dev=True)
     assert not (tmp_path / "s").exists()
+
+
+# ------------------------------------------------------------------ real 2026-10-23 export: two renderer leaks
+_QUOTE = "这是一段知识库原文引用，长度足够长"
+
+
+def test_image_list_does_not_repeat_the_kb_caption():
+    """Real S04 sample: an image caption was a fact's verbatim quote and the 配图 list repeated it outside the
+    publishable text; the leak scan (rightly) refused to write. The list now gives file name and position."""
+    result = {"plan": {"items": [{"image": {"media_id": "m1", "title": "图1.png", "caption": _QUOTE}}]},
+              "post": {"images": [{"media_id": "m1", "position": "文末", "caption": _QUOTE}]}}
+    lines = "\n".join(ex._images(result))
+    assert _QUOTE not in lines and "图1.png" in lines and "文末" in lines
+
+
+def test_needs_review_reason_names_the_fact_instead_of_quoting_it():
+    """Real S01 NeedsReview: the 8A reason embeds the fact value ('应同时标注 [F5]（<value>）')."""
+    ledger = {"facts": [{"id": "F5", "value": _QUOTE, "quote": _QUOTE}]}
+    reason = f"数值「1.38 kg」不属于所标编号 F14，应同时标注 [F5]（{_QUOTE}）"
+    out = ex._redact(reason, ledger)
+    assert _QUOTE not in out and "F5" in out and "1.38 kg" in out
+
+
+def test_review_record_can_be_chosen_by_file_name(runs, tmp_path):
+    recs = [{"_path": tmp_path / "a.json", "result": {"failing": []}},
+            {"_path": tmp_path / "b.json", "result": {"failing": []}}]
+    assert ex.select(recs)["review"]["_path"].name == "b.json"                 # default: latest, unchanged
+    assert ex.select(recs, review="a.json")["review"]["_path"].name == "a.json"

@@ -81,8 +81,18 @@ def _images(result: dict) -> list[str]:
     lines = []
     for im in (result.get("post") or {}).get("images") or []:
         ref = plan.get(im.get("media_id"), {})
-        lines.append(f"- {ref.get('title', '（图片）')}：{im.get('caption') or ref.get('caption', '')}")
+        # file name and position only: a KB caption is KB text (it can equal a fact's verbatim quote)
+        lines.append(f"- {ref.get('title', '（图片）')}（位置：{im.get('position') or '—'}）")
     return lines or ["- （无配图）"]
+
+
+def _redact(text: str, ledger: dict) -> str:
+    """A check message may embed a fact's value ("应同时标注 [F5]（<value>）"): name the fact, not its text."""
+    for f in sorted((ledger or {}).get("facts", []), key=lambda f: -len(f.get("value") or "")):
+        for s in {(f.get("value") or "").strip(), (f.get("quote") or "").strip()}:
+            if len(s) >= 6 and s in text:
+                text = text.replace(f"（{s}）", f"（{f['id']} 原文略）").replace(s, f"{f['id']} 原文略")
+    return text
 
 
 def _verification(result: dict) -> list[str]:
@@ -123,7 +133,7 @@ def render_post_sample(rec: dict) -> tuple[str, str]:
     body = _header(rec, title) + ["## 为什么推这条", ""] + (_reasons(card) or ["- —"])
     body += ["", f"内容角度：{(result.get('task') or {}).get('angle', '')} · 开头方式：{(result.get('task') or {}).get('hook', '')}", ""]
     body += ["## 可直接发布的文案（店员复制即发）", "", "```text", _post_text(result), "```", ""]
-    body += ["## 配图（只列文件名与说明，不含图片文件）", ""] + _images(result) + [""]
+    body += ["## 配图（只列文件名与位置，不含图片文件）", ""] + _images(result) + [""]
     body += ["## 四、核验结果（精简）", ""] + _verification(result) + [""]
     name = f"{rec['store_id']}-{rec.get('slot') or card.get('slot', '')}-{platform}.md"
     return name, "\n".join(l for l in body if l is not None)
@@ -159,7 +169,9 @@ def render_review_sample(rec: dict) -> tuple[str, str]:
     body = _header(rec, f"{rec['store_id']} · 需人工确认（NeedsReview）") + [
         "## 为什么推这条", ""] + (_reasons(card) or ["- —"]) + [
         "", "## 草稿（未发布；【】内为未通过核验的句子）", "", "```text", text, "```", "", "## 未通过的原因", ""]
-    body += [f"- {f.get('stage')} · {f.get('code')}：{f.get('reason')}" for f in r.get("failing") or []]
+    ledger = draft.get("ledger") or {}
+    body += [f"- {f.get('stage')} · {f.get('code')}：{_redact(f.get('reason') or '', ledger)}"
+             for f in r.get("failing") or []]
     body += ["", f"已尝试：{' → '.join(r.get('attempts') or [])}", "",
              "删去问题句子和改用下一条推荐都没有通过全部核验，所以没有交付任何文案，转人工确认。", ""]
     return f"{rec['store_id']}-needs-review.md", "\n".join(body)
@@ -200,21 +212,27 @@ def _media_ids(result: dict) -> set[str]:
 POST_STORES = ("S01", "S02", "S04", "S08", "S10")
 
 
-def select(records: list[dict]) -> dict:
+def select(records: list[dict], review: str | None = None) -> dict:
+    """review: the run-record file name of the NeedsReview to show (default: the latest one)."""
     prepared = {r["store_id"]: r for r in records if r.get("kind") == "prepared"}
     picks = {"posts": [prepared[s] for s in POST_STORES if s in prepared and prepared[s].get("status") == "RunResult"]}
     locked = [r for r in records if (r.get("result") or {}).get("reason") == "fact_card_draft"]
     picks["locked"] = locked[-1] if locked else None
     blocked = [r for r in records if r.get("kind") == "edit_blocked" and "立减500" in (r.get("result") or {}).get("instruction", "")]
     picks["blocked"] = blocked[-1] if blocked else None
-    review = [r for r in records if (r.get("result") or {}).get("failing") is not None]
-    picks["review"] = review[-1] if review else None
+    reviews = [r for r in records if (r.get("result") or {}).get("failing") is not None]
+    if review is not None:
+        reviews = [r for r in reviews if r["_path"].name == review]
+        if not reviews:
+            raise ValueError(f"no NeedsReview run record named {review!r} for this date")
+    picks["review"] = reviews[-1] if reviews else None
     return picks
 
 
-def build(day: str, runs_dir: Path, out: Path, allow_dev: bool = False) -> list[tuple[str, str]]:
+def build(day: str, runs_dir: Path, out: Path, allow_dev: bool = False,
+          review: str | None = None) -> list[tuple[str, str]]:
     records = _records(runs_dir, day, allow_dev)
-    picks = select(records)
+    picks = select(records, review)
     files: list[tuple[str, str, str, dict]] = []      # name, text, publishable, result
     for rec in picks["posts"]:
         name, text = render_post_sample(rec)
@@ -269,7 +287,7 @@ def render_readme(picks: dict, day: str) -> str:
     return "\n".join([
         "# 输出样例", "",
         f"由 `scripts/export_samples.py` 从 {day} 的**真实运行记录**（runs/，未纳入仓库）自动导出，未经手工编辑。",
-        "文案为店员复制即发的版本（已去掉事实编号）；配图只列文件名与说明，不含图片文件；不含知识库原文引用。", "",
+        "文案为店员复制即发的版本（已去掉事实编号）；配图只列文件名与位置，不含图片文件；不含知识库原文引用。", "",
         "| 样例 | 展示什么 |", "|---|---|", *rows, "",
         "**说明**：门店销量、库存、活动（含演示活动价）、顾客提问与发布记录均为**模拟数据**（标注「模拟数据」/「演示活动」）；"
         "产品事实与图片来自 ima 共享知识库，可按事实编号追溯到来源文章。", ""])
@@ -279,10 +297,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--today", default="2026-10-23")
     ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--review", help="run-record file name of the NeedsReview sample (default: the latest)")
     args = ap.parse_args(argv)
     from agent.runs import RUNS_DIR
     try:
-        written = build(args.today, RUNS_DIR, Path(args.out))
+        written = build(args.today, RUNS_DIR, Path(args.out), review=args.review)
     except LeakError as e:
         print(f"NOT written, leak check failed: {e}")
         return 1
