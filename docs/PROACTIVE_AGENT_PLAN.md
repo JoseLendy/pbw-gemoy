@@ -1,10 +1,11 @@
 # pbw gemoy — Proactive Store Post Agent (复赛 plan)
 
 > Team design doc for the 复赛 (semi-final → final) round.
-> Status: **v2.4, Phase 5 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
+> Status: **v2.5, Phase 5 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
 > Deadline: **video submission, Fri Oct 23, 17:00**.
 
 **Changelog**
+- **v2.5 (Wed Oct 21, Phase 5):** weekly rotation changed to 公众号 · 小红书 · 朋友圈 · 小红书 · 朋友圈 · 小红书 · 朋友圈 (Mon→Sun) so the recording day Fri Oct 23 is a staff 朋友圈 day (公众号 is manager-only, §2.1); weekly minimums unchanged (§5.4).
 - **v2.4 (Wed Oct 21, Phase 5):** push model made literal: `prepare_today(date)` generates every store's default post in the morning (8E included) and stores it under `runs/<date>/prepared/`; staff open the app to a ready post and 重新生成 runs live (§2, §9). New-release truthfulness in 8B: 新品 / 首发 / 新上市 / 刚发布 / 即将上市 wording or a launch date only with a tagged ledger release fact; the demo `launch_date` only schedules the card and never reaches the writer; the card reason reads “总部新品推送（演示流程）” unless the KB states that date (§4.4, §7). KB release order and the MODEL_N / MODEL_A–F proposals are in `docs/model_mapping.md`.
 - **v2.3 (Wed Oct 21, Phase 4):** real model mapping applied (`docs/model_mapping.md`); peer-aware hook/angle assignment replaces per-store md5 rotation (§6.4); `generate_batch` adds 8E regeneration and before/after similarity; 8C/8D duplicate hits are merged into one line with both checker IDs; `reset_demo_state`, `runs/` real-run logs and `latest_run` added (Phase 3 UI can call them); `gen_fake_data.py --check-only` supports a safe Amap swap. 8A auto-cite now refuses sentences with unsupported numbers; 8B money patterns are as broad as the old 8A price rule.
 - **v2.2 (Wed Oct 21, Phase 2):** the 8D blocklist drops its `absolute` group (absolute claims are 8B's job; a bare 最/第一 substring match would false-flag 最近/第一次). Customer-hook wording loses its 最 ("这几天好几位顾客都在问……"). Recommendation cards gain an explicit, calendar-aware `scenario` field (§10.7), so the pipeline no longer guesses a stage from the segment.
@@ -290,10 +291,10 @@ Example of rule 1 in the data: MODEL_A is the 潜力款 at both S01 (campus → 
 `data/demo/inputs/platform_quota.json` maps HQ's posting requirement to a weekly rotation (Mon→Sun):
 
 ```
-朋友圈 · 小红书 · 朋友圈 · 小红书 · 公众号 · 小红书 · 朋友圈
+公众号 · 小红书 · 朋友圈 · 小红书 · 朋友圈 · 小红书 · 朋友圈
 ```
 
-So Wed Oct 21 = 朋友圈, Fri Oct 23 = 公众号. We don't know HQ's real quota → keep it configurable and say so in the video. Managers/HQ see the week view; staff see only today.
+So Wed Oct 21 = 朋友圈, Fri Oct 23 = 朋友圈 (the recording day is a staff 朋友圈 day; 公众号 falls on Monday, manager-only). Weekly minimums (朋友圈 3, 小红书 3, 公众号 1) are unchanged. We don't know HQ's real quota → keep it configurable and say so in the video. Managers/HQ see the week view; staff see only today.
 
 ### 5.5 Explanation card ("为什么推这条")
 
@@ -555,7 +556,7 @@ Full example: `templates/recommendation_card.example.json`. Fields:
 - **Map real models:** edit `models.csv` (keep IDs or rename everywhere, including `PLANTED`/`STOCKOUT` in the script and `promotions.json`).
 - **Add a store:** add a row to `stores.csv` with an `anchor_category` from `segments.json`.
 - **Change a story:** edit `PLANTED` in the script; re-run; read the sanity table.
-- **Recording day:** run with `--today 2026-10-23` (platform becomes 公众号; `MODEL_N` is 5 days from launch, so verifying it makes it the default card).
+- **Recording day:** run with `--today 2026-10-23` (platform is 朋友圈; `MODEL_N` is 5 days from launch, so verifying it makes it the default card).
 - **Real POI:** `export AMAP_KEY=...`, run `fetch_poi.py S01` first, inspect the file, then all stores. Expect some picks to change: that's POI winning over the label, and worth saying in the video.
 
 ---

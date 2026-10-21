@@ -344,3 +344,13 @@ def test_locked_card_returns_without_calling_llm_or_ima(data):
     assert isinstance(res, LockedResult)
     assert res.message == "新品资料待总部确认，暂不可生成" and res.reason == "fact_card_draft"
     assert res.card is locked
+
+
+def test_recording_day_is_a_staff_moments_day_and_weekly_minimums_hold():
+    quota = json.loads((INPUTS / "platform_quota.json").read_text(encoding="utf-8"))
+    rot = quota["rotation"]
+    assert len(rot) == 7 and rot[dt.date(2026, 10, 23).weekday()] == "朋友圈" and rot[0] == "公众号"
+    for platform, n in quota["weekly_minimum"].items():
+        assert rot.count(platform) >= n
+    for sid in ("S01", "S04", "S08", "S02"):
+        assert default_card(sid, dt.date(2026, 10, 23)).platform == "朋友圈"

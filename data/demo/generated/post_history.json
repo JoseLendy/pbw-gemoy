@@ -18,7 +18,7 @@
   {
     "date": "2026-10-16",
     "store_id": "S01",
-    "platform": "公众号",
+    "platform": "朋友圈",
     "posted": "true",
     "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
@@ -42,7 +42,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S01",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-d-14-2024",
     "is_demo": "true"
@@ -74,7 +74,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S02",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-gt-14",
     "is_demo": "true"
@@ -90,7 +90,7 @@
   {
     "date": "2026-10-16",
     "store_id": "S03",
-    "platform": "公众号",
+    "platform": "朋友圈",
     "posted": "true",
     "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
@@ -122,7 +122,7 @@
   {
     "date": "2026-10-16",
     "store_id": "S04",
-    "platform": "公众号",
+    "platform": "朋友圈",
     "posted": "true",
     "model_id": "matebook-d-14-2024",
     "is_demo": "true"
@@ -130,7 +130,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S04",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-gt-14",
     "is_demo": "true"
@@ -162,7 +162,7 @@
   {
     "date": "2026-10-16",
     "store_id": "S05",
-    "platform": "公众号",
+    "platform": "朋友圈",
     "posted": "true",
     "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
@@ -170,7 +170,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S05",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-gt-14",
     "is_demo": "true"
@@ -194,7 +194,7 @@
   {
     "date": "2026-10-16",
     "store_id": "S06",
-    "platform": "公众号",
+    "platform": "朋友圈",
     "posted": "true",
     "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
@@ -202,7 +202,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S06",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-d-14-2024",
     "is_demo": "true"
@@ -218,7 +218,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S07",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-14-harmonyos",
     "is_demo": "true"
@@ -258,7 +258,7 @@
   {
     "date": "2026-10-16",
     "store_id": "S09",
-    "platform": "公众号",
+    "platform": "朋友圈",
     "posted": "true",
     "model_id": "matebook-gt-14",
     "is_demo": "true"
@@ -274,7 +274,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S09",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-gt-14",
     "is_demo": "true"
@@ -306,7 +306,7 @@
   {
     "date": "2026-10-19",
     "store_id": "S10",
-    "platform": "朋友圈",
+    "platform": "公众号",
     "posted": "true",
     "model_id": "matebook-d-16-se-2024",
     "is_demo": "true"
