@@ -1,0 +1,15 @@
+{
+  "_doc": "Preset question chips staff can tap at end of day. gen_fake_data.py samples a fake log from these; the app shows them as chips.",
+  "chips": {
+    "Q01": {"text": "学生用够不够", "segments": ["student", "family"]},
+    "Q02": {"text": "能不能和手机/平板互传文件", "segments": ["student", "office", "family"]},
+    "Q03": {"text": "续航能撑一整天吗", "segments": ["student", "office"]},
+    "Q04": {"text": "出差带着重不重", "segments": ["office"]},
+    "Q05": {"text": "数据安全怎么保障", "segments": ["office"]},
+    "Q06": {"text": "能不能跑设计/剪辑软件", "segments": ["student", "office"]},
+    "Q07": {"text": "旧电脑资料怎么迁移", "segments": ["family", "office"]},
+    "Q08": {"text": "老人小孩好不好上手", "segments": ["family"]},
+    "Q09": {"text": "送人选哪款合适", "segments": ["shopper", "family"]},
+    "Q10": {"text": "可以先到店试用吗", "segments": ["shopper", "family", "student"]}
+  }
+}

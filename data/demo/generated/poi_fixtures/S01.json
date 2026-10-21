@@ -1,0 +1,85 @@
+{
+  "store_id": "S01",
+  "pois": [
+    {
+      "name": "浙江大学紫金港校区",
+      "category": "university",
+      "typecode": "141201",
+      "distance_m": 300,
+      "is_anchor": true,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）高校1",
+      "category": "university",
+      "typecode": "141201",
+      "distance_m": 525,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）中学1",
+      "category": "middle_school",
+      "typecode": "141202",
+      "distance_m": 801,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）小学1",
+      "category": "primary_school",
+      "typecode": "141203",
+      "distance_m": 585,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区1",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 409,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区2",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1316,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区3",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 378,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区4",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1064,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区5",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 265,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼1",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 491,
+      "is_anchor": false,
+      "is_demo": true
+    }
+  ]
+}

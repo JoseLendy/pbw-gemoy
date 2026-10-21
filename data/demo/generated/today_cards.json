@@ -1,0 +1,2306 @@
+{
+  "date": "2026-10-21",
+  "seed": 42,
+  "cards": {
+    "S01": [
+      {
+        "card_id": "S01-2026-10-21-potential",
+        "store_id": "S01",
+        "store_name": "紫金港店",
+        "date": "2026-10-21",
+        "slot": "potential",
+        "slot_label": "潜力款",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "宿舍/图书馆场景",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "myth",
+          "label": "误区澄清"
+        },
+        "voice": {
+          "id": "senior",
+          "label": "学长学姐风"
+        },
+        "landmark": "紫金港校区东门对面",
+        "nickname": "阿杰",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2所高校（浙江大学紫金港校区等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "该型号本店销量占比低于同类商圈门店 64%",
+            "source": "sales",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.717,
+          "index": 0.365,
+          "potential": 0.455,
+          "share": 0.084,
+          "peer_share": 0.2299
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S01-2026-10-21-promo",
+        "store_id": "S01",
+        "store_name": "紫金港店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "上课携带",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "senior",
+          "label": "学长学姐风"
+        },
+        "landmark": "紫金港校区东门对面",
+        "nickname": "阿杰",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2所高校（浙江大学紫金港校区等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "4999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.717
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S01-2026-10-21-new_release",
+        "store_id": "S01",
+        "store_name": "紫金港店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "手机平板电脑多设备协同",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "senior",
+          "label": "学长学姐风"
+        },
+        "landmark": "紫金港校区东门对面",
+        "nickname": "阿杰",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2所高校（浙江大学紫金港校区等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.692
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S01-2026-10-21-customer_question",
+        "store_id": "S01",
+        "store_name": "紫金港店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "可以先到店试用吗",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "senior",
+          "label": "学长学姐风"
+        },
+        "landmark": "紫金港校区东门对面",
+        "nickname": "阿杰",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2所高校（浙江大学紫金港校区等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「可以先到店试用吗」2 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q10",
+          "text": "可以先到店试用吗",
+          "count": 2
+        },
+        "scores": {
+          "fit": 0.717
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S02": [
+      {
+        "card_id": "S02-2026-10-21-promo",
+        "store_id": "S02",
+        "store_name": "下沙高教园店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "手机平板电脑多设备协同",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "myth",
+          "label": "误区澄清"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "杭州电子科技大学附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2所高校（杭州电子科技大学等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "4999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.707
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S02-2026-10-21-new_release",
+        "store_id": "S02",
+        "store_name": "下沙高教园店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "手机平板电脑多设备协同",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "checklist",
+          "label": "清单式"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "杭州电子科技大学附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2所高校（杭州电子科技大学等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.689
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S02-2026-10-21-customer_question",
+        "store_id": "S02",
+        "store_name": "下沙高教园店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "能不能跑设计/剪辑软件",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "杭州电子科技大学附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2所高校（杭州电子科技大学等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「能不能跑设计/剪辑软件」2 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q06",
+          "text": "能不能跑设计/剪辑软件",
+          "count": 2
+        },
+        "scores": {
+          "fit": 0.707
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S03": [
+      {
+        "card_id": "S03-2026-10-21-potential",
+        "store_id": "S03",
+        "store_name": "小和山店",
+        "date": "2026-10-21",
+        "slot": "potential",
+        "slot_label": "潜力款",
+        "model_id": "MODEL_E",
+        "display_name": "<入门型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "上课携带",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "myth",
+          "label": "误区澄清"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "浙江科技大学附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有3所高校（浙江科技大学等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "该型号本店销量占比低于同类商圈门店 40%",
+            "source": "sales",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.677,
+          "index": 0.595,
+          "potential": 0.274,
+          "share": 0.1006,
+          "peer_share": 0.169
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S03-2026-10-21-promo",
+        "store_id": "S03",
+        "store_name": "小和山店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "宿舍/图书馆场景",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "浙江科技大学附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有3所高校（浙江科技大学等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "4999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.747
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S03-2026-10-21-new_release",
+        "store_id": "S03",
+        "store_name": "小和山店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "全天续航",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "myth",
+          "label": "误区澄清"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "浙江科技大学附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有3所高校（浙江科技大学等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.715
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S03-2026-10-21-customer_question",
+        "store_id": "S03",
+        "store_name": "小和山店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "student",
+        "segment_label": "学生客群",
+        "angle": "能不能跑设计/剪辑软件",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "浙江科技大学附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有3所高校（浙江科技大学等）→ 学生客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「能不能跑设计/剪辑软件」1 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q06",
+          "text": "能不能跑设计/剪辑软件",
+          "count": 1
+        },
+        "scores": {
+          "fit": 0.747
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S04": [
+      {
+        "card_id": "S04-2026-10-21-potential",
+        "store_id": "S04",
+        "store_name": "钱江新城店",
+        "date": "2026-10-21",
+        "slot": "potential",
+        "slot_label": "潜力款",
+        "model_id": "MODEL_B",
+        "display_name": "<商务型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "数据安全",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "钱江新城商务区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有12个写字楼（钱江新城商务区等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "该型号本店销量占比低于同类商圈门店 48%",
+            "source": "sales",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.823,
+          "index": 0.525,
+          "potential": 0.391,
+          "share": 0.093,
+          "peer_share": 0.1772
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S04-2026-10-21-promo",
+        "store_id": "S04",
+        "store_name": "钱江新城店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "多任务处理",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "钱江新城商务区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有12个写字楼（钱江新城商务区等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "6999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.762
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S04-2026-10-21-new_release",
+        "store_id": "S04",
+        "store_name": "钱江新城店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "多任务处理",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "钱江新城商务区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有12个写字楼（钱江新城商务区等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.711
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S04-2026-10-21-customer_question",
+        "store_id": "S04",
+        "store_name": "钱江新城店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_B",
+        "display_name": "<商务型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "数据安全怎么保障",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "钱江新城商务区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有12个写字楼（钱江新城商务区等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「数据安全怎么保障」1 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q05",
+          "text": "数据安全怎么保障",
+          "count": 1
+        },
+        "scores": {
+          "fit": 0.823
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S05": [
+      {
+        "card_id": "S05-2026-10-21-promo",
+        "store_id": "S05",
+        "store_name": "未来科技城店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "会议与差旅",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "梦想小镇附近",
+        "nickname": "阿雅",
+        "reasons": [
+          {
+            "text": "门店1.5km内有15个写字楼（（模拟）写字楼11等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "6999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.785
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S05-2026-10-21-new_release",
+        "store_id": "S05",
+        "store_name": "未来科技城店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "会议与差旅",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "checklist",
+          "label": "清单式"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "梦想小镇附近",
+        "nickname": "阿雅",
+        "reasons": [
+          {
+            "text": "门店1.5km内有15个写字楼（（模拟）写字楼11等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.729
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S05-2026-10-21-customer_question",
+        "store_id": "S05",
+        "store_name": "未来科技城店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_B",
+        "display_name": "<商务型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "出差带着重不重",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "梦想小镇附近",
+        "nickname": "阿雅",
+        "reasons": [
+          {
+            "text": "门店1.5km内有15个写字楼（（模拟）写字楼11等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「出差带着重不重」2 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q04",
+          "text": "出差带着重不重",
+          "count": 2
+        },
+        "scores": {
+          "fit": 0.853
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S06": [
+      {
+        "card_id": "S06-2026-10-21-promo",
+        "store_id": "S06",
+        "store_name": "滨江店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "多任务处理",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "滨江高新区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有13个写字楼（滨江高新区等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "6999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.777
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S06-2026-10-21-new_release",
+        "store_id": "S06",
+        "store_name": "滨江店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "会议与差旅",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "滨江高新区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有13个写字楼（滨江高新区等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.718
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S06-2026-10-21-customer_question",
+        "store_id": "S06",
+        "store_name": "滨江店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_B",
+        "display_name": "<商务型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "office",
+        "segment_label": "上班族客群",
+        "angle": "续航能撑一整天吗",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "滨江高新区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有13个写字楼（滨江高新区等）→ 上班族客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「续航能撑一整天吗」2 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q03",
+          "text": "续航能撑一整天吗",
+          "count": 2
+        },
+        "scores": {
+          "fit": 0.799
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S07": [
+      {
+        "card_id": "S07-2026-10-21-promo",
+        "store_id": "S07",
+        "store_name": "三墩店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_D",
+        "display_name": "<家用全能型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "上手简单",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "三墩住宅区附近",
+        "nickname": "小陈",
+        "reasons": [
+          {
+            "text": "门店1.5km内有12个住宅小区（三墩住宅区等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": null,
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.89
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S07-2026-10-21-new_release",
+        "store_id": "S07",
+        "store_name": "三墩店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "上手简单",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "三墩住宅区附近",
+        "nickname": "小陈",
+        "reasons": [
+          {
+            "text": "门店1.5km内有12个住宅小区（三墩住宅区等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.554
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S07-2026-10-21-customer_question",
+        "store_id": "S07",
+        "store_name": "三墩店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_D",
+        "display_name": "<家用全能型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "能不能和手机/平板互传文件",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "三墩住宅区附近",
+        "nickname": "小陈",
+        "reasons": [
+          {
+            "text": "门店1.5km内有12个住宅小区（三墩住宅区等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「能不能和手机/平板互传文件」2 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q02",
+          "text": "能不能和手机/平板互传文件",
+          "count": 2
+        },
+        "scores": {
+          "fit": 0.89
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S08": [
+      {
+        "card_id": "S08-2026-10-21-potential",
+        "store_id": "S08",
+        "store_name": "九堡店",
+        "date": "2026-10-21",
+        "slot": "potential",
+        "slot_label": "潜力款",
+        "model_id": "MODEL_D",
+        "display_name": "<家用全能型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "全家共用",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "myth",
+          "label": "误区澄清"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "九堡住宅区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有10个住宅小区（九堡住宅区等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "该型号本店销量占比低于同类商圈门店 50%",
+            "source": "sales",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.844,
+          "index": 0.504,
+          "potential": 0.419,
+          "share": 0.0982,
+          "peer_share": 0.1948
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S08-2026-10-21-promo",
+        "store_id": "S08",
+        "store_name": "九堡店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_D",
+        "display_name": "<家用全能型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "全家共用",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "九堡住宅区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有10个住宅小区（九堡住宅区等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": null,
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.844
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S08-2026-10-21-new_release",
+        "store_id": "S08",
+        "store_name": "九堡店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "全家共用",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "九堡住宅区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有10个住宅小区（九堡住宅区等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.577
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S08-2026-10-21-customer_question",
+        "store_id": "S08",
+        "store_name": "九堡店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_D",
+        "display_name": "<家用全能型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "能不能和手机/平板互传文件",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "九堡住宅区附近",
+        "nickname": "小王",
+        "reasons": [
+          {
+            "text": "门店1.5km内有10个住宅小区（九堡住宅区等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「能不能和手机/平板互传文件」2 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q02",
+          "text": "能不能和手机/平板互传文件",
+          "count": 2
+        },
+        "scores": {
+          "fit": 0.844
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S09": [
+      {
+        "card_id": "S09-2026-10-21-promo",
+        "store_id": "S09",
+        "store_name": "良渚店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_D",
+        "display_name": "<家用全能型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "长期耐用",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "良渚文化村附近",
+        "nickname": "阿杰",
+        "reasons": [
+          {
+            "text": "门店1.5km内有11个住宅小区（良渚文化村等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": null,
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.875
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S09-2026-10-21-new_release",
+        "store_id": "S09",
+        "store_name": "良渚店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "旧电脑资料迁移",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "checklist",
+          "label": "清单式"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "良渚文化村附近",
+        "nickname": "阿杰",
+        "reasons": [
+          {
+            "text": "门店1.5km内有11个住宅小区（良渚文化村等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.562
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S09-2026-10-21-customer_question",
+        "store_id": "S09",
+        "store_name": "良渚店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_D",
+        "display_name": "<家用全能型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "family",
+        "segment_label": "家庭客群",
+        "angle": "学生用够不够",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "manager",
+          "label": "亲切店长"
+        },
+        "landmark": "良渚文化村附近",
+        "nickname": "阿杰",
+        "reasons": [
+          {
+            "text": "门店1.5km内有11个住宅小区（良渚文化村等）→ 家庭客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「学生用够不够」4 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q01",
+          "text": "学生用够不够",
+          "count": 4
+        },
+        "scores": {
+          "fit": 0.875
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S10": [
+      {
+        "card_id": "S10-2026-10-21-potential",
+        "store_id": "S10",
+        "store_name": "湖滨商圈店",
+        "date": "2026-10-21",
+        "slot": "potential",
+        "slot_label": "潜力款",
+        "model_id": "MODEL_A",
+        "display_name": "<轻薄长续航型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "送礼怎么选",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "myth",
+          "label": "误区澄清"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "湖滨银泰in77附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（湖滨银泰in77等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "该型号本店销量占比低于同类商圈门店 44%",
+            "source": "sales",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.57,
+          "index": 0.561,
+          "potential": 0.25,
+          "share": 0.1096,
+          "peer_share": 0.1954
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S10-2026-10-21-promo",
+        "store_id": "S10",
+        "store_name": "湖滨商圈店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "送礼怎么选",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "湖滨银泰in77附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（湖滨银泰in77等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "6999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.74
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S10-2026-10-21-new_release",
+        "store_id": "S10",
+        "store_name": "湖滨商圈店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "到店体验理由",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "scene",
+          "label": "场景开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "湖滨银泰in77附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（湖滨银泰in77等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.664
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S10-2026-10-21-customer_question",
+        "store_id": "S10",
+        "store_name": "湖滨商圈店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "可以先到店试用吗",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "湖滨银泰in77附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（湖滨银泰in77等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「可以先到店试用吗」4 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q10",
+          "text": "可以先到店试用吗",
+          "count": 4
+        },
+        "scores": {
+          "fit": 0.74
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S11": [
+      {
+        "card_id": "S11-2026-10-21-promo",
+        "store_id": "S11",
+        "store_name": "武林广场店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "到店体验理由",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "杭州大厦附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（杭州大厦等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "6999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.768
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S11-2026-10-21-new_release",
+        "store_id": "S11",
+        "store_name": "武林广场店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "到店体验理由",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "question",
+          "label": "问题开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "杭州大厦附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（杭州大厦等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.707
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S11-2026-10-21-customer_question",
+        "store_id": "S11",
+        "store_name": "武林广场店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "送人选哪款合适",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "杭州大厦附近",
+        "nickname": "小许",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（杭州大厦等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「送人选哪款合适」4 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q09",
+          "text": "送人选哪款合适",
+          "count": 4
+        },
+        "scores": {
+          "fit": 0.768
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ],
+    "S12": [
+      {
+        "card_id": "S12-2026-10-21-promo",
+        "store_id": "S12",
+        "store_name": "城西银泰店",
+        "date": "2026-10-21",
+        "slot": "promo",
+        "slot_label": "活动款",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "送礼怎么选",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "checklist",
+          "label": "清单式"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "城西银泰城附近",
+        "nickname": "小林",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（城西银泰城等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "全国活动「双十一预约季」进行中（2026-10-20 至 2026-11-11）",
+            "source": "promo",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": {
+          "campaign_id": "DEMO-1111-PRE",
+          "name": "双十一预约季",
+          "mechanic": "到店预约体验，活动期内享演示活动价",
+          "price_info": {
+            "label": "演示活动价",
+            "value": "6999",
+            "currency": "CNY",
+            "conditions": "活动期内有效，以门店实际为准"
+          },
+          "source": "DEMO"
+        },
+        "question": null,
+        "scores": {
+          "fit": 0.737
+        },
+        "is_default": true,
+        "is_demo": true
+      },
+      {
+        "card_id": "S12-2026-10-21-new_release",
+        "store_id": "S12",
+        "store_name": "城西银泰店",
+        "date": "2026-10-21",
+        "slot": "new_release",
+        "slot_label": "新品款",
+        "model_id": "MODEL_N",
+        "display_name": "<扮演\"新品\"的型号 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "到店体验理由",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "checklist",
+          "label": "清单式"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "城西银泰城附近",
+        "nickname": "小林",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（城西银泰城等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "新品资料待总部确认，暂不可生成",
+            "source": "release",
+            "is_demo": false
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": true,
+        "locked_reason": "fact_card_draft",
+        "promo": null,
+        "question": null,
+        "scores": {
+          "fit": 0.674
+        },
+        "is_default": false,
+        "is_demo": true
+      },
+      {
+        "card_id": "S12-2026-10-21-customer_question",
+        "store_id": "S12",
+        "store_name": "城西银泰店",
+        "date": "2026-10-21",
+        "slot": "customer_question",
+        "slot_label": "顾客问答",
+        "model_id": "MODEL_F",
+        "display_name": "<全国畅销旗舰 — 从catalog填写>",
+        "platform": "朋友圈",
+        "segment": "shopper",
+        "segment_label": "逛街/送礼客群",
+        "angle": "可以先到店试用吗",
+        "calendar_theme": "购物节前做功课",
+        "hook": {
+          "id": "customer",
+          "label": "顾客问答开头"
+        },
+        "voice": {
+          "id": "techie",
+          "label": "懂技术的店员"
+        },
+        "landmark": "城西银泰城附近",
+        "nickname": "小林",
+        "reasons": [
+          {
+            "text": "门店1.5km内有2个商场（城西银泰城等）→ 逛街/送礼客群为主",
+            "source": "poi",
+            "is_demo": true
+          },
+          {
+            "text": "本店近7天顾客问「可以先到店试用吗」1 次",
+            "source": "questions",
+            "is_demo": true
+          },
+          {
+            "text": "距双十一还有 21 天",
+            "source": "calendar",
+            "is_demo": false
+          }
+        ],
+        "locked": false,
+        "locked_reason": null,
+        "promo": null,
+        "question": {
+          "chip_id": "Q10",
+          "text": "可以先到店试用吗",
+          "count": 1
+        },
+        "scores": {
+          "fit": 0.737
+        },
+        "is_default": false,
+        "is_demo": true
+      }
+    ]
+  }
+}

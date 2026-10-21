@@ -1,0 +1,8 @@
+model_id,display_name,archetype,base_popularity,launch_date,is_new_release,fact_card_status,aff_student,aff_office,aff_family,aff_shopper,why_student,why_office,why_family,why_shopper
+MODEL_A,<轻薄长续航型号 — 从catalog填写>,light_student,1.0,2026-03-01,false,verified,0.90,0.60,0.50,0.60,<KB事实: 重量/续航>,<KB事实>,<KB事实>,<KB事实>
+MODEL_B,<商务型号 — 从catalog填写>,business,0.9,2026-03-01,false,verified,0.40,0.95,0.35,0.50,<KB事实>,<KB事实: 安全/接口/续航>,<KB事实>,<KB事实>
+MODEL_C,<高性能/创作型号 — 从catalog填写>,creator_perf,0.7,2026-04-01,false,verified,0.45,0.55,0.30,0.40,<KB事实>,<KB事实>,<KB事实>,<KB事实>
+MODEL_D,<家用全能型号 — 从catalog填写>,family_allround,0.9,2026-02-01,false,verified,0.50,0.40,0.90,0.60,<KB事实>,<KB事实>,<KB事实: 屏幕/易用>,<KB事实>
+MODEL_E,<入门型号 — 从catalog填写>,budget,0.8,2026-01-15,false,verified,0.70,0.40,0.70,0.50,<KB事实>,<KB事实>,<KB事实>,<KB事实>
+MODEL_F,<全国畅销旗舰 — 从catalog填写>,flagship_bestseller,1.5,2025-11-01,false,verified,0.70,0.80,0.60,0.80,<KB事实>,<KB事实>,<KB事实>,<KB事实>
+MODEL_N,<扮演"新品"的型号 — 从catalog填写>,new_release,1.0,2026-10-28,true,draft,0.80,0.75,0.55,0.70,<KB事实>,<KB事实>,<KB事实>,<KB事实>

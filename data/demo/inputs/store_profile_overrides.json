@@ -1,0 +1,4 @@
+{
+  "_doc": "Edits a store made to its auto-generated profile (landmark / voice / nickname). Anything not listed stays auto. Voice must be allowed for the store's dominant segment.",
+  "S01": {"voice": "senior", "landmark": "紫金港校区东门对面"}
+}

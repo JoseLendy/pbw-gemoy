@@ -1,0 +1,21 @@
+{
+  "segment_angles": {
+    "student": ["上课携带", "全天续航", "手机平板电脑多设备协同", "宿舍/图书馆场景"],
+    "office":  ["会议与差旅", "多任务处理", "文档效率", "数据安全"],
+    "family":  ["上手简单", "全家共用", "旧电脑资料迁移", "长期耐用"],
+    "shopper": ["送礼怎么选", "到店体验理由"]
+  },
+  "hooks": [
+    {"id": "scene",    "label": "场景开头",   "example": "下午三点的图书馆，插座全被占了……"},
+    {"id": "question", "label": "问题开头",   "example": "轻薄本到底要不要带充电器出门？"},
+    {"id": "customer", "label": "顾客问答开头", "example": "最近好几位顾客都在问……", "requires_logged_question": true},
+    {"id": "myth",     "label": "误区澄清",   "example": "很多人以为……其实……"},
+    {"id": "checklist","label": "清单式",     "example": "买之前先看这3点"}
+  ],
+  "voices": [
+    {"id": "manager", "label": "亲切店长",   "allowed_segments": ["student", "office", "family", "shopper"]},
+    {"id": "techie",  "label": "懂技术的店员", "allowed_segments": ["student", "office", "family", "shopper"]},
+    {"id": "senior",  "label": "学长学姐风",  "allowed_segments": ["student"]}
+  ],
+  "nicknames": ["小王", "小李", "阿杰", "小陈", "小林", "阿雅", "小周", "小许"]
+}

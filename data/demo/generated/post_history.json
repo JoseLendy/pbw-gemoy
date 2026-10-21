@@ -1,0 +1,370 @@
+[
+  {
+    "date": "2026-10-14",
+    "store_id": "S01",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_F",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-15",
+    "store_id": "S01",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_B",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-16",
+    "store_id": "S01",
+    "platform": "公众号",
+    "posted": "true",
+    "model_id": "MODEL_D",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-17",
+    "store_id": "S01",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-18",
+    "store_id": "S01",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S01",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S01",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_D",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-14",
+    "store_id": "S02",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-18",
+    "store_id": "S02",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_B",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S02",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S02",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_F",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-16",
+    "store_id": "S03",
+    "platform": "公众号",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S03",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_B",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-14",
+    "store_id": "S04",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-15",
+    "store_id": "S04",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-16",
+    "store_id": "S04",
+    "platform": "公众号",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S04",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S04",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_F",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-14",
+    "store_id": "S05",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-15",
+    "store_id": "S05",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-16",
+    "store_id": "S05",
+    "platform": "公众号",
+    "posted": "true",
+    "model_id": "MODEL_D",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S05",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S05",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_B",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-14",
+    "store_id": "S06",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-16",
+    "store_id": "S06",
+    "platform": "公众号",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S06",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-15",
+    "store_id": "S07",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_D",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S07",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S07",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_F",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-18",
+    "store_id": "S08",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-14",
+    "store_id": "S09",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_F",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-15",
+    "store_id": "S09",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_D",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-16",
+    "store_id": "S09",
+    "platform": "公众号",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-18",
+    "store_id": "S09",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S09",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-15",
+    "store_id": "S10",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_F",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-17",
+    "store_id": "S10",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_B",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-18",
+    "store_id": "S10",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_D",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-19",
+    "store_id": "S10",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_D",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S10",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-15",
+    "store_id": "S11",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_E",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-17",
+    "store_id": "S11",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_A",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-18",
+    "store_id": "S11",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_B",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-20",
+    "store_id": "S11",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_F",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-17",
+    "store_id": "S12",
+    "platform": "小红书",
+    "posted": "true",
+    "model_id": "MODEL_B",
+    "is_demo": "true"
+  },
+  {
+    "date": "2026-10-18",
+    "store_id": "S12",
+    "platform": "朋友圈",
+    "posted": "true",
+    "model_id": "MODEL_C",
+    "is_demo": "true"
+  }
+]

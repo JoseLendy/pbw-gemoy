@@ -1,0 +1,5 @@
+{
+  "_doc": "Weekly rotation standing in for HQ's posting requirement (real quota unknown - keep configurable). Monday=0.",
+  "rotation": ["朋友圈", "小红书", "朋友圈", "小红书", "公众号", "小红书", "朋友圈"],
+  "weekly_minimum": {"朋友圈": 3, "小红书": 3, "公众号": 1}
+}

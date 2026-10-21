@@ -1,0 +1,27 @@
+[
+  {
+    "campaign_id": "DEMO-1111-PRE",
+    "name": "双十一预约季",
+    "models": ["MODEL_A", "MODEL_F", "MODEL_D"],
+    "start": "2026-10-20",
+    "end": "2026-11-11",
+    "mechanic": "到店预约体验，活动期内享演示活动价",
+    "price_info": {
+      "MODEL_A": {"label": "演示活动价", "value": "4999", "currency": "CNY", "conditions": "活动期内有效，以门店实际为准"},
+      "MODEL_F": {"label": "演示活动价", "value": "6999", "currency": "CNY", "conditions": "活动期内有效，以门店实际为准"}
+    },
+    "source": "DEMO",
+    "is_demo": true
+  },
+  {
+    "campaign_id": "DEMO-1111-EXP",
+    "name": "双十一到店体验周",
+    "models": ["MODEL_A", "MODEL_B", "MODEL_D", "MODEL_F"],
+    "start": "2026-11-01",
+    "end": "2026-11-11",
+    "mechanic": "到店体验 + 以旧换新咨询",
+    "price_info": null,
+    "source": "DEMO",
+    "is_demo": true
+  }
+]

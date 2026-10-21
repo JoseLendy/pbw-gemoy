@@ -1,0 +1,12 @@
+{
+  "_doc": "Format written by scripts/fetch_poi.py and read by gen_fake_data.py / agent/recommend/poi.py. typecode may contain several codes joined by '|'.",
+  "store_id": "S01",
+  "lng": 120.0,
+  "lat": 30.0,
+  "fetched_at": "2026-10-21T10:00:00",
+  "source": "amap_v3_place_around",
+  "pois": [
+    {"name": "<POI名称>", "typecode": "141201", "distance_m": 320, "location": "120.0,30.0"},
+    {"name": "<POI名称>", "typecode": "120302", "distance_m": 610, "location": "120.0,30.0"}
+  ]
+}

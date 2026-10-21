@@ -1,0 +1,20 @@
+{
+  "_doc": "8D anti-AI style check. phrases = substring hits; patterns = regex; rules = structural limits. Tune freely.",
+  "phrases": {
+    "era_cliche": ["在这个快节奏的时代", "随着科技的发展", "在当今社会", "在数字化时代"],
+    "corporate":  ["赋能", "助力", "打造", "开启新篇章", "全新体验", "极致", "颠覆", "引领潮流"],
+    "forced_slang": ["家人们", "宝子们", "绝绝子", "冲鸭", "yyds", "闭眼入"],
+    "sales_claims": ["热销", "爆款", "销量第一", "卖断货", "抢疯了"],
+    "absolute": ["最", "第一", "唯一", "顶级", "全网", "首选"]
+  },
+  "patterns": {
+    "not_only_but_also": "不仅.{0,20}更",
+    "whether_or": "无论.{0,20}还是.{0,20}都"
+  },
+  "rules": {
+    "max_rhetorical_questions": 1,
+    "max_parallel_sentences": 2,
+    "emoji_limit": {"小红书": "1 per paragraph", "朋友圈": 2, "公众号": 0},
+    "must_include_concrete_detail": ["landmark", "specific_scene", "logged_customer_question"]
+  }
+}
