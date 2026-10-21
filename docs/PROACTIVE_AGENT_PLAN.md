@@ -1,10 +1,11 @@
 # pbw gemoy — Proactive Store Post Agent (复赛 plan)
 
 > Team design doc for the 复赛 (semi-final → final) round.
-> Status: **v2.3, Phase 4 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
+> Status: **v2.4, Phase 5 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
 > Deadline: **video submission, Fri Oct 23, 17:00**.
 
 **Changelog**
+- **v2.4 (Wed Oct 21, Phase 5):** push model made literal: `prepare_today(date)` generates every store's default post in the morning (8E included) and stores it under `runs/<date>/prepared/`; staff open the app to a ready post and 重新生成 runs live (§2, §9). New-release truthfulness in 8B: 新品 / 首发 / 新上市 / 刚发布 / 即将上市 wording or a launch date only with a tagged ledger release fact; the demo `launch_date` only schedules the card and never reaches the writer; the card reason reads “总部新品推送（演示流程）” unless the KB states that date (§4.4, §7). KB release order and the MODEL_N / MODEL_A–F proposals are in `docs/model_mapping.md`.
 - **v2.3 (Wed Oct 21, Phase 4):** real model mapping applied (`docs/model_mapping.md`); peer-aware hook/angle assignment replaces per-store md5 rotation (§6.4); `generate_batch` adds 8E regeneration and before/after similarity; 8C/8D duplicate hits are merged into one line with both checker IDs; `reset_demo_state`, `runs/` real-run logs and `latest_run` added (Phase 3 UI can call them); `gen_fake_data.py --check-only` supports a safe Amap swap. 8A auto-cite now refuses sentences with unsupported numbers; 8B money patterns are as broad as the old 8A price rule.
 - **v2.2 (Wed Oct 21, Phase 2):** the 8D blocklist drops its `absolute` group (absolute claims are 8B's job; a bare 最/第一 substring match would false-flag 最近/第一次). Customer-hook wording loses its 最 ("这几天好几位顾客都在问……"). Recommendation cards gain an explicit, calendar-aware `scenario` field (§10.7), so the pipeline no longer guesses a stage from the segment.
 - **v2 (Wed Oct 21):** organizer confirmed we may use fake data. §10 rewritten around a ready-to-run data kit (`scripts/gen_fake_data.py` + templates in `data/demo/inputs/`). Demo promos may now carry demo prices, with a new price-traceability rule (§4.3, §6.5). Affinity scores moved into `models.csv`. Configs are JSON. Amap POI codes verified. Timeline updated.
@@ -55,7 +56,10 @@ The 复赛 only requires a video. No reference data or fixed requirements are gi
 ## 2. User flow (what the store employee sees)
 
 ```
-Open app (store already bound to account)
+Every morning (before opening): prepare_today(date) writes each store's 今日一条 post
+   │   (full pipeline + 8A–8E checks; stored as a real run under runs/<date>/prepared/)
+   ▼
+Open app (store already bound to account) → the post is already there
    │
    ▼
 ┌──────────────────────────────────────┐
@@ -67,7 +71,7 @@ Open app (store already bound to account)
 │  · 该型号本店销量占比低于同类商圈门店 64% │
 │  · 距双十一还有 21 天                  │
 │                                       │
-│  [ 查看文案 ]   [ 换一条 ]              │
+│  [ 查看文案 ]   [ 换一条 ]  [ 重新生成 ] │
 └──────────────────────────────────────┘
    │ tap
    ▼
@@ -79,7 +83,8 @@ Post preview (phone mockup, images from ima, 4-section verification hidden in a 
 
 (The card text above is real generator output for store S01; see `data/demo/generated/today_cards.json`.)
 
-- Default is **one post per day** ("今日一条"). "换一条" shows the other slots (活动款 / 新品款 / 顾客问答).
+- Default is **one post per day** ("今日一条"). **Posts are generated each morning; staff open the app to a ready post** (`agent.runs.prepared_post(store_id, date)`), so nobody waits for generation. **重新生成** runs the same card live (`run_from_card`). "换一条" shows the other slots (活动款 / 新品款 / 顾客问答); those generate live.
+- If the default card changed after the morning run (e.g. HQ verified a new release), `prepared_post` returns None for the old card and the app generates live.
 - "已发布 ✓" is how HQ knows the store posted (no auto-posting: 朋友圈 and personal 小红书 have no open posting API; we don't claim otherwise).
 - Optional: "拍一张店内实拍" prompt. One real photo of the product on the display table removes most of the AI feel and fits 小红书's rule against faked experience. Real photo is added *alongside* ima images, never replaces the model-verified product image.
 
@@ -197,6 +202,8 @@ Video moment: user adds an invented discount → 8B blocks it and cites the rule
 ### 4.4 New releases
 
 A new product is only recommended if its **fact card is `verified`** (§7). Unverified → locked card "新品资料待总部确认，暂不可生成". In the demo, `MODEL_N` launches Oct 28 and starts as `draft`.
+
+The demo `launch_date` only **schedules** the 新品款 card. It is not a fact: it never reaches the writer, and the card's reason reads “总部新品推送（演示流程）” unless the KB states that same date. Public copy may say 新品 / 首发 / 新上市 / 刚发布 / 即将上市 (or state a launch date) only in a sentence citing a ledger fact that carries release information (8B `release_unsupported`, card runs). Today no ledger fact states a release date, so new-release posts describe the product without calling it new.
 
 ### 4.5 Calendar
 
@@ -396,12 +403,14 @@ The last panel was roadmap in v1. Since fake data is allowed, it can be shown ch
 
 ## 9. Demo views (Gradio tabs)
 
-1. **门店端 · 今日推荐** — store selector (demo only), today's card(s), explanation, generate, preview, copy, "已发布".
+1. **门店端 · 今日推荐** — store selector (demo only), today's card(s), explanation, **the prepared post shown on open** (`prepared_post`), **重新生成** (live `run_from_card`), preview, copy, "已发布". The 新品款 card shows the “总部新品推送（演示流程）” label.
 2. **三店对比** — same product, same day, side by side as phone previews: S01 campus, S04 CBD, S08 residential, plus **S02, a second campus store**, to show same-type stores still differ. *The key video shot.*
 3. **总部端** — panels from §8, including verifying `MODEL_N` live.
 4. **手动输入** — existing pull-based flow, kept as fallback.
 
-Retakes: call `agent.recommend.reset_demo_state()` (clears fact-card overrides + data cache) and clear the app session’s 已发布 / question state. Real runs also append `runs/<date>/<timestamp>-<store>-<slot>.json`; `agent.runs.latest_run(card_id)` returns the newest real output for a fallback display. The `runs/` directory is gitignored; these are real outputs and must never be hand-edited.
+Morning run: `python scripts/prepare_today.py --today <date>` (real deps; `--fake` rehearses into `runs/_rehearsal/`). It prints per store status, rewrites, seconds and 8E flags; locked cards are skipped and listed.
+
+Retakes: call `agent.recommend.reset_demo_state()` (clears fact-card overrides + data cache) and clear the app session’s 已发布 / question state. `reset_demo_state` does **not** delete prepared posts (they are real run logs); `agent.runs.clear_prepared(date)` does, explicitly. Real runs also append `runs/<date>/<timestamp>-<store>-<slot>.json`; `agent.runs.latest_run(card_id)` returns the newest real output for a fallback display. The `runs/` directory is gitignored; these are real outputs and must never be hand-edited.
 
 ---
 
