@@ -271,3 +271,19 @@ def test_llm_layer_still_lists_untagged_sentences():
     p.body = ["重量约 1.25 kg [F1]。一整天不用充电。"]
     block = _uncited_block(p)
     assert "一整天不用充电" in block and "1.25 kg" not in block
+
+
+def test_wrong_tag_on_a_variant_specific_value_is_a_tag_mismatch():
+    """Canary: '约 1.25 kg [F6]' (F6 is the battery; 1.25 kg is the 标准版 weight F1) with no variant
+    requested used to raise only variant_unspecified (warn) and pass."""
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F6]。"]
+    issues = check_facts(p, fake_ledger(), {}).issues
+    assert any(i.code == "tag_mismatch" and i.severity == "error" and i.fact_id == "F1" for i in issues)
+
+
+def test_right_tag_on_a_variant_specific_value_is_still_only_a_warning():
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。"]
+    issues = check_facts(p, fake_ledger(), {}).issues
+    assert not [i for i in issues if i.severity == "error"]

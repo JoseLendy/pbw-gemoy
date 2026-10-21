@@ -301,8 +301,10 @@ def _check_tags(post: Post, ledger: Ledger, variant: str | None) -> list[CheckIs
                 facts = [ledger.get(f) for f in tags if ledger.get(f)]
                 for span, value, unit in units.find_all(mask_whitelisted(clean)):
                     if not any(units.same_value(v, u, value, unit) for f in facts for v, u in fact_values(f)):
-                        owners = [f for f in _matching_facts(ledger, value, unit)
-                                  if f.id not in excluded and _variant_ok(f, variant)]
+                        matching = [f for f in _matching_facts(ledger, value, unit) if f.id not in excluded]
+                        # Prefer the owner of the requested variant, but a number that only another variant's
+                        # fact holds is still a wrong tag (it used to slip through as a variant warning only).
+                        owners = [f for f in matching if _variant_ok(f, variant)] or matching
                         if owners:   # the number exists under another id: name it so auto_cite can fix it in code
                             issues.append(_issue("tag_mismatch",
                                                  f"数值「{span}」不属于所标编号 {'/'.join(tags)}，"
