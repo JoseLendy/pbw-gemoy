@@ -228,5 +228,9 @@ def rewrite(post: Post, issues: list[CheckIssue], task: Task, strategy: Strategy
                tags=f.get("tags", post.tags) or post.tags, selling_points=list(post.selling_points),
                images=f.get("images", post.images))
     used = _used_ids(new)
-    new.selling_points = [i for i in dict.fromkeys(post.selling_points + used) if i in allowed and ledger.get(i)]
+    # An id whose tag this rewrite removed is no longer a selling point (otherwise it lingers, e.g. as a
+    # second 朋友圈 point no sentence cites). Ids declared without ever being tagged are kept as before.
+    removed = set(_used_ids(post)) - set(used)
+    new.selling_points = [i for i in dict.fromkeys(post.selling_points + used)
+                          if i in allowed and ledger.get(i) and i not in removed]
     return new
