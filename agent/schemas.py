@@ -404,6 +404,25 @@ class LockedResult:
     to_dict = _d
 
 
+BASELINE_LABEL = "对照组：未经约束的普通大模型输出"
+
+
+@dataclass
+class BaselineResult:
+    """generate_baseline(): one naive LLM call for the video's before/after shot. NEVER our result:
+    `display_text` always starts with BASELINE_LABEL and the UI must show it as the control group."""
+    card_id: str
+    model_id: Optional[str]
+    platform: str
+    prompt: str                     # the naive prompt that was sent
+    text: str                       # raw model output, unchecked
+    display_text: str               # label + text: the only form the UI should render
+    hits: list["CheckIssue"] = field(default_factory=list)   # 8D stage-1 hits, for highlighting only
+    label: str = BASELINE_LABEL
+    is_baseline: bool = True
+    to_dict = _d
+
+
 @dataclass
 class StaffContext:
     """Who is posting (demo mode, no auth). Only voice / nickname may differ from the store card."""

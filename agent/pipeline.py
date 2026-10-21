@@ -451,3 +451,10 @@ def run_all_platforms(prev: RunResult, platforms=("wechat_article", "xiaohongshu
     with ThreadPoolExecutor(max_workers=len(platforms)) as ex:
         futs = {p: ex.submit(edit, prev, f"换成{PLATFORM_LABELS[p]}", deps, on_progress) for p in platforms}
         return {p: f.result() for p, f in futs.items()}
+
+
+# ---------------------------------------------------------------- baseline (video before/after; never our result)
+def generate_baseline(card: RecommendationCard, deps: Deps | None = None, llm=None):
+    """Re-export of agent.baseline.generate_baseline so the UI imports every entry point from here."""
+    from agent.baseline import generate_baseline as _gen
+    return _gen(card, deps=deps, llm=llm)
