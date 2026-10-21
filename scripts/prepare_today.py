@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""
+Morning run (push model): prepare every store's default post for a date and store it as a real run.
+
+    python scripts/prepare_today.py --today 2026-10-23          # real deps (ima + LLM)
+    python scripts/prepare_today.py --today 2026-10-23 --fake   # rehearsal on tests/fakes -> runs/_rehearsal/
+
+Prints per store: status, rewrites, seconds taken, 8E similarity flags. Refuses to run when any dependency
+would fall back to a fake, unless --fake is passed. Never prints keys, the Client ID or KB IDs.
+"""
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import datetime as dt
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from agent.schemas import LockedResult, NeedsHuman, RunResult  # noqa: E402
+
+
+def _status(result) -> str:
+    if isinstance(result, RunResult):
+        return "PASS" if result.report.passed else "FAIL（未通过核验）"
+    if isinstance(result, NeedsHuman):
+        return "NEEDS_HUMAN"
+    if isinstance(result, LockedResult):
+        return "LOCKED"
+    if isinstance(result, Exception):
+        return f"ERROR {type(result).__name__}"
+    return type(result).__name__
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
+    ap.add_argument("--today", default=dt.date.today().isoformat())
+    ap.add_argument("--fake", action="store_true", help="rehearsal on tests/fakes (synthetic facts)")
+    args = ap.parse_args(argv)
+    from agent.pipeline import Deps, prepare_today
+    from agent.runs import REHEARSAL_DIR
+    from agent.style.similarity import similarity_threshold
+
+    if args.fake:
+        deps, runs_dir = Deps.fake(), REHEARSAL_DIR
+
+        def card_map(card):
+            return dataclasses.replace(card, model_id="demobook-14", display_name="DemoBook 14（演示版）")
+    else:
+        deps, runs_dir, card_map = Deps.auto(), None, None
+        if deps.is_dev_mode:
+            print("prepare_today.py needs real deps, but these would be fakes: " + ", ".join(deps.fake_fields))
+            print("Fix the configuration, or pass --fake for a rehearsal.")
+            return 2
+
+    day = prepare_today(args.today, deps, runs_dir=runs_dir, card_map=card_map)
+    threshold = similarity_threshold()
+    print(f"prepare_today {day.date} · {'rehearsal (fakes)' if args.fake else 'real deps'}")
+    print(f"{'store':6} {'status':22} {'rewrites':>8} {'seconds':>8}  similarity")
+    for sid in sorted(day.batch.results):
+        r = day.batch.results[sid]
+        flags = [f"{p.store_a}×{p.store_b} {p.before}→{p.after}" + (" ⚠️" if p.after > threshold else "")
+                 for p in day.batch.similarity if sid in (p.store_a, p.store_b) and p.before > threshold]
+        regen = " (8E regenerated)" if sid in day.batch.regenerated else ""
+        print(f"{sid:6} {_status(r):22} {getattr(r, 'loops', '-')!s:>8} {day.batch.seconds.get(sid, 0):>8.1f}  "
+              f"{'; '.join(flags) or '-'}{regen}")
+    for sid, why in sorted(day.locked.items()):
+        print(f"{sid:6} {'SKIPPED':22} {'-':>8} {'-':>8}  {why}")
+    print(f"stored: {len(day.paths)} prepared post(s) under {runs_dir or 'runs/'}{day.date}/prepared/")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

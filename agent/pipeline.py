@@ -387,6 +387,7 @@ class BatchResult:
     results: dict[str, Any]                 # store_id -> RunResult | LockedResult | NeedsHuman | Exception
     similarity: list[SimilarityPair]
     regenerated: list[str] = field(default_factory=list)
+    seconds: dict[str, float] = field(default_factory=dict)   # store_id -> wall-clock incl. 8E reruns
 
 
 def _batch_text(result) -> str:
@@ -415,9 +416,18 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
     items = [c if isinstance(c, RecommendationCard) else RecommendationCard.from_dict(c) for c in raw]
     by_store = {c.store_id: c for c in items}
     results: dict[str, Any] = {}
+    seconds: dict[str, float] = defaultdict(float)
+
+    def timed_run(card):
+        t0 = time.perf_counter()
+        try:
+            return run_from_card(card, deps, staff_map.get(card.store_id), on_progress)
+        finally:
+            seconds[card.store_id] += time.perf_counter() - t0
+
     for card in items:
         try:
-            results[card.store_id] = run_from_card(card, deps, staff_map.get(card.store_id), on_progress)
+            results[card.store_id] = timed_run(card)
         except Exception as e:  # noqa: BLE001 - one store must not abort the batch
             results[card.store_id] = e
 
@@ -472,7 +482,7 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                     if not hook_changed and next_angle is not None:
                         new_card.angle = next_angle
                     try:
-                        new_result = run_from_card(new_card, deps, staff_map.get(later), on_progress)
+                        new_result = timed_run(new_card)
                     except Exception:  # noqa: BLE001 - keep the original result if the rerun fails
                         continue
                     if not isinstance(new_result, RunResult):
@@ -484,7 +494,7 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                         angle_card = copy.deepcopy(new_card)
                         angle_card.angle = next_angle
                         try:
-                            angle_result = run_from_card(angle_card, deps, staff_map.get(later), on_progress)
+                            angle_result = timed_run(angle_card)
                         except Exception:  # noqa: BLE001
                             angle_result = None
                         if isinstance(angle_result, RunResult):
@@ -507,7 +517,8 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                     continue
                 pairs.append(SimilarityPair(seg, a, b, round(jaccard(before, after), 3),
                                             round(jaccard(peer_text(a), peer_text(b)), 3), b in regenerated))
-    batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated)
+    batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated,
+                        seconds={sid: round(v, 2) for sid, v in seconds.items()})
     if deps is not None and not getattr(deps, "is_dev_mode", True):
         try:
             from agent.runs import log_batch
@@ -515,6 +526,46 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
         except Exception as e:  # noqa: BLE001 - logging must never break a batch
             log.warning("batch log failed: %s", e)
     return batch
+
+
+# ---------------------------------------------------------------- prepared posts (the push model)
+@dataclass
+class PreparedDay:
+    date: str
+    batch: BatchResult
+    paths: dict[str, Any]                   # store_id -> prepared record path
+    locked: dict[str, str]                  # store_id -> why nothing was generated (locked / no card)
+
+
+def prepare_today(date, deps: Deps | None = None, runs_dir=None, on_progress: Progress = None,
+                  card_map: Optional[Callable[[RecommendationCard], RecommendationCard]] = None) -> PreparedDay:
+    """Morning run: every store's default card for `date` through generate_batch (8E included). Each final
+    result is stored as that store's prepared post (agent.runs.log_prepared); staff open the app to it and
+    重新生成 runs live. Locked cards (and stores without an unlocked card) are skipped and listed.
+    card_map is for the --fake rehearsal only (maps each card onto the synthetic DemoBook)."""
+    from agent.recommend.store_data import default_card, load_store_data
+    from agent.runs import log_prepared
+    deps = deps or default_deps()
+    data = load_store_data()
+    cards, locked = [], {}
+    for st in data.stores:
+        card = default_card(st["store_id"], date, data)
+        if card is None:
+            locked[st["store_id"]] = "今日无可生成的卡片"
+        elif card.locked:
+            locked[st["store_id"]] = LOCKED_MESSAGES.get(card.locked_reason or "", "该推荐暂不可生成，请等待总部确认")
+        else:
+            cards.append(card_map(card) if card_map else card)
+    batch = generate_batch(cards, deps, on_progress=on_progress)
+    by_store = {c.store_id: c for c in cards}
+    paths = {}
+    for sid, result in batch.results.items():
+        # The morning card is stored; if 8E changed hook / angle, result.task records what actually ran.
+        sims = [dict(p.__dict__) for p in batch.similarity if sid in (p.store_a, p.store_b)]
+        paths[sid] = log_prepared(by_store[sid], result, seconds=batch.seconds.get(sid), similarity=sims,
+                                  regenerated=sid in batch.regenerated, dev_mode=deps.is_dev_mode,
+                                  runs_dir=runs_dir)
+    return PreparedDay(date=str(date), batch=batch, paths=paths, locked=locked)
 
 
 # ---------------------------------------------------------------- edit
