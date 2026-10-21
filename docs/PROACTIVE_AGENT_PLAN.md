@@ -1,10 +1,11 @@
 # pbw gemoy — Proactive Store Post Agent (复赛 plan)
 
 > Team design doc for the 复赛 (semi-final → final) round.
-> Status: **v2.5, Phase 5 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
+> Status: **v2.6, Phase 5 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
 > Deadline: **video submission, Fri Oct 23, 17:00**.
 
 **Changelog**
+- **v2.6 (Wed Oct 21, Phase 5):** latency: per-product fact cache (§7 "verify once, generate many"), stores generated 4 at a time, 8A/8B/8D run in parallel within a check pass, per-stage timings in every run. Fallback for posts still failing after 2 rewrites: trim the failing sentences → the store's next card → 「需人工确认」 (`NeedsReview`); an unchecked post is never delivered (`docs/UI_BACKEND_CONTRACT.md`).
 - **v2.5 (Wed Oct 21, Phase 5):** weekly rotation changed to 公众号 · 小红书 · 朋友圈 · 小红书 · 朋友圈 · 小红书 · 朋友圈 (Mon→Sun) so the recording day Fri Oct 23 is a staff 朋友圈 day (公众号 is manager-only, §2.1); weekly minimums unchanged (§5.4).
 - **v2.4 (Wed Oct 21, Phase 5):** push model made literal: `prepare_today(date)` generates every store's default post in the morning (8E included) and stores it under `runs/<date>/prepared/`; staff open the app to a ready post and 重新生成 runs live (§2, §9). New-release truthfulness in 8B: 新品 / 首发 / 新上市 / 刚发布 / 即将上市 wording or a launch date only with a tagged ledger release fact; the demo `launch_date` only schedules the card and never reaches the writer; the card reason reads “总部新品推送（演示流程）” unless the KB states that date (§4.4, §7). KB release order and the MODEL_N / MODEL_A–F proposals are in `docs/model_mapping.md`.
 - **v2.3 (Wed Oct 21, Phase 4):** real model mapping applied (`docs/model_mapping.md`); peer-aware hook/angle assignment replaces per-store md5 rotation (§6.4); `generate_batch` adds 8E regeneration and before/after similarity; 8C/8D duplicate hits are merged into one line with both checker IDs; `reset_demo_state`, `runs/` real-run logs and `latest_run` added (Phase 3 UI can call them); `gen_fake_data.py --check-only` supports a safe Amap swap. 8A auto-cite now refuses sentences with unsupported numbers; 8B money patterns are as broad as the old 8A price rule.
