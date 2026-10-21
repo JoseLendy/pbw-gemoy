@@ -16,7 +16,12 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _clean():
+def _clean(tmp_path, monkeypatch):
+    # Hermetic: never read this machine's real runs/ (after a real prepare_today, S01 has a prepared post
+    # for 2026-10-23 and these "no result yet" tests would see it).
+    import agent.runs as runs
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "REHEARSAL_DIR", tmp_path / "runs" / "_rehearsal")
     ui_data.reset()
     yield
     ui_data.reset()
