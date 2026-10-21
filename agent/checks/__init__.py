@@ -98,28 +98,54 @@ def dedupe_style_hits(report: "CheckReport") -> "CheckReport":
 def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task: Task,
             plan: ImagePlan, llm=None) -> CheckReport:
     """8A → 8B → 8C → 8D, merged into one report (8C before 8D because stripping in 8A/8B can break
-    structure, and 8D's structural counts should see the final text)."""
+    structure, and 8D's structural counts should see the final text).
+
+    8A, 8B and 8D are independent of each other (each reads only the post, ledger and task). With an LLM
+    they run concurrently (CHECK_PARALLEL=0 turns that off); the merged report is identical either way."""
+    import os
     from agent.checks.compliance import check_compliance
     from agent.checks.conformance import check_conformance
     from agent.checks.facts import check_facts
+    from agent.timing import stage
 
     variant = getattr(task, "variant", None)
     platform = post.platform or getattr(task, "platform", None) or plan.platform
-    report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=llm)
-    from agent.checks.prices import valid_price_record
-    if valid_price_record(task) is not None:
-        # An active promotion record exists: 8B's exact price-traceability check owns money claims, and 8A's
-        # generic "no price facts in the KB" rule would otherwise block the one allowed price.
-        report = CheckReport([i for i in report.issues if i.code != "invented_price"])
-    report = report.merge(check_compliance(post, ledger, task, llm=llm))
-    report = report.merge(check_conformance(post, platform, plan))
-    try:  # Phase 2: 8D anti-AI style. A missing/broken style module must never stop a run.
-        from agent.style.antiai import check_style
-        report = report.merge(check_style(post, task, llm))
-    except Exception as e:  # noqa: BLE001
-        import logging
-        logging.getLogger("agent.checks").warning("8D unavailable: %s", e)
-    return dedupe_style_hits(report)
+
+    def facts():
+        with stage("check.8A"):
+            report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=llm)
+        from agent.checks.prices import valid_price_record
+        if valid_price_record(task) is not None:
+            # An active promotion record exists: 8B's exact price-traceability check owns money claims, and
+            # 8A's generic "no price facts in the KB" rule would otherwise block the one allowed price.
+            report = CheckReport([i for i in report.issues if i.code != "invented_price"])
+        return report
+
+    def compliance():
+        with stage("check.8B"):
+            return check_compliance(post, ledger, task, llm=llm)
+
+    def style():
+        try:  # Phase 2: 8D anti-AI style. A missing/broken style module must never stop a run.
+            from agent.style.antiai import check_style
+            with stage("check.8D"):
+                return check_style(post, task, llm)
+        except Exception as e:  # noqa: BLE001
+            import logging
+            logging.getLogger("agent.checks").warning("8D unavailable: %s", e)
+            return CheckReport()
+
+    if llm is not None and os.getenv("CHECK_PARALLEL", "1") != "0":
+        import contextvars
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            futs = [ex.submit(contextvars.copy_context().run, fn) for fn in (facts, compliance, style)]
+            r_facts, r_comp, r_style = (f.result() for f in futs)
+    else:
+        r_facts, r_comp, r_style = facts(), compliance(), style()
+    with stage("check.8C"):
+        r_conf = check_conformance(post, platform, plan)
+    return dedupe_style_hits(r_facts.merge(r_comp).merge(r_conf).merge(r_style))
 
 
 __all__ = ["run_all", "strip_fact_tags", "load_lines", "load_yaml", "CONFIG_DIR", "FACT_TAG_RE"]
