@@ -343,6 +343,8 @@ def _check_invented(post: Post, ledger: Ledger) -> list[CheckIssue]:
 def _llm_layer(post: Post, ledger: Ledger, llm) -> list[CheckIssue]:
     cited, uncited = [], []
     for field, raw in _fields(post):
+        if field.startswith("images["):      # KB captions verbatim; the plan check owns them (as in _check_tags)
+            continue
         clean, pairs = strip_fact_tags(raw)
         # strip_fact_tags keeps the sentence's final 。！？; the split below drops it. Compare without it, or
         # every tagged sentence is also sent as "uncited" and comes back as a false uncited_claim.

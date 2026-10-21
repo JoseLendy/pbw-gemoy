@@ -287,3 +287,15 @@ def test_right_tag_on_a_variant_specific_value_is_still_only_a_warning():
     p.body = ["重量约 1.25 kg [F1]。"]
     issues = check_facts(p, fake_ledger(), {}).issues
     assert not [i for i in issues if i.severity == "error"]
+
+
+def test_llm_layer_does_not_send_image_captions_as_uncited_claims():
+    """Real canary: captions come verbatim from the KB image index (the plan check owns them; the code layer
+    of 8A already skips them), but the LLM layer listed them as uncited sentences and the judge flagged the
+    model name / colour in them on every clean draft."""
+    from agent.schemas import PostImage
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。"]
+    p.images = [PostImage("img-1", "文末", "DemoBook 14 星空灰正面"), PostImage("img-2", "文末", "DemoBook 14 接口特写")]
+    block = _uncited_block(p)
+    assert "星空灰" not in block and "接口特写" not in block

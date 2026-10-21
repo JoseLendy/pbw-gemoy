@@ -34,6 +34,7 @@ class Case:
     planted: bool
     caught: bool = False
     hits: list = dataclasses.field(default_factory=list)       # (stage, code, span)
+    reasons: list = dataclasses.field(default_factory=list)    # (stage, code, span, message)
 
 
 def _numeric(ledger, exclude=()):
@@ -126,12 +127,19 @@ def main(argv=None) -> int:
             post.selling_points = list(dict.fromkeys(re.findall(r"\[(F\d+)\]", post.all_text())))
         report = deps.run_checks(post, ledger, siblings, task, plan, deps.llm)
         case.hits = [(i.stage, i.code, (i.span or "")[:24]) for i in report.issues if i.severity == "error"]
+        case.reasons = [(i.stage, i.code, (i.span or "")[:40], i.message) for i in report.issues
+                        if i.severity == "error"]
         case.caught = bool(case.hits)
     print("\n| 稿件 | 植入错误 | 结果 | 命中 |\n|---|---|---|---|")
     for case, _ in cases:
         verdict = ("✅ 拦截" if case.caught else "❌ 漏过") if case.planted else ("✅ 通过" if not case.caught else "⚠️ 误报")
         hits = "；".join(f"{s} {c}「{sp}」" for s, c, sp in case.hits[:3]) or "—"
         print(f"| {case.name} | {'是' if case.planted else '否'} | {verdict} | {hits} |")
+    for case, _ in cases:      # reasons for anything flagged on a clean draft (a false positive to inspect)
+        if not case.planted and case.caught:
+            print(f"\n{case.name}：")
+            for stage, code, span, msg in case.reasons:
+                print(f"  - {stage} {code}「{span}」{msg[:160]}")
     planted = [c for c, _ in cases if c.planted]
     clean = [c for c, _ in cases if not c.planted]
     missed = [c.name for c in planted if not c.caught]
