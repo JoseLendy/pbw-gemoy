@@ -25,7 +25,7 @@ Phase 3: build the demo UI from scratch. There is no previous UI work; ignore an
 Backend files listed above were never edited directly - the one exception is the Phase 5 **merge** done
 later at the user's explicit request (see "Later instructions" below), which is bringing backend work
 *in*, not editing it by hand. `app.py` now defaults to port 7861 (`GRADIO_SERVER_PORT` still wins if set).
-1920×1080 visual check is **PENDING** - see the Playwright item below.
+1920×1080 visual check is **DONE** (2026-10-21) - see the Playwright item below.
 
 ### Read first
 
@@ -128,12 +128,11 @@ The UI's "today" comes from env DEMO_TODAY (default 2026-10-23), never the syste
 - No visible "MODEL_" or "<…>" text; no 「开发占位」 text in normal paths.
 - CJK font renders properly; no horizontal scroll at 1920×1080, 100% zoom.
 
-**Status: DONE at the code level; visual confirmation at 1920×1080 is PENDING.**
-`agent.ui_data.plain_error` never leaks key/Client-ID/KB-id characters (regex-redacted, tested); no
-code path prints a model_id or "MODEL_" to the UI (tested in `tests/test_ui_components.py`). The
-1920×1080 / no-horizontal-scroll / CJK-rendering check needs an actual browser - that is the Playwright
-task below, which was **interrupted mid-run** and not completed. Do this before trusting the on-screen
-rules are visually satisfied, not just logically satisfied.
+**Status: DONE.** `agent.ui_data.plain_error` never leaks key/Client-ID/KB-id characters
+(regex-redacted, tested); no code path prints a model_id or "MODEL_" to the UI (tested in
+`tests/test_ui_components.py`). Playwright at 1920×1080 confirmed no horizontal overflow, correct CJK
+rendering, no `MODEL_` or `<…>` on screen, and no console/page errors. The friendly 402 message is
+covered by tests; a real 402 screenshot depends on the key's balance.
 
 ### Tests (fakes only, no network)
 
@@ -151,7 +150,8 @@ longer "optional" (Phase 5 merged, they're real `agent.runs` functions) but the 
 adapter degrades to None/0 if either hook ever goes missing again. The NeedsReview stand-in was replaced
 by the real `agent.schemas.NeedsReview` once it merged. "reset clears UI session state" is tested at the
 pure-function level (`ui.components.fresh_session()`); wiring an actual 「重置演示」 button to call it is
-Stage 2's 总部端, not built yet. Full suite: **613 passed, 1 skipped** as of the last commit on this branch.
+Stage 2's 总部端, not built yet. Full suite: **617 passed, 1 skipped** after the queue fix
+(`tests/test_ui_queue.py` adds the page-load/store-switch/status/proxy regressions).
 
 ### Report at each checkpoint
 
@@ -186,15 +186,14 @@ possible; each marked DONE / PENDING.
 > If everything looks right, continue with my previous message (merge base if PR #4 is merged,
 > error-display fix, startup race check, then Stage 2).
 
-**Status: PENDING / interrupted.** Playwright and Chromium were installed in `.venv` (not added to
-`requirements.txt`). `eval/ui_screens/` was created. A port-7862 instance was started and confirmed
-serving (`HTTP 200`). A first screenshot script was written and hit `Page.goto(..., wait_until="networkidle")`
-timing out - Gradio keeps a live connection open (status polling / SSE), so `networkidle` never fires;
-the fix (`wait_until="load"` + an explicit wait) was written but **never run** - the wrap-up/handover
-request arrived first. No screenshots exist yet. The port-7862 instance and the exploration script were
-stopped/left in place respectively before handover; nothing was running when this session ended. The
-`localhost` vs `0.0.0.0` question was never answered empirically - worth checking first, since Gradio
-binds `0.0.0.0` and some browsers/editors render that literally rather than as "all interfaces."
+**Status: DONE (2026-10-21).** Playwright + Chromium installed (not added to `requirements.txt`).
+At 1920×1080, headless Chromium, `wait_until="load"`: initial load, S01, a store switch, 「换一条」,
+chips and a generation attempt were exercised; screenshots are in `eval/ui_screens/` (gitignored).
+Measured while a 25s generation was in flight: cold load 383ms, second visitor 360ms, store switch
+384ms. Console/page errors: none. No horizontal overflow, no `MODEL_`, no `<…>`, CJK renders.
+`127.0.0.1` renders correctly (the user's blank page was the literal `0.0.0.0` address).
+Some later screenshots (S04/S08/S10, locked card, 402-friendly error) are produced as Stage 2
+checkpoint evidence rather than kept from this pass.
 
 ### 2. "merge base if PR #4 is merged" (referenced as part of an earlier message not visible in this
 session's context after a compaction)
@@ -229,14 +228,15 @@ so the caller no longer adds a second one). Both covered by new tests in `tests/
 
 ### 4. "startup race check"
 
-**Status: DONE** (from Checkpoint 1, carried forward). Gradio's own post-`launch()` self-check
-(`GET .../gradio_api/startup-events`) was found to race the server thread coming up and return a one-time
-503, even on a trivial two-line `gr.Blocks` app with `ssr_mode=False` - confirmed as an environment
-characteristic, not a bug in this app's code (the real HTTP server was already up and serving correctly
-moments later). `app.py`'s `__main__` block now catches exactly that one exception (checked by the string
-"startup-events", nothing else) and falls through to `demo.block_thread()` instead of crashing, so the
-process keeps running exactly as a normal successful `launch()` would. **Retried at most once** - if the
-exception message doesn't mention "startup-events", it is re-raised, not swallowed.
+**Status: DONE, root cause corrected 2026-10-21.** Gradio's post-`launch()` self-check
+`GET .../gradio_api/startup-events` was returning 502 on this machine because the system proxy
+(127.0.0.1:7890) intercepted the localhost request. That endpoint is also what starts Gradio's queue,
+so continuing after the exception (the old workaround) left the server up but the queue permanently
+stopped - the real cause of the `queue: 1/1` freeze, not concurrency alone. `app.py` now adds
+`127.0.0.1,localhost,::1` to `NO_PROXY` before Gradio/httpx read the environment, launches with
+`ssr_mode=False`, and if the self-check still fails retries the endpoint with `trust_env=False`
+instead of merely swallowing the error. Verified by Playwright: page load and store switch stay under
+1s while a 25s generation runs.
 
 ### 5. "then Stage 2"
 

@@ -92,7 +92,25 @@ and shows "开发模式" in the status bar when anything is fake.
 
 ## Known bugs
 
-### TOP PRIORITY: the store tab (and everything else) freezes behind one slow request
+### FIXED: the store tab (and everything else) froze behind one slow request
+
+**Resolved on 2026-10-21.** The real cause was worse than the queue default: the machine's system
+proxy (127.0.0.1:7890) intercepted Gradio's launch self-check `GET /gradio_api/startup-events`, which
+returned 502. `launch()` aborted before that endpoint ran - and that endpoint is what starts Gradio's
+queue. The page therefore loaded with every event showing `queue: 1/1` forever, regardless of
+concurrency. Fixes in `app.py` / `ui/store_tab.py`:
+- add `127.0.0.1,localhost,::1` to `NO_PROXY`/`no_proxy` before Gradio/httpx read the environment;
+- retry `/gradio_api/startup-events` with `trust_env=False` if launch's self-check still fails;
+- `demo.queue(default_concurrency_limit=4)` + one shared `"generation"` pool (limit 4) for slow
+  events, while page load / store switch / publish / chips use `concurrency_limit=None`;
+- render the KB status bar from cache immediately and refresh it in a daemon thread (2s Timer update).
+Verified with Playwright at 1920×1080 while a 25s generation was running: cold load 383ms, second
+visitor load 360ms, store switch 384ms, no console errors, no horizontal overflow, no `MODEL_`/<…>.
+Regression tests: `tests/test_ui_queue.py`.
+
+The original diagnosis (kept for context) follows.
+
+### TOP PRIORITY (historical): the store tab and everything else froze behind one slow request
 
 **Symptom reported by the user:** in a real browser at `http://localhost:7861`, the store tab never
 finishes loading. Every component shows `queue: 1/1 | 131.1s` (the number keeps growing), and the page
@@ -127,17 +145,11 @@ page load or a store switch in the current code.** So the fix is not "stop calli
 load" (already true); it's "stop sharing one global queue slot between fast local UI events and slow
 network-bound generation."
 
-**Fix direction** (not implemented - flagged as the top priority for the next session):
-- Give `.click()` on generate/edit/baseline/compare a `concurrency_limit` high enough that one running
-  generation doesn't block page loads or other users' clicks (e.g. `concurrency_limit=4`, or a separate
-  named queue via `concurrency_id=`), while page-load and store-switch events either get their own
-  higher limit or none at all (`concurrency_limit=None`).
-- Consider calling `demo.queue(default_concurrency_limit=<N>)` explicitly before `.launch()` instead of
-  relying on Gradio's default of 1.
-- Time-box or background `kb_status()`'s first real call so a slow/unreachable ima endpoint can't stall
-  the shared queue (e.g. show "连接中…" immediately, update when the real check returns).
-- Re-verify with Playwright (see above) that a page load / store switch completes in under ~1s with a
-  generation running concurrently in another tab, before calling this fixed.
+**Fix applied:** see the "FIXED" section above - explicit `demo.queue(default_concurrency_limit=4)`,
+one shared `"generation"` pool, `concurrency_limit=None` on page load / store switch / other local
+events, a non-blocking `kb_status()`, and the `NO_PROXY` + startup-events retry that actually gets the
+queue started on machines with a system proxy. Playwright verified 360-420ms for all three paths while
+a generation was running.
 
 ### Secondary / lower priority
 

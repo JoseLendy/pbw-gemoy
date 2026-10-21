@@ -21,6 +21,15 @@ from pathlib import Path
 from uuid import uuid4
 
 os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
+
+# Gradio's launch self-check GETs /gradio_api/startup-events on localhost. With a system proxy
+# (Clash / WinHTTP registry) that request is proxied and can return 502, launch aborts before the
+# startup endpoint runs, and the queue is never started - every event then hangs at "queue: 1/1".
+# Localhost must never go through a proxy: excluded here before Gradio/httpx read the environment.
+for _proxy_var in ("NO_PROXY", "no_proxy"):
+    _hosts = [h.strip() for h in os.environ.get(_proxy_var, "").split(",") if h.strip()]
+    os.environ[_proxy_var] = ",".join(dict.fromkeys([*_hosts, "127.0.0.1", "localhost", "::1"]))
+
 import gradio as gr  # noqa: E402
 
 from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags
@@ -43,26 +52,47 @@ ROOT = Path(__file__).parent
 CSS = (ROOT / "static" / "phone.css").read_text("utf-8")
 KB_NAME = "任德耀新建华为PC知识库"
 
-# ---------------------------------------------------------------- deps + status (cached)
+# ---------------------------------------------------------------- deps + status (cached, never blocking)
 # DEPS is the single shared Deps for the whole app (manual tab + proactive tabs): one catalog, one ima
 # client. Built once in agent.ui_data and imported here, never re-constructed.
-_STATUS_CACHE: dict = {}
+#
+# The status bar renders during page load, so the first real DEPS.status() call must not sit in that
+# request path: a slow/unreachable ima endpoint would hold the page. Render what is cached and refresh
+# in a daemon thread; the timer in build() re-renders once the answer arrives.
+_STATUS_TTL = 600.0
+_STATUS_STATE: dict = {"data": None, "ts": 0.0, "inflight": False}
 _STATUS_LOCK = threading.Lock()
 
 
-def kb_status() -> dict:
+def _placeholder_status() -> dict:
+    return {"kb_name": KB_NAME, "connected": False, "configured": bool(os.getenv("LLM_API_KEY")),
+            "index_status": "checking", "error": None, "_pending": True}
+
+
+def _refresh_status() -> None:
+    try:
+        s = dict(DEPS.status())
+    except Exception as e:  # never crash the UI on a status check
+        s = {"kb_name": KB_NAME, "connected": False, "configured": False, "index_status": "stale",
+             "error": plain_error(e)}
+    s["_ts"] = time.time()
     with _STATUS_LOCK:
-        if _STATUS_CACHE and time.time() - _STATUS_CACHE.get("_ts", 0) < 600:
-            return _STATUS_CACHE
-        try:
-            s = dict(DEPS.status())
-        except Exception as e:  # never crash the UI on a status check
-            s = {"kb_name": KB_NAME, "connected": False, "configured": False, "index_status": "stale",
-                 "error": plain_error(e)}
-        s["_ts"] = time.time()
-        _STATUS_CACHE.clear()
-        _STATUS_CACHE.update(s)
-        return s
+        _STATUS_STATE.update(data=s, ts=s["_ts"], inflight=False)
+
+
+def kb_status() -> dict:
+    """Cached status snapshot; never waits on the network. A stale cache is returned as-is while a
+    background refresh runs, and the very first call returns a "checking" placeholder immediately."""
+    now = time.time()
+    with _STATUS_LOCK:
+        data = _STATUS_STATE["data"]
+        stale = data is None or now - _STATUS_STATE["ts"] >= _STATUS_TTL
+        if stale and not _STATUS_STATE["inflight"]:
+            _STATUS_STATE["inflight"] = True
+            threading.Thread(target=_refresh_status, daemon=True, name="kb-status").start()
+        if data is None:
+            return _placeholder_status()
+        return dict(data)
 
 
 def llm_configured() -> bool:
@@ -71,13 +101,16 @@ def llm_configured() -> bool:
 
 def status_html() -> str:
     s = kb_status()
-    dot = "on" if s.get("connected") else "off"
+    checking = bool(s.get("_pending")) or s.get("index_status") == "checking"
+    dot = "mid" if checking else ("on" if s.get("connected") else "off")
     idx = s.get("index_status") or "stale"
-    idx_label = {"complete": "完整", "partial": "部分", "stale": "可能过期"}.get(idx, idx)
-    idx_dot = {"complete": "on", "partial": "mid"}.get(idx, "off")
+    idx_label = {"complete": "完整", "partial": "部分", "stale": "可能过期",
+                 "checking": "连接中…"}.get(idx, idx)
+    idx_dot = {"complete": "on", "partial": "mid", "checking": "mid"}.get(idx, "off")
+    kb_state = "连接中…" if checking else ("已连接" if s.get("connected") else "未连接")
     parts = [
         f'<span><span class="dot {dot}"></span>知识库：{html.escape(s.get("kb_name") or KB_NAME)}'
-        f'（{"已连接" if s.get("connected") else "未连接"}）</span>',
+        f'（{kb_state}）</span>',
         f'<span><span class="dot {idx_dot}"></span>索引：{idx_label}</span>',
         f'<span>模型：{html.escape(os.getenv("LLM_MODEL", "未设置"))}</span>',
         f'<span>密钥：{"已配置 ✓" if (s.get("configured") or llm_configured()) else "未配置"}</span>',
@@ -86,7 +119,7 @@ def status_html() -> str:
         parts.append('<span class="hw-dev">开发模式：部分模块为模拟数据（' +
                      html.escape("、".join(DEPS.fake_fields)) + "）</span>")
     err = s.get("error")
-    if err and not s.get("connected"):
+    if err and not s.get("connected") and not checking:
         parts.append(f'<span style="color:#b71c1c">{html.escape(str(err))}</span>')
     return '<div class="hw-status">' + "".join(parts) + "</div>"
 
@@ -131,6 +164,11 @@ def rate_check(session_id: str, follow_up: bool = False) -> str | None:
 # ---------------------------------------------------------------- event handlers
 EDIT_BTNS = {"短一点": "短一点", "换卖点": "换卖点", "换个角度": "换个角度"}
 PLATFORM_CHOICES = [PLATFORM_LABELS[p] for p in ("xiaohongshu", "moments", "wechat_article", "poster", "douyin")]
+# Slow (ima + LLM) events share one small pool, so finite model/KB resources stay bounded. Local-only
+# events (store switch, tab select, publish, chips, page load) use concurrency_limit=None instead.
+GEN_CONCURRENCY = int(os.getenv("UI_GENERATION_CONCURRENCY", "4"))
+_GEN_QUEUE = {"concurrency_limit": GEN_CONCURRENCY, "concurrency_id": "generation",
+              "show_progress": "minimal"}
 
 
 def _empty_outputs():
@@ -332,16 +370,24 @@ def build() -> gr.Blocks:
                 gr.Markdown("<small>知识库内容仅用于生成与核验，不提供原文浏览或批量导出。密钥仅存于环境变量。</small>")
 
                 outs = [progress, phone, talk, banner, report, pub, clar_box, r1, r2, r3, session]
-                gen.click(on_generate, [text, session, r1, r2, r3], outs)
-                text.submit(on_generate, [text, session, r1, r2, r3], outs)
-                cont.click(on_generate, [text, session, r1, r2, r3], outs)
-                b_short.click(lambda s: (yield from on_edit("短一点", s)), [session], outs)
-                b_point.click(lambda s: (yield from on_edit("换卖点", s)), [session], outs)
-                b_angle.click(lambda s: (yield from on_edit("换个角度", s)), [session], outs)
-                b_plat.click(on_switch_platform, [plat, session], outs)
-                b_all.click(on_all_platforms, [session], [all_out, session])
-                b_dl.click(on_download, [session], [b_dl])
-        demo.load(lambda: status_html(), None, status)
+                gen.click(on_generate, [text, session, r1, r2, r3], outs, **_GEN_QUEUE)
+                text.submit(on_generate, [text, session, r1, r2, r3], outs, **_GEN_QUEUE)
+                cont.click(on_generate, [text, session, r1, r2, r3], outs, **_GEN_QUEUE)
+                b_short.click(lambda s: (yield from on_edit("短一点", s)), [session], outs, **_GEN_QUEUE)
+                b_point.click(lambda s: (yield from on_edit("换卖点", s)), [session], outs, **_GEN_QUEUE)
+                b_angle.click(lambda s: (yield from on_edit("换个角度", s)), [session], outs, **_GEN_QUEUE)
+                b_plat.click(on_switch_platform, [plat, session], outs, **_GEN_QUEUE)
+                b_all.click(on_all_platforms, [session], [all_out, session], **_GEN_QUEUE)
+                b_dl.click(on_download, [session], [b_dl], concurrency_limit=None, show_progress="hidden")
+        # The status bar must never block or delay page load: render the cache immediately and let the
+        # timer pick up the background check's result a moment later.
+        status_timer = gr.Timer(2.0)
+        demo.load(lambda: status_html(), None, status, concurrency_limit=None, show_progress="hidden")
+        status_timer.tick(lambda: status_html(), None, status, concurrency_limit=None,
+                          show_progress="hidden")
+    # Every event that can take tens of seconds shares one 4-slot pool; pure-local events opt out with
+    # concurrency_limit=None so a running generation can never sit in front of a page load or tab switch.
+    demo.queue(default_concurrency_limit=GEN_CONCURRENCY)
     return demo
 
 
@@ -349,12 +395,21 @@ if __name__ == "__main__":
     port = int(os.getenv("GRADIO_SERVER_PORT", os.getenv("PORT", "7861")))
     demo = build()
     try:
-        demo.launch(server_name="0.0.0.0", server_port=port, show_error=False,
+        demo.launch(server_name="0.0.0.0", server_port=port, show_error=False, ssr_mode=False,
                    css=CSS, allowed_paths=[str(Path(tempfile.gettempdir()) / "hwpc_downloads")])
     except Exception as e:
-        # Gradio's own post-launch self-check (GET .../startup-events) can race the server thread
-        # coming up and 503 once; the server itself is already listening and fine by then.
+        # Gradio's post-launch self-check (GET .../startup-events) can still fail transiently. That
+        # endpoint is also what starts the queue, so retry it directly (trust_env=False ignores the
+        # system proxy); otherwise the page loads but every event sits at "queue: 1/1" forever.
         if "startup-events" not in str(e):
             raise
-        log.warning("Gradio startup self-check raced the server coming up, continuing: %s", e)
+        log.warning("Gradio startup self-check failed, retrying startup events directly: %s", e)
+        try:
+            import httpx
+            resp = httpx.get(f"{demo.local_api_url}startup-events", timeout=10, trust_env=False)
+            if not resp.is_success:
+                log.error("startup-events retry returned HTTP %s; the queue may not be running",
+                          resp.status_code)
+        except Exception as retry_err:  # noqa: BLE001
+            log.error("startup-events retry failed; the queue may not be running: %s", retry_err)
         demo.block_thread()

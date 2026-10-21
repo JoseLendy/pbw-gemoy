@@ -5,6 +5,7 @@ this module only builds Gradio widgets and wires their events.
 from __future__ import annotations
 
 import html
+import os
 import re
 import tempfile
 import time
@@ -25,6 +26,10 @@ from ui.components import (
 STORES = ui_data.list_stores()
 POOL = ui_data.question_pool()
 DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "hwpc_downloads"
+# Shared with app.py's manual tab: one bounded pool for all slow (ima + LLM) events.
+GEN_QUEUE = {"concurrency_limit": int(os.getenv("UI_GENERATION_CONCURRENCY", "4")),
+             "concurrency_id": "generation", "show_progress": "minimal"}
+_LOCAL = {"concurrency_limit": None, "show_progress": "hidden"}
 
 
 class _RecoveryDisplay:
@@ -328,7 +333,7 @@ def build_store_tab(demo: gr.Blocks) -> None:
     gr.Markdown(f"演示日期：{ui_data.today()}")
     store_dd = gr.Dropdown(choices=store_choices(STORES), value=STORES[0]["store_id"],
                            label="演示模式：切换门店账号")
-    card_panel = gr.HTML()
+    card_panel = gr.HTML(elem_id="store-card-panel")
     with gr.Row():
         action_btn = gr.Button("生成", variant="primary")
         switch_btn = gr.Button("换一条")
@@ -368,20 +373,22 @@ def build_store_tab(demo: gr.Blocks) -> None:
             talk, status_box, banner, phone, report, pub, published_note, chip_status]
     full_outs = [*OUTS, session]
 
-    store_dd.change(on_store_change, [store_dd, session], full_outs)
-    switch_btn.click(on_switch_toggle, [session], full_outs)
+    # Local-only events bypass the queue entirely (concurrency_limit=None): a running generation can
+    # never delay opening the app or switching stores.
+    store_dd.change(on_store_change, [store_dd, session], full_outs, **_LOCAL)
+    switch_btn.click(on_switch_toggle, [session], full_outs, **_LOCAL)
     for i, b in enumerate(slot_btns):
-        b.click(lambda s, idx=i: on_select_other(idx, s), [session], full_outs)
-    action_btn.click(on_generate, [session], full_outs)
-    recovery_btn.click(on_show_recovery, [session], full_outs)
-    b_short.click(on_short, [session], full_outs)
-    b_point.click(on_point, [session], full_outs)
-    b_angle.click(on_angle, [session], full_outs)
-    b_price.click(on_price, [session], full_outs)
-    b_pub_btn.click(on_publish, [session], full_outs)
-    b_dl.click(on_download_text, [session], [b_dl])
-    b_img.click(on_save_image, [session], [b_img])
+        b.click(lambda s, idx=i: on_select_other(idx, s), [session], full_outs, **_LOCAL)
+    action_btn.click(on_generate, [session], full_outs, **GEN_QUEUE)
+    recovery_btn.click(on_show_recovery, [session], full_outs, **_LOCAL)
+    b_short.click(on_short, [session], full_outs, **GEN_QUEUE)
+    b_point.click(on_point, [session], full_outs, **GEN_QUEUE)
+    b_angle.click(on_angle, [session], full_outs, **GEN_QUEUE)
+    b_price.click(on_price, [session], full_outs, **GEN_QUEUE)
+    b_pub_btn.click(on_publish, [session], full_outs, **_LOCAL)
+    b_dl.click(on_download_text, [session], [b_dl], **_LOCAL)
+    b_img.click(on_save_image, [session], [b_img], **GEN_QUEUE)
     for chip_id, b in zip(POOL.keys(), chip_buttons):
-        b.click(lambda s, c=chip_id: on_chip(c, s), [session], full_outs)
+        b.click(lambda s, c=chip_id: on_chip(c, s), [session], full_outs, **_LOCAL)
 
-    demo.load(on_initial, [session], full_outs)
+    demo.load(on_initial, [session], full_outs, **_LOCAL)
