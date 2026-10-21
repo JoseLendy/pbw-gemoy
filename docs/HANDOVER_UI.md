@@ -21,7 +21,8 @@ this file is the runbook and the bug list.
   phone previews with each store's segment/scenario/voice/landmark/hook; 8E before→after scores and
   regenerated badges.
 - `ui/hq_tab.py`: Stage 2, 总部端. 14-day posting rate (lowest 3 highlighted), new-release draft review
-  with fact IDs / fields / source titles, 确认发布 (store tab re-fetches and unlocks on return),
+  with reference IDs / field groups / source titles (explicitly marked as an unverified demo
+  checklist), 确认发布 (store tab re-fetches and unlocks on return),
   customer questions, weekly plan with today highlighted, recommendation distribution, 重置演示.
 - `ui/baseline_tab.py`: Stage 3, 对照组. Left `baseline()` always under
   「对照组：未经约束的普通大模型输出」 with 8D hits marked; right our verified `generate()` result.
@@ -54,7 +55,7 @@ if it's missing again. Playwright was installed for browser testing but **not** 
 ## How to test
 
 **Unit/integration tests** (fakes only, no network): `.venv/bin/python -m pytest -q`. Should be green
-(613 passed, 1 skipped at the time of this handover). `tests/test_ui_data.py` and
+(700 passed, 1 skipped after the audit-fix round). `tests/test_ui_data.py` and
 `tests/test_ui_components.py` are the Stage 1 UI tests.
 
 **Browser testing with Playwright** (not yet completed this session - see the first known-bug item
@@ -160,32 +161,28 @@ a generation was running.
 
 ### Secondary / lower priority
 
-- **`kb_snapshot/` is no longer tracked in git** upstream (PR #5, merged into `feat/proactive-recommender`,
-  **not yet merged into `feat/proactive-ui`**). This branch's `kb_snapshot/` is still tracked as of this
-  commit. When you merge `feat/proactive-recommender` again to pick up PR #5, check its updated README
-  section for how to restore the KB mirror on a fresh clone (PR #5's description says it added one;
-  this branch's current `README.md` does not have it yet, precisely because PR #5 isn't merged here).
-- **Playwright visual verification (1920×1080, screenshots, console-error check) was not completed**
-  this session - it was interrupted mid-script by the handover request. `eval/ui_screens/` (gitignored)
-  was created but is empty. Do this early; it's the fastest way to catch anything that "looks wrong on
-  camera" (overflow, cut-off CJK text, a stray model_id, etc.) before Stage 2 adds more screens.
+- **`kb_snapshot/` is untracked** after the PR #5 merge. It is restored locally from the backup and
+  ignored; a fresh clone must obtain the mirror separately (see README).
+- **Playwright visual verification is DONE** at 1920×1080 (initial, store switch, compare, HQ,
+  baseline, result controls). Screenshots are in `eval/ui_screens/`. The compare/baseline screenshots
+  were produced by the deterministic 7862 fake-generation probe because the live key returns 402;
+  label them as layout evidence, not real-LLM output.
 - The LLM key configured in this worktree's `.env` returned `402 Insufficient Balance` on every real
   generate attempt tested this session. That's an account/billing issue, not a code bug - `plain_error`
   now shows a friendly message for it (「模型账户额度不足，请联系管理员充值后重试。」) instead of the
   raw provider JSON, but you still need a funded key to actually see a generated post on screen.
 - `pip install -r requirements.txt` resolves `gradio>=4.44` to **6.30.0** as of this session (a major
-  jump from what the project was originally built against). A one-time Gradio self-check race on
-  `launch()` (`GET .../gradio_api/startup-events` returning a transient 503 even though the server is
-  already up) was observed and worked around in `app.py`'s `__main__` (retried at most once, only for
-  that specific error). If Gradio's queue defaults or API shift again in a future minor/major version,
-  re-check that workaround and the concurrency fix above against whatever version is actually installed.
-- `agent/ui_data.prepared_post` / `last_real_run` return the **raw logged dict** from `agent.runs`
-  (`{"status": ..., "result": {...}, "timestamp": ...}`), not a live `RunResult`. `ui/components.py`'s
-  `prepared_post_html` / `prepared_pub_text` / `prepared_payload_view` render straight from that dict
-  (title/intro/body/cta, images by media id) rather than reconstructing live `Ledger`/`Post` objects, so
-  these two paths don't get the full interactive phone preview (fact-popover, platform skin) or the
-  four-section report that a freshly generated `RunResult` gets - just a simplified card. Known,
-  intentional scope cut for Stage 1, not a bug, but worth knowing before building on it further.
+  jump from what the project was originally built against). The launch self-check can return 502 when
+  the system proxy intercepts `127.0.0.1`; `app.py` now adds NO_PROXY, retries the endpoint directly
+  with `trust_env=False`, and starts with `ssr_mode=False`. If Gradio's queue defaults or API shift in
+  a future version, re-check that workaround and the concurrency fix against the installed version.
+- `agent/ui_data.prepared_post` / `last_real_run` still return the **raw logged dict** from
+  `agent.runs`. `run_result_from_payload()` now rehydrates a stored `RunResult` into the full phone,
+  talk card and four-section report (verified over every RunResult record in `runs/2026-10-23`).
+  Non-RunResult records (`NeedsReview`, `NeedsHuman`, baseline) fall back to the message/failing
+  renderer; a malformed record shows an explicit note rather than an empty phone. Prepared images are
+  placeholders on the first page-load render (`allow_fetch=False`) to keep the local event off the
+  network; the next live render can load them. Async image hydration is still a follow-up.
 
 ## Branch / commit
 

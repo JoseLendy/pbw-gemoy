@@ -41,8 +41,8 @@ def posting_html() -> str:
                     f'<td style="{_CELL};width:45%">{bar}</td>'
                     f'<td style="{_CELL};text-align:right">{pct:.1f}%{flag}</td></tr>')
     window = data["window"]
-    return (f'<div style="font-size:13px;color:#666;margin-bottom:6px">最近 {data["days"]} 天'
-            f'（{_esc(window[0])} 至 {_esc(window[1])}）· 发帖天数 / 应发天数</div>'
+    return (f'<div style="font-size:13px;color:#666;margin-bottom:6px">最近 {data["days"]} 个记录日'
+            f'（{_esc(window[0])} 至 {_esc(window[1])}，截至最新记录）· 发帖天数 / 应发天数</div>'
             '<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff">'
             f'<thead><tr><th style="{_HEAD}">门店</th><th style="{_HEAD}">已发</th>'
             f'<th style="{_HEAD}">完成度</th><th style="{_HEAD};text-align:right">发帖率</th></tr></thead>'
@@ -58,12 +58,12 @@ def release_html() -> str:
         status = "已确认发布" if d["verified"] else "待总部确认"
         color = "#2e7d32" if d["verified"] else "#b26a00"
         refs = "".join(
-            f'<tr><td style="{_CELL}">{_esc(r["fact_id"])}</td><td style="{_CELL}">{_esc(r["fields"])}</td>'
+            f'<tr><td style="{_CELL}">{_esc(r["ref_id"])}</td><td style="{_CELL}">{_esc(r["fields"])}</td>'
             f'<td style="{_CELL}">{_esc(r["source_title"])}<div style="font-size:11px;color:#888">'
             f'{_esc(r["source_path"])}</div></td></tr>' for r in d["refs"])
-        note = ("总部已确认：字段与资料来源已核验，门店端可以生成。"
+        note = ("已解锁门店生成（演示状态）；具体数值仍需按知识库事实卡核验。"
                 if d["verified"] else
-                "审核清单仅展示字段与资料来源；具体数值须由总部对照知识库核验后，门店才可生成。")
+                "演示审核清单：以下只是字段与来源参考，不是已核验的事实卡数值。")
         note_style = ("color:#1b5e20;background:#eef7ee" if d["verified"]
                       else "color:#8a4b00;background:#fff8e1")
         blocks.append(
@@ -72,12 +72,12 @@ def release_html() -> str:
             f'<b style="font-size:15px">{_esc(d["display_name"])}</b>'
             f'<span style="font-size:12px;color:{color};background:#f5f5f5;border-radius:10px;padding:2px 8px">'
             f'{_esc(status)}</span></div>'
-            f'<div style="font-size:12px;color:#666;margin:4px 0 8px">上市日期：{_esc(d["launch_date"])}'
-            f' · 演示：总部确认一次，全部门店解锁</div>'
+            f'<div style="font-size:12px;color:#666;margin:4px 0 8px">演示上市日期：{_esc(d["launch_date"])}'
+            f' · 总部确认一次，全部门店解锁</div>'
             f'<div style="font-size:12px;{note_style};border-radius:6px;padding:6px 8px;margin-bottom:8px">'
             f'{_esc(note)}</div>'
             '<table style="width:100%;border-collapse:collapse;font-size:12px">'
-            f'<thead><tr><th style="{_HEAD}">事实</th><th style="{_HEAD}">字段</th>'
+            f'<thead><tr><th style="{_HEAD}">参考</th><th style="{_HEAD}">字段组</th>'
             f'<th style="{_HEAD}">来源</th></tr></thead><tbody>{refs}</tbody></table></div>')
     return "".join(blocks)
 
@@ -133,18 +133,20 @@ def distribution_html() -> str:
 def on_verify():
     drafts = [d for d in ui_data.new_release_drafts() if not d["verified"]]
     if not drafts:
-        return release_html(), gr.update(visible=False), _banner("没有待确认的新品。", "note"), distribution_html()
+        return (release_html(), gr.update(visible=False), _banner("没有待确认的新品。", "note"), "",
+                distribution_html())
     model = drafts[0]
     ui_data.verify_new_product(model["model_id"])
-    msg = _banner(f"已确认发布：{model['display_name']}。全部门店的新品款已解锁，切回门店端即可看到。")
-    return release_html(), gr.update(visible=has_draft()), msg, distribution_html()
+    msg = _banner(f"已确认发布（演示解锁）：{model['display_name']}。全部门店的新品款已解锁；"
+                  "本演示未对具体数值做事实核验，切回门店端即可看到。")
+    return release_html(), gr.update(visible=has_draft()), msg, "", distribution_html()
 
 
 def on_reset():
     ui_data.reset()
     msg = _banner("已重置演示数据：新品恢复待确认，门店推荐重置；已发布标记与顾客提问将在回到门店端时清空。"
                   "（已准备的口播稿不会被删除。）", "note")
-    return (posting_html(), release_html(), gr.update(visible=has_draft()), msg, questions_html(),
+    return (posting_html(), release_html(), gr.update(visible=has_draft()), msg, "", questions_html(),
             plan_html(), distribution_html())
 
 
@@ -170,7 +172,8 @@ def build_hq_tab() -> None:
         with gr.Row():
             reset = gr.Button("重置演示")
         reset_msg = gr.HTML()
-        verify.click(on_verify, None, [release, verify, verify_msg, distribution],
+        verify.click(on_verify, None, [release, verify, verify_msg, reset_msg, distribution],
                      concurrency_limit=None, show_progress="hidden")
-        reset.click(on_reset, None, [posting, release, verify, reset_msg, questions, plan, distribution],
+        reset.click(on_reset, None,
+                    [posting, release, verify, reset_msg, verify_msg, questions, plan, distribution],
                     concurrency_limit=None, show_progress="hidden")

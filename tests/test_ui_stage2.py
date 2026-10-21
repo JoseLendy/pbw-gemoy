@@ -73,13 +73,13 @@ def test_recommendation_distribution_covers_every_store():
 def test_new_release_verify_unlocks_stores_and_reset_reverts():
     draft = ui_data.new_release_drafts()[0]
     assert draft["status"] == "draft" and draft["refs"]
-    assert all(r["fact_id"].startswith("F") and r["source_title"] for r in draft["refs"])
+    assert all(r["ref_id"].startswith("R") and r["source_title"] for r in draft["refs"])
     before = hq_tab.release_html()
     assert "待总部确认" in before and draft["display_name"] in before
     assert "产品事实.md" in before or "卖点与限制.md" in before
 
-    _, _, msg, distribution = hq_tab.on_verify()
-    assert "已确认发布" in msg
+    _, _, msg, reset_msg, distribution = hq_tab.on_verify()
+    assert "已确认发布" in msg and reset_msg == ""
     assert "已确认发布" in hq_tab.release_html()
     assert draft["model_id"] not in hq_tab.release_html()   # never show an internal model id
     assert draft["display_name"] in distribution

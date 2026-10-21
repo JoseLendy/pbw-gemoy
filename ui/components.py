@@ -133,13 +133,14 @@ def placeholder_png(label: str, w: int = 600, h: int = 450) -> bytes:
     return svg.encode("utf-8")
 
 
-def image_data_uri(media_id: str, title: str, deps: Any = None) -> str:
+def image_data_uri(media_id: str, title: str, deps: Any = None, allow_fetch: bool = True) -> str:
     """deps is any object with an optional .fetch_image_bytes(media_id); never raises, never shows the
-    media id - falls back to a labelled placeholder (fake mode, or a fetch failure)."""
+    media id - falls back to a labelled placeholder (fake mode, or a fetch failure). allow_fetch=False
+    is used by page-load paths so a prepared post can never block on a network image fetch."""
     if media_id in _IMG_CACHE:
         return _IMG_CACHE[media_id]
     uri = ""
-    fetch = getattr(deps, "fetch_image_bytes", None)
+    fetch = getattr(deps, "fetch_image_bytes", None) if allow_fetch else None
     if fetch is not None:
         try:
             data = fetch(media_id)
@@ -148,7 +149,9 @@ def image_data_uri(media_id: str, title: str, deps: Any = None) -> str:
         except Exception:  # noqa: BLE001 - image fetch must never break the render
             uri = ""
     if not uri:
-        uri = "data:image/svg+xml;base64," + base64.b64encode(placeholder_png(title)).decode()
+        # Never cache a placeholder: a later live render with deps must still be able to load the
+        # real image (the page-load path intentionally passes allow_fetch=False).
+        return "data:image/svg+xml;base64," + base64.b64encode(placeholder_png(title)).decode()
     _IMG_CACHE[media_id] = uri
     return uri
 
@@ -178,14 +181,15 @@ def _sentence_html(text: str, r: RunResult, flagged: set[str]) -> str:
     return "".join(out)
 
 
-def _img_tag(im, r: RunResult, deps: Any = None) -> str:
+def _img_tag(im, r: RunResult, deps: Any = None, allow_fetch: bool = True) -> str:
     it = next((p for p in r.plan.items if p.image.media_id == im.media_id), None)
     title = it.image.title if it else "图片"
     cap = html.escape(im.caption or (it.caption if it else ""))
-    return f'<img src="{image_data_uri(im.media_id, title, deps)}" alt="{html.escape(title)}"><div class="cap">{cap}</div>'
+    return (f'<img src="{image_data_uri(im.media_id, title, deps, allow_fetch)}" '
+            f'alt="{html.escape(title)}"><div class="cap">{cap}</div>')
 
 
-def phone_html(r: RunResult, deps: Any = None) -> str:
+def phone_html(r: RunResult, deps: Any = None, allow_fetch: bool = True) -> str:
     p, post = r.post.platform, r.post
     flagged = _flagged_spans(r)
     S = lambda t: _sentence_html(t, r, flagged)  # noqa: E731
@@ -199,9 +203,9 @@ def phone_html(r: RunResult, deps: Any = None) -> str:
             body_parts.append(f'<div class="p">{S(b)}</div>')
             for im in imgs:
                 if im.position == f"第{k + 1}段后":
-                    body_parts.append(_img_tag(im, r, deps))
-        top = "".join(_img_tag(im, r, deps) for im in imgs if im.position == "标题下方")
-        rest = "".join(_img_tag(im, r, deps) for im in imgs if im.position not in ("标题下方",) and not re.match(r"第\d+段后", im.position))
+                    body_parts.append(_img_tag(im, r, deps, allow_fetch))
+        top = "".join(_img_tag(im, r, deps, allow_fetch) for im in imgs if im.position == "标题下方")
+        rest = "".join(_img_tag(im, r, deps, allow_fetch) for im in imgs if im.position not in ("标题下方",) and not re.match(r"第\d+段后", im.position))
         screen = (f'<div class="topbar"><span>‹</span><span>公众号</span><span>···</span></div>'
                   f'<h2>{title}</h2><div class="meta">华为门店 · 刚刚</div><div class="body">{top}'
                   f'<div class="p">{S(post.intro)}</div>{"".join(body_parts)}{rest}'
@@ -211,22 +215,22 @@ def phone_html(r: RunResult, deps: Any = None) -> str:
         n = "one" if len(imgs) == 1 else ""
         screen = (f'<div class="topbar"><span>‹</span><span>朋友圈</span><span>📷</span></div>'
                   f'<div class="post"><div class="avatar"></div><div style="flex:1"><div class="name">华为授权体验店</div>'
-                  f'{paras}<div class="grid {n}">{"".join(_img_tag(im, r, deps) for im in imgs)}</div>'
+                  f'{paras}<div class="grid {n}">{"".join(_img_tag(im, r, deps, allow_fetch) for im in imgs)}</div>'
                   f'<div class="cta">{S(post.cta)}</div><div class="time">刚刚</div></div></div>')
         skin = "skin-moments"
     elif p == "poster":
         pts = "".join(f'<div class="pt">{S(b)}</div>' for b in post.body)
-        screen = (f'{"".join(_img_tag(im, r, deps) for im in imgs[:1])}<h2>{title}</h2><div class="sub">{S(post.intro)}</div>'
+        screen = (f'{"".join(_img_tag(im, r, deps, allow_fetch) for im in imgs[:1])}<h2>{title}</h2><div class="sub">{S(post.intro)}</div>'
                   f'{pts}<div class="cta">{S(post.cta)}</div>')
         skin = "skin-poster"
     elif p == "douyin":
-        screen = (f'<div class="gallery">{"".join(_img_tag(im, r, deps) for im in imgs)}</div>'
+        screen = (f'<div class="gallery">{"".join(_img_tag(im, r, deps, allow_fetch) for im in imgs)}</div>'
                   f'<div class="body"><b>{title}</b><div class="p">{S(post.intro)}</div>{paras}'
                   f'<div class="cta">{S(post.cta)}</div><div class="tags">{tags}</div></div>')
         skin = "skin-douyin"
     else:  # xiaohongshu
         screen = (f'<div class="author"><div class="avatar"></div><span>华为门店小助手</span></div>'
-                  f'<div class="gallery">{"".join(_img_tag(im, r, deps) for im in imgs)}</div>'
+                  f'<div class="gallery">{"".join(_img_tag(im, r, deps, allow_fetch) for im in imgs)}</div>'
                   f'<h2>{title}</h2><div class="body"><div class="p">{S(post.intro)}</div>{paras}'
                   f'<div class="cta">{S(post.cta)}</div><div class="tags">{tags}</div></div>')
         skin = "skin-xhs"
@@ -278,9 +282,11 @@ def prepared_payload_view(payload: dict) -> dict:
         draft = result_dict.get("draft") or {}
         return {"post": draft.get("post") or {}, "is_review": True,
                "failing": result_dict.get("failing") or [],
-               "message": result_dict.get("message") or "需人工确认", "fallback": None}
+               "message": result_dict.get("message") or "需人工确认", "fallback": None,
+               "conflicts": result_dict.get("conflicts") or []}
     return {"post": result_dict.get("post") or {}, "is_review": False, "failing": [],
-           "message": "", "fallback": result_dict.get("fallback")}
+           "message": result_dict.get("message") or "", "fallback": result_dict.get("fallback"),
+           "conflicts": result_dict.get("conflicts") or []}
 
 
 def _post_dict_html(post: dict, deps: Any = None) -> str:
@@ -300,6 +306,15 @@ def prepared_post_html(payload: dict, deps: Any = None) -> str:
     """「今日已为你准备好」: render a prepared-post record as-is (it genuinely is today's content, so
     no "not a fresh run" disclaimer - that's only for last_real_run_html's recovery case below)."""
     v = prepared_payload_view(payload)
+    if not v["post"]:
+        if v["message"]:
+            out = stop_html(v["message"])
+            if v["conflicts"]:
+                out += ('<div class="hw-banner warn"><ul>'
+                        + "".join(f"<li>{html.escape(str(c))}</li>" for c in v["conflicts"])
+                        + "</ul></div>")
+            return out
+        return '<div class="hw-banner note">该记录没有可展示的正文。</div>'
     out = _post_dict_html(v["post"], deps)
     if v["is_review"]:
         li = "".join(f"<li>{html.escape(f.get('reason', ''))}" +
@@ -326,9 +341,13 @@ def prepared_pub_text(payload: dict) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
+def last_real_run_notice_html(payload: dict) -> str:
+    ts = payload.get("timestamp", "")
+    return (f'<div class="hw-banner warn">⏱ 以下为最近一次真实运行结果（非本次生成）'
+            f'· 时间：{html.escape(ts)}</div>')
+
+
 def last_real_run_html(payload: dict) -> str:
     """Fallback panel for ui_data.last_real_run(): never presented as a fresh run - the label and the
     original timestamp are always shown together, on top of the same dict rendering as a prepared post."""
-    ts = payload.get("timestamp", "")
-    return (f'<div class="hw-banner warn">⏱ 以下为最近一次真实运行结果（非本次生成）· 时间：{html.escape(ts)}</div>'
-           + prepared_post_html(payload))
+    return last_real_run_notice_html(payload) + prepared_post_html(payload)

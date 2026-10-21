@@ -23,6 +23,7 @@ not a live RunResult - see ui.components.prepared_post_html for why and how it's
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import importlib
 import logging
@@ -40,7 +41,11 @@ from agent.recommend.store_data import (
     product_card as _product_card, reset_demo_state, set_fact_card_status,
 )
 from agent.runs import latest_run
-from agent.schemas import RecommendationCard, StaffContext
+from agent.schemas import (
+    CheckIssue, CheckReport, Conflict, Fact, ImagePlan, ImageRef, Ledger, Model, PlannedImage, Post,
+    PostImage, RecommendationCard, RunResult, ScenarioAnalysis, SellingPoint, SourceRecord, StaffContext,
+    Strategy, Task,
+)
 
 log = logging.getLogger("agent.ui_data")
 
@@ -175,6 +180,97 @@ def last_real_run(card_id: str) -> Optional[dict]:
     return latest_run(card_id)
 
 
+def run_result_from_payload(payload: Optional[dict]) -> Optional[RunResult]:
+    """Rehydrate a stored `RunResult` record (agent.runs payload) for the UI's read-only prepared /
+    recovery screens. Returns None for any other status or a malformed record instead of raising."""
+    if not isinstance(payload, dict) or payload.get("status") not in (None, "RunResult"):
+        return None
+    d = payload.get("result") or {}
+    try:
+        keep = lambda cls, value: {k: v for k, v in (value or {}).items()
+                                   if k in {f.name for f in dataclasses.fields(cls)}}  # noqa: E731
+        task = Task(**keep(Task, d.get("task")))
+        model = Model(**keep(Model, d.get("model")))
+        analysis = ScenarioAnalysis(**keep(ScenarioAnalysis, (d.get("strategy") or {}).get("analysis")))
+        strategy_d = d.get("strategy") or {}
+        strategy = Strategy(
+            analysis=analysis, angle=strategy_d.get("angle") or "",
+            selling_points=[SellingPoint(**keep(SellingPoint, x)) for x in strategy_d.get("selling_points") or []],
+            dropped_categories=dict(strategy_d.get("dropped_categories") or {}),
+            talk_card=list(strategy_d.get("talk_card") or []),
+            cta_type=strategy_d.get("cta_type") or "",
+            pending=list(strategy_d.get("pending") or []),
+        )
+        ledger_d = d.get("ledger") or {}
+        ledger = Ledger(
+            model_id=ledger_d.get("model_id") or model.model_id,
+            facts=[Fact(**keep(Fact, x)) for x in ledger_d.get("facts") or []],
+            conflicts=[Conflict(**keep(Conflict, x)) for x in ledger_d.get("conflicts") or []],
+            dropped=list(ledger_d.get("dropped") or []),
+            entities=list(ledger_d.get("entities") or []),
+            boundaries=list(ledger_d.get("boundaries") or []),
+        )
+        plan_d = d.get("plan") or {}
+        plan = ImagePlan(
+            platform=plan_d.get("platform") or "",
+            items=[PlannedImage(image=ImageRef(**keep(ImageRef, (x or {}).get("image"))),
+                                position=(x or {}).get("position") or "",
+                                caption=(x or {}).get("caption") or "")
+                   for x in plan_d.get("items") or []],
+            shortage=bool(plan_d.get("shortage")), note=plan_d.get("note") or "",
+        )
+        report_d = d.get("report") or {}
+        report = CheckReport([CheckIssue(**keep(CheckIssue, x)) for x in report_d.get("issues") or []])
+        post_d = d.get("post") or {}
+        post = Post(platform=post_d.get("platform") or "", title=post_d.get("title") or "",
+                    intro=post_d.get("intro") or "", body=list(post_d.get("body") or []),
+                    cta=post_d.get("cta") or "", tags=list(post_d.get("tags") or []),
+                    selling_points=list(post_d.get("selling_points") or []),
+                    images=[PostImage(**keep(PostImage, x)) for x in post_d.get("images") or []])
+        sources = [SourceRecord(**keep(SourceRecord, x)) for x in d.get("sources") or []]
+        return RunResult(task=task, model=model, strategy=strategy, ledger=ledger, plan=plan, post=post,
+                         report=report, pending=list(d.get("pending") or []), sources=sources,
+                         timings=dict(d.get("timings") or {}), loops=int(d.get("loops") or 0),
+                         fallback=d.get("fallback"))
+    except Exception as e:  # noqa: BLE001 - a stored record must never crash a page
+        log.warning("run_result_from_payload failed: %s", e)
+        return None
+
+
+_HOOK_LABELS: Optional[dict[str, str]] = None
+
+
+def hook_label(hook_id: Optional[str]) -> Optional[str]:
+    """Human label for angles.json's hook id (used after 8E changes a card's hook)."""
+    global _HOOK_LABELS
+    if not hook_id:
+        return None
+    if _HOOK_LABELS is None:
+        try:
+            _HOOK_LABELS = {h["id"]: h["label"] for h in load_json(INPUTS / "angles.json")["hooks"]}
+        except Exception:  # noqa: BLE001
+            _HOOK_LABELS = {}
+    return _HOOK_LABELS.get(hook_id) or hook_id
+
+
+def model_display_name(model_id: Optional[str]) -> Optional[str]:
+    if not model_id:
+        return None
+    try:
+        return load_store_data().model(model_id)["display_name"]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def similarity_threshold() -> float:
+    """8E threshold, exposed so the compare tab never hardcodes a stale value."""
+    try:
+        from agent.style.similarity import similarity_threshold as _threshold
+        return _threshold()
+    except Exception:  # noqa: BLE001
+        return 0.55
+
+
 # ---------------------------------------------------------------- HQ panels (offline, local files only)
 def publish_stats(days: int = 14) -> dict:
     """Posting rate per store over the last `days` dates in publish_log.csv (local fixture)."""
@@ -258,7 +354,7 @@ def new_release_drafts() -> list[dict]:
             if not fields or not source or (fields, source) in seen:
                 continue
             seen.add((fields, source))
-            refs.append({"fact_id": f"F{len(refs) + 1}", "fields": fields,
+            refs.append({"ref_id": f"R{len(refs) + 1}", "fields": fields,
                          "source_title": source.rsplit("/", 1)[-1], "source_path": source})
         status = m.get("fact_card_status") or "draft"
         out.append({"model_id": m["model_id"], "display_name": m["display_name"],
@@ -311,6 +407,7 @@ __all__ = [
     "DEPS", "ACTIVE_PATHS", "today", "prepared_post", "clear_prepared", "list_stores", "get_cards",
     "default_card", "product_card", "fact_card_overrides", "question_pool", "generate", "baseline",
     "edit", "compare", "verify_new_product", "reset", "reset_token", "last_real_run",
+    "run_result_from_payload", "hook_label", "model_display_name", "similarity_threshold",
     "publish_stats", "question_stats", "weekly_plan", "recommendation_distribution",
     "new_release_drafts", "compare_products", "plain_error",
 ]

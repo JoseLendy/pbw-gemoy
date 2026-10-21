@@ -52,8 +52,9 @@ later at the user's explicit request (see "Later instructions" below), which is 
 surface (plus `list_stores`, `question_pool`, `plain_error`, and the offline HQ helpers added in Stage 2:
 `product_card`, `publish_stats`, `question_stats`, `weekly_plan`, `recommendation_distribution`,
 `new_release_drafts`, `compare_products`, `fact_card_overrides`, `reset_token`).
-`store_tab.py`, `compare_tab.py`, `hq_tab.py` and `baseline_tab.py` are built; only `binding_tab.py`
-(Stage 4, optional) is **PENDING**. `NeedsReview`/`prepared_post`/`clear_prepared` were originally built
+`store_tab.py`, `compare_tab.py`, `hq_tab.py` and `baseline_tab.py` are built. All of Stage 4
+(staff picker, `binding_tab.py`, 发布效果) is **PENDING** and optional. `NeedsReview`/`prepared_post`/
+`clear_prepared` were originally built
 defensively (duck-typed / "not merged yet") exactly as instructed, then **updated to the real Phase 5
 contract** once PR #4 merged - see "Later instructions" below; the detection pattern itself (log which
 path is active, degrade gracefully if a hook goes missing again) was kept.
@@ -82,15 +83,23 @@ The UI's "today" comes from env DEMO_TODAY (default 2026-10-23), never the syste
 
 === CHECKPOINT 1: commit, push feat/proactive-ui, tell me how to start it, and STOP until I say "continue". ===
 
-**Status: DONE, with two deviations noted to the user and not objected to:**
-- The "next_card" note text was corrected to match the *real* Phase 5 contract once it merged:
-  「今日一条未通过核验，已换成下一条推荐」(+ the actual slot), not the placeholder wording above written
-  before the real type existed; "trimmed" shows 「已删去未通过核验的句子」 alongside the post, per
-  `docs/UI_BACKEND_CONTRACT.md`, in addition to appearing in 四、核验结果.
-- 「保存图片」saves the post's first image only (one at a time), never a bulk zip, per CLAUDE.md rule 2 /
-  WORKFLOW v4 rule 11. This was a judgment call, flagged in the Checkpoint 1 report, not objected to.
-- Checkpoint 1 was reported, committed (`5b8c2b7`) and pushed. The user then asked for browser
-  verification before continuing - see "Later instructions".
+**Status: DONE (after the ErrorReport1792578570 fix round), with corrections:**
+- `next_card` now renders the delivered card's slot/display/platform/reasons (live, prepared and
+  compare views); the note uses the real contract wording and actual slot.
+- `trimmed` follows `docs/UI_BACKEND_CONTRACT.md`: the note appears alongside the post; the formatter
+  does not add a separate line in 四、核验结果. The brief's "only in 四" wording is superseded.
+- Copy / publish / downloads / quick edits are gated on a publishable, passed `RunResult`; locked,
+  `NeedsReview`, `NeedsHuman` and recovery records cannot be published.
+- Prepared/recovery `RunResult` records are rehydrated into the phone + four-section view (images are
+  placeholders on the first page-load render to avoid a network fetch; a later live render can fill
+  them).
+- The default demo person is a `StaffContext(role="staff")`, so 公众号/小红书 cards show
+  「由店长发布」 and hide generation. The optional Stage 4 staff picker can replace it.
+- 「保存图片」saves the first image only (never a bulk zip), per CLAUDE.md rule 2 / WORKFLOW v4 rule 11.
+- 「加上立减500」 intentionally demonstrates the 8B price-traceability block (the brief's “show the
+  price block” wording is superseded by `PROACTIVE_AGENT_PLAN.md` §4.3 and `FREEZE_CHECKLIST.md`).
+- Checkpoint 1 was reported, committed (`5b8c2b7`) and pushed; later browser verification superseded
+  the earlier screenshots.
 
 #### Stage 2 — 三店对比 + 总部端
 
@@ -109,11 +118,13 @@ The UI's "today" comes from env DEMO_TODAY (default 2026-10-23), never the syste
 
 **Status: DONE (2026-10-21).** `ui/compare_tab.py` (fixed S01/S04/S08/S02, product + platform,
 4 side-by-side phones, per-store meta, 8E before→after table, regenerated badge) and `ui/hq_tab.py`
-(14-day posting rate with lowest 3 highlighted, new-release review panel with fact IDs / field groups /
-source titles, 确认发布 → store cards re-fetch on tab select, customer questions, weekly plan with today
-highlighted, recommendation distribution, 重置演示 clearing backend + store-tab session while keeping
-prepared posts). `agent/ui_data.py` gained the offline HQ/product-card adapter functions. Screenshots:
-`eval/ui_screens/12-compare-result.png`, `13-hq-initial.png`, `14-hq-verified.png`,
+(14-day posting rate with lowest 3 highlighted, new-release review panel with reference IDs / field
+groups / source titles - labelled as an unverified demo checklist, because no real fact-card fixture
+exists; 确认发布 → unlock + store cards re-fetch on tab select, customer questions, weekly plan with
+today highlighted, recommendation distribution, 重置演示 clearing backend + store-tab session while
+keeping prepared posts). `agent/ui_data.py` gained the offline HQ/product-card adapter functions.
+Screenshots are layout probes from the deterministic 7862 fake-generation instance (the live key
+returns 402): `eval/ui_screens/12-compare-result.png`, `13-hq-initial.png`, `14-hq-verified.png`,
 `15-store-new-release-unlocked.png`, `16-store-after-reset.png`.
 
 #### Stage 3 — 对照组 tab
@@ -122,8 +133,10 @@ prepared posts). `agent/ui_data.py` gained the offline HQ/product-card adapter f
 
 **Status: DONE (2026-10-21).** `ui/baseline_tab.py`: pick a store's 今日一条, left renders the
 `BaselineResult` with the exact 「对照组：未经约束的普通大模型输出」 title and 8D hit spans marked;
-right renders our `generate()` result with the phone preview and 四、核验结果 fold. Both run on the
-same card/model/platform. Screenshot: `eval/ui_screens/17-baseline.png`.
+right renders our `generate()` result with the phone preview and 四、核验结果 fold. Both start from
+the same card/model/platform; if our run falls back to the next card, the right meta says so and names
+the delivered product instead of claiming same-card. Screenshot: `eval/ui_screens/17-baseline.png`
+(deterministic probe, not a real LLM run).
 
 #### Stage 4 — optional, only if time allows (cut in this order if short: engagement → binding → staff picker)
 
@@ -161,7 +174,7 @@ longer "optional" (Phase 5 merged, they're real `agent.runs` functions) but the 
 adapter degrades to None/0 if either hook ever goes missing again. The NeedsReview stand-in was replaced
 by the real `agent.schemas.NeedsReview` once it merged. "reset clears UI session state" is tested at the
 pure-function level (`ui.components.fresh_session()`), and now also through the real 「重置演示」 flow
-(`test_store_tab_clears_its_session_after_hq_reset`). Full suite: **682 passed, 1 skipped**
+(`test_store_tab_clears_its_session_after_hq_reset`). Full suite: **700 passed, 1 skipped**
 (`tests/test_ui_queue.py` covers the queue/proxy/status regressions; `tests/test_ui_stage2.py` covers
 the Stage 2/3 adapter + rendering and the HQ verify/reset flow).
 
@@ -252,7 +265,8 @@ instead of merely swallowing the error. Verified by Playwright: page load and st
 
 ### 5. "then Stage 2"
 
-**Status: PENDING.** Superseded by the wrap-up/handover request before Stage 2 was started.
+**Status: DONE (2026-10-21), superseding the earlier handover deferral.** Both 三店对比 and 总部端 are
+implemented and exercised; see the Stage 2 status above.
 
 ### 6. Wrap-up / handover request (this session's last instruction)
 
