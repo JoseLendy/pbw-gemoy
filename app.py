@@ -35,7 +35,7 @@ import gradio as gr  # noqa: E402
 from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags
 from agent.pipeline import edit as pipeline_edit, run as pipeline_run, run_all_platforms
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult
-from agent.ui_data import DEPS, plain_error, today as demo_today
+from agent.ui_data import DEPS, plain_error, reset_token, today as demo_today
 from ui import baseline_tab, compare_tab, hq_tab, store_tab, theme
 from ui.components import banner_html, phone_html, placeholder_png, stop_html, talk_card_html  # noqa: F401
 
@@ -333,6 +333,17 @@ EXAMPLES = [
 ]
 
 
+def on_manual_tab(session: dict, token: int, all_out: str):
+    """HQ 重置演示 also clears the pre-existing manual-flow session when the user returns here."""
+    now = reset_token()
+    if token == now:
+        return (*[gr.update()] * 10, session, gr.update(), token)
+    fresh = {"id": uuid4().hex}
+    hidden = gr.update(visible=False, choices=[], value=None)
+    return ("", "", "", "", "", "", gr.update(visible=False), hidden, hidden, hidden,
+            fresh, "", now)
+
+
 # ---------------------------------------------------------------- UI
 def build() -> gr.Blocks:
     with gr.Blocks(title="华为 PC 图文软文 Agent") as demo:
@@ -344,8 +355,9 @@ def build() -> gr.Blocks:
             compare_tab.build_compare_tab()
             hq_tab.build_hq_tab()
             baseline_tab.build_baseline_tab()
-            with gr.Tab("手动输入"):
+            with gr.Tab("手动输入") as manual_tab_ui:
                 session = gr.State(lambda: {"id": uuid4().hex})
+                manual_reset = gr.State(reset_token())
                 gr.Markdown("输入一句顾客描述，生成经知识库核验的平台软文。")
                 with gr.Row():
                     text = gr.Textbox(label="顾客描述", placeholder=EXAMPLES[0], lines=2, scale=5)
@@ -389,6 +401,11 @@ def build() -> gr.Blocks:
                 b_plat.click(on_switch_platform, [plat, session], outs, **_GEN_QUEUE)
                 b_all.click(on_all_platforms, [session], [all_out, session], **_GEN_QUEUE)
                 b_dl.click(on_download, [session], [b_dl], concurrency_limit=None, show_progress="hidden")
+                manual_tab_ui.select(
+                    on_manual_tab, [session, manual_reset, all_out],
+                    [progress, phone, talk, banner, report, pub, clar_box, r1, r2, r3, session,
+                     all_out, manual_reset],
+                    concurrency_limit=None, show_progress="hidden")
         # Returning from 总部端 introduces newly verified/unlocked cards (and a reset clears the session).
         store_tab_ui.select(store_handles["on_refresh"], [store_handles["session"]],
                             store_handles["outputs"], concurrency_limit=None, show_progress="hidden")

@@ -128,9 +128,11 @@ groups / source titles - labelled as an unverified demo checklist, because no re
 exists; 确认发布 → unlock + store cards re-fetch on tab select, customer questions, weekly plan with
 today highlighted, recommendation distribution, 重置演示 clearing backend + store-tab session while
 keeping prepared posts). `agent/ui_data.py` gained the offline HQ/product-card adapter functions.
-Screenshots are layout probes from the deterministic 7862 fake-generation instance (the live key
-returns 402): `eval/ui_screens/12-compare-result.png`, `13-hq-initial.png`, `14-hq-verified.png`,
-`15-store-new-release-unlocked.png`, `16-store-after-reset.png`.
+The compare/generated screenshots (`12`, `17`) are layout probes from the deterministic 7862
+fake-generation instance; `13`–`16` are local-data views. Live captures now also exist for S04/S08/S10
+(`21`–`23`), the locked new-release card (`24`) and a real `NeedsReview` generation (`25`, 143.8s).
+The live key is funded again; it no longer returns 402, so `25` is a real backend run (the checks
+rejected the draft), not a probe.
 
 #### Stage 3 — 对照组 tab
 
@@ -161,16 +163,22 @@ the delivered product instead of claiming same-card. Screenshot: `eval/ui_screen
 (regex-redacted, tested); no code path prints a model_id or "MODEL_" to the UI (tested in
 `tests/test_ui_components.py`). Playwright at 1920×1080 confirmed no horizontal overflow, correct CJK
 rendering, no `MODEL_` or `<…>` on screen, and no console/page errors. The friendly 402 message is
-covered by tests; a real 402 screenshot depends on the key's balance.
+covered by tests. As of the latest live run the key is funded again; that run reached the real checks
+and returned `NeedsReview` after 143.8s, which the UI renders with the no-copy/no-publish panel.
 
 ### Tests (fakes only, no network)
 
-tests/test_ui_data.py and tests/test_ui_components.py:
+tests/test_ui_data.py, tests/test_ui_components.py and the later UI regressions:
 - adapter works with and without the optional functions (monkeypatch)
-- each result type (incl. a NeedsReview stand-in) maps to the right display model (test ui/components.py, not Gradio rendering)
+- each result type (incl. NeedsReview) maps to the right display model (test ui/components.py, not
+  Gradio rendering)
 - display helpers never output model_id or "MODEL_"
 - DEMO_TODAY is used instead of the system date
-- reset clears UI session state but not prepared posts
+- reset clears UI session state (store, manual and compare/baseline views) but not prepared posts
+- `tests/test_ui_queue.py`: queue/proxy/status/page-load regression
+- `tests/test_ui_stage2.py`: Stage 2/3 adapter, compare/HQ rendering, verify/reset
+- `tests/test_ui_contract_fixes.py`: publish gating, delivered-card identity, recovery, role rule,
+  prepared rendering, image cache/prefetch, reset and fallback regressions
 
 Keep the full existing suite green.
 
@@ -179,7 +187,7 @@ longer "optional" (Phase 5 merged, they're real `agent.runs` functions) but the 
 adapter degrades to None/0 if either hook ever goes missing again. The NeedsReview stand-in was replaced
 by the real `agent.schemas.NeedsReview` once it merged. "reset clears UI session state" is tested at the
 pure-function level (`ui.components.fresh_session()`), and now also through the real 「重置演示」 flow
-(`test_store_tab_clears_its_session_after_hq_reset`). Full suite: **701 passed, 1 skipped**
+(`test_store_tab_clears_its_session_after_hq_reset`). Full suite: **702 passed, 1 skipped**
 (`tests/test_ui_queue.py` covers the queue/proxy/status regressions; `tests/test_ui_stage2.py` covers
 the Stage 2/3 adapter + rendering and the HQ verify/reset flow).
 
@@ -219,11 +227,14 @@ possible; each marked DONE / PENDING.
 **Status: DONE (2026-10-21).** Playwright + Chromium installed (not added to `requirements.txt`).
 At 1920×1080, headless Chromium, `wait_until="load"`: initial load, S01, a store switch, 「换一条」,
 chips and a generation attempt were exercised; screenshots are in `eval/ui_screens/` (gitignored).
-Measured while a 25s generation was in flight: cold load 383ms, second visitor 360ms, store switch
-384ms. Console/page errors: none. No horizontal overflow, no `MODEL_`, no `<…>`, CJK renders.
+Measured while a 25s generation was in flight: a warm page load was 360–383ms and a store switch
+384ms; the very first load after starting the server is about **1.7s** because Gradio's frontend assets
+are downloaded. Console/page errors: none. No horizontal overflow, no `MODEL_`, no `<…>`, CJK renders.
 `127.0.0.1` renders correctly (the user's blank page was the literal `0.0.0.0` address).
-Some later screenshots (S04/S08/S10, locked card, 402-friendly error) are produced as Stage 2
-checkpoint evidence rather than kept from this pass.
+The current evidence set is `eval/ui_screens/10`–`25`: initial, compare, HQ verify/reset, unlocked new
+release, generated result, published state, S04/S08/S10, the locked new-release card, and a real
+NeedsReview run. The 402-friendly message is covered by tests; the live key is currently funded, so a
+402 screenshot is not reproducible right now.
 
 ### 2. "merge base if PR #4 is merged" (referenced as part of an earlier message not visible in this
 session's context after a compaction)
@@ -240,12 +251,10 @@ contract (`docs/UI_BACKEND_CONTRACT.md`): `prepared_post`/`clear_prepared` moved
 `fallback_note()` wording matches the contract doc exactly, including the "next_card" case naming the
 actual card that ran.
 
-**PR #5** ("Freeze prep: untrack KB mirror, UI contract test, freeze_check, samples tooling") merged into
-`feat/proactive-recommender` separately and is **not yet in `feat/proactive-ui`** - this branch still has
-`kb_snapshot/` tracked in git (PR #5 untracks it and adds restore instructions to README). Merging it was
-not explicitly requested in the message that triggered wrap-up, and pulling in another branch update
-during a "stop and hand over" request seemed like the wrong moment to take on more merge risk, so it was
-left for the next session to do deliberately. **Status: PENDING, flagged, not merged.**
+**PR #5** ("Freeze prep: untrack KB mirror, UI contract test, freeze_check, samples tooling") is now
+merged into `feat/proactive-ui` via the `origin/feat/proactive-recommender` merge (`a4d2519`,
+base `de0920a`). `kb_snapshot/` is untracked and ignored; the local mirror is restored from the
+backup for this worktree only. **Status: DONE.**
 
 ### 3. "error-display fix" / "friendly error display instead of raw JSON"
 
@@ -279,6 +288,6 @@ implemented and exercised; see the Stage 2 status above.
 > session. Don't start new features. [stop app instances / finish-or-revert mid-change / run full suite;
 > write docs/UI_SPEC.md; write docs/HANDOVER_UI.md; commit and push; reply with branch + commit hash]
 
-**Status: DONE** - this file and `docs/HANDOVER_UI.md` are the direct result. See the handover doc for
-the TOP PRIORITY known bug (the queue freeze), how to run and test, and everything else that didn't
-belong in a spec-status file.
+**Status: DONE** - this file and `docs/HANDOVER_UI.md` are the direct result. The handover doc now marks
+the queue freeze as FIXED (system proxy → startup-events → unstarted queue), explains how to run/test,
+and records the remaining data/LLM items.

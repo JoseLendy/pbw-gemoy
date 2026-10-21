@@ -253,6 +253,18 @@ def test_published_label_is_hidden_when_not_publishable():
     assert st._render(s)[19] == ""
 
 
+def test_manual_tab_clears_its_session_after_hq_reset():
+    import app
+    from agent import ui_data as ud
+
+    session = {"id": "old-session", "result": object()}
+    token = ud.reset_token()
+    ud.reset()
+    out = app.on_manual_tab(session, token, "old all-platform output")
+    assert out[0] == "" and out[10]["id"] != "old-session" and out[11] == ""
+    assert out[12] == ud.reset_token()
+
+
 def test_baseline_needs_review_shows_read_only_draft():
     card = ui_data.default_card("S01")
     nr = NeedsReview(card=card, draft=_fake_result(card),

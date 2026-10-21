@@ -1,5 +1,9 @@
 # ErrorReport1792582675
 
+> **Status update 2026-10-21:** the live key is funded again. The 402 issue in this report no longer
+> reproduces; a real S01 run returned `NeedsReview` after 143.8s. See
+> `ErrorReport1792583669.md` for the current state. The data-dependent R-1/R-2 items remain.
+
 - Repository: `T:\GithubRepo\pbw-gemoy`
 - Branch: `feat/proactive-ui`
 - Round: third pass, after fixing the UI-only items in `ErrorReport1792581313.md`

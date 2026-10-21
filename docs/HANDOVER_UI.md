@@ -57,7 +57,7 @@ if it's missing again. Playwright was installed for browser testing but **not** 
 ## How to test
 
 **Unit/integration tests** (fakes only, no network): `.venv/bin/python -m pytest -q`. Should be green
-(701 passed, 1 skipped after the audit-fix round). `tests/test_ui_data.py` and
+(702 passed, 1 skipped after the audit-fix round). `tests/test_ui_data.py` and
 `tests/test_ui_components.py` are the Stage 1 UI tests.
 
 **Browser testing with Playwright** (not yet completed this session - see the first known-bug item
@@ -166,13 +166,13 @@ a generation was running.
 - **`kb_snapshot/` is untracked** after the PR #5 merge. It is restored locally from the backup and
   ignored; a fresh clone must obtain the mirror separately (see README).
 - **Playwright visual verification is DONE** at 1920×1080 (initial, store switch, compare, HQ,
-  baseline, result controls). Screenshots are in `eval/ui_screens/`. The compare/baseline screenshots
-  were produced by the deterministic 7862 fake-generation probe because the live key returns 402;
-  label them as layout evidence, not real-LLM output.
-- The LLM key configured in this worktree's `.env` returned `402 Insufficient Balance` on every real
-  generate attempt tested this session. That's an account/billing issue, not a code bug - `plain_error`
-  now shows a friendly message for it (「模型账户额度不足，请联系管理员充值后重试。」) instead of the
-  raw provider JSON, but you still need a funded key to actually see a generated post on screen.
+  baseline, result controls, S04/S08/S10, locked card, real result). Screenshots are in
+  `eval/ui_screens/`. `12`/`17` are deterministic 7862 probe layouts; `21`–`24` are local-data live
+  captures; `25` is a real backend run that returned `NeedsReview` after 143.8s.
+- The LLM key returned 402 earlier in the session, but the latest real run reached the writer/checks
+  successfully (key funded again). The result was rejected by the 8A checks (`NeedsReview`), which the
+  UI correctly shows with no copy/publish controls. The backend/content quality is still owned by the
+  other workstream; `plain_error` still handles a future 402 friendly.
 - `pip install -r requirements.txt` resolves `gradio>=4.44` to **6.30.0** as of this session (a major
   jump from what the project was originally built against). The launch self-check can return 502 when
   the system proxy intercepts `127.0.0.1`; `app.py` now adds NO_PROXY, retries the endpoint directly

@@ -55,11 +55,12 @@ class _PreparedDisplay:
 
 
 # ---------------------------------------------------------------- pure-ish view helpers (session in, strings out)
-def _card_panel_html(card, prepared: bool, staff: StaffContext | None = None) -> str:
+def _card_panel_html(card, prepared: bool, staff: StaffContext | None = None,
+                     prepared_slot: str | None = None) -> str:
     if card is None:
         return '<div class="hw-card"><p>今日暂无推荐。</p></div>'
     if prepared:
-        head = "今日已为你准备好"
+        head = "今日已为你准备好" + (f" · {prepared_slot}" if prepared_slot else "")
     elif card.is_default:
         head = "今日一条"
     else:
@@ -207,9 +208,9 @@ def _render(session: dict, allow_fetch: bool = False) -> tuple:
         # platform/role, and hide the edit controls that would still talk about the old card.
         publishable = publishable and can_act(actual_card, staff)
         editable = False
-    panel_html = _card_panel_html(actual_card,
-                                  prepared and actual_card is card and isinstance(live, RunResult)
-                                  and not locked, staff)
+    prepared_slot = (SLOT_LABELS.get(getattr(actual_card, "slot", None), "")
+                     if prepared and actual_card is not card else None)
+    panel_html = _card_panel_html(actual_card, prepared and not locked, staff, prepared_slot)
     action_update = gr.update(value="重新生成" if display is not None else "生成",
                               visible=not locked and can_act(card, staff))
 
@@ -511,25 +512,25 @@ def build_store_tab(demo: gr.Blocks) -> dict:
             talk = gr.HTML()
             status_box = gr.HTML()
             banner = gr.HTML()
+            with gr.Accordion("详细信息（四段式输出）", open=False):
+                report = gr.Markdown()
+            with gr.Group(visible=False) as edit_group:
+                with gr.Row():
+                    b_short = gr.Button("短一点")
+                    b_point = gr.Button("换卖点")
+                    b_angle = gr.Button("换个角度")
+                    b_price = gr.Button("加上立减500")
         with gr.Column(scale=1):
             phone = gr.HTML()
-    with gr.Accordion("详细信息（四段式输出）", open=False):
-        report = gr.Markdown()
-    with gr.Group(visible=False) as edit_group:
-        with gr.Row():
-            b_short = gr.Button("短一点")
-            b_point = gr.Button("换卖点")
-            b_angle = gr.Button("换个角度")
-            b_price = gr.Button("加上立减500")
-    with gr.Group(visible=False) as pub_group:
-        pub = gr.Textbox(label="可直接复制的正文", lines=6, buttons=["copy"])
-        b_pub_btn = gr.Button("标记为已发布")
-    with gr.Group(visible=False) as file_group:
-        with gr.Row():
-            b_dl = gr.DownloadButton("下载 .md")
-            with gr.Group(visible=False) as image_group:
-                b_img = gr.DownloadButton("保存图片")
-    published_note = gr.Markdown()
+            with gr.Group(visible=False) as pub_group:
+                pub = gr.Textbox(label="可直接复制的正文", lines=6, buttons=["copy"])
+                b_pub_btn = gr.Button("标记为已发布")
+            with gr.Group(visible=False) as file_group:
+                with gr.Row():
+                    b_dl = gr.DownloadButton("下载 .md")
+                    with gr.Group(visible=False) as image_group:
+                        b_img = gr.DownloadButton("保存图片")
+            published_note = gr.Markdown()
     gr.Markdown("### 今天顾客问了什么？")
     with gr.Row():
         chip_buttons = [gr.Button(c["text"]) for c in POOL.values()]
