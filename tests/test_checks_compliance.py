@@ -202,3 +202,39 @@ def test_run_all_merges_all_stages():
     r = run_all(p, fake_ledger(), SIB, fake_task(), fake_plan())
     assert {"8A", "8B", "8C"} <= {i.stage for i in r.issues}
     assert not r.passed
+
+
+# ------------------------------------------------------------------ Phase 5 eval: store context (false-positive proof)
+def _card_task():
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    return card_to_task(next(c for c in cards_for("S09", "2026-10-23") if c.slot == "promo"))
+
+
+def _8b_prompt(task):
+    seen = {}
+
+    class Spy:
+        def chat_json(self, system, user, stage="", **kw):
+            seen[stage] = (system, user)
+            return {"issues": []}
+    p = fake_post("moments")
+    p.body = [f"我店在{task.landmark}附近，过来坐坐。"]
+    check_compliance(p, fake_ledger(), task, llm=Spy())
+    return seen["8B"]
+
+
+def test_8b_judge_is_told_the_cards_store_context():
+    """Real 朋友圈 eval S09: the brief told the writer to name the store's landmark and sign as the staff
+    member; the 8B judge, never shown that context, called '我店在良渚文化村附近…' an invented personal
+    experience. The judge must see the store data the card supplied."""
+    task = _card_task()
+    assert task.landmark and task.nickname
+    system, user = _8b_prompt(task)
+    assert "<store>" in user and task.landmark in user.split("<store>")[1] and task.nickname in user
+    assert "不算编造" in system and "顾客" in system          # still: no invented customer experience
+
+
+def test_manual_flow_8b_prompt_has_no_store_block():
+    _, user = _8b_prompt(fake_task("moments"))
+    assert "<store>" not in user
