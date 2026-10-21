@@ -71,6 +71,10 @@ Push `feat/proactive-samples` and open a PR into `feat/proactive-recommender`. *
 - **Python:** the repo's `.venv` (`.venv/bin/python`); on the old laptop it lived one level up. `pip install -r requirements.txt` includes pytest.
 - **Real-call scripts** need `RUN_E2E=1` (eval_cards, demo_scenes, check_canary); `prepare_today.py` refuses fake deps unless `--fake`.
 
+### Known: 8D `ai_judge` run-to-run variance (recorded 2026-10-21)
+
+The 8D LLM judge ("整篇仍像机器写的通用稿") gives different verdicts on an **identical** draft between runs, although judges run at `CHECK_TEMPERATURE=0`: canary clean draft 1 (reader-side scene sentence + verbatim KB conclusion) passed in one run and failed in the next with the same text; clean draft 3 likewise flipped. 8A/8B are stable on the same drafts. Decision (user, 2026-10-21): **accept it for now and proceed**; in real runs an `ai_judge` flag triggers a rewrite, then the T4 fallback. Do **not** change the judge yet. If it has to be addressed, look first at how the writer generates the scene sentence (generic reader scenes read as machine-written), not at judge voting.
+
 ## Open decisions
 
 - **Git history still contains the old KB files** (from commit `ddf3b1a`). Removing them needs a history rewrite and a force-push. Decision: **only after Friday's submission**, and only by the repo owner; until then do not publish the repository.
