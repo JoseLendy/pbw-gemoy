@@ -36,7 +36,7 @@ from agent.formatter import render_download, render_publishable, render_report, 
 from agent.pipeline import edit as pipeline_edit, run as pipeline_run, run_all_platforms
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult
 from agent.ui_data import DEPS, plain_error, today as demo_today
-from ui import baseline_tab, compare_tab, hq_tab, store_tab
+from ui import baseline_tab, compare_tab, hq_tab, store_tab, theme
 from ui.components import banner_html, phone_html, placeholder_png, stop_html, talk_card_html  # noqa: F401
 
 try:
@@ -49,7 +49,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(
 log = logging.getLogger("app")
 
 ROOT = Path(__file__).parent
-CSS = (ROOT / "static" / "phone.css").read_text("utf-8")
+CSS = (ROOT / "static" / "phone.css").read_text("utf-8") + "\n" + theme.EXTRA_CSS
 KB_NAME = "任德耀新建华为PC知识库"
 
 # ---------------------------------------------------------------- deps + status (cached, never blocking)

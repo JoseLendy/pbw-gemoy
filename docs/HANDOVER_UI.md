@@ -26,6 +26,8 @@ this file is the runbook and the bug list.
   customer questions, weekly plan with today highlighted, recommendation distribution, 重置演示.
 - `ui/baseline_tab.py`: Stage 3, 对照组. Left `baseline()` always under
   「对照组：未经约束的普通大模型输出」 with 8D hits marked; right our verified `generate()` result.
+- `ui/theme.py`: UI-only readability CSS appended after `static/phone.css` (card surfaces, stronger
+  phone text, compare/baseline cards, table contrast). `app.py` imports it; no backend edit.
 - `app.py`: assembles 门店端·今日推荐 + 三店对比 + 总部端 + 对照组 + 手动输入 (unchanged) under one header.
 - The branch has been merged with `origin/feat/proactive-recommender` (brings in PR #4 / Phase 5 and
   PR #5 / freeze prep: new model mapping, fallback policy, prepared posts, latency tracking, KB mirror
@@ -55,7 +57,7 @@ if it's missing again. Playwright was installed for browser testing but **not** 
 ## How to test
 
 **Unit/integration tests** (fakes only, no network): `.venv/bin/python -m pytest -q`. Should be green
-(700 passed, 1 skipped after the audit-fix round). `tests/test_ui_data.py` and
+(701 passed, 1 skipped after the audit-fix round). `tests/test_ui_data.py` and
 `tests/test_ui_components.py` are the Stage 1 UI tests.
 
 **Browser testing with Playwright** (not yet completed this session - see the first known-bug item
@@ -182,7 +184,8 @@ a generation was running.
   Non-RunResult records (`NeedsReview`, `NeedsHuman`, baseline) fall back to the message/failing
   renderer; a malformed record shows an explicit note rather than an empty phone. Prepared images are
   placeholders on the first page-load render (`allow_fetch=False`) to keep the local event off the
-  network; the next live render can load them. Async image hydration is still a follow-up.
+  network; a background prefetch + 1.5s store-tab timer swaps in the real images when the cache is
+  ready, without blocking the local event.
 
 ## Branch / commit
 

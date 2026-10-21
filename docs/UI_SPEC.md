@@ -12,6 +12,11 @@ Branch: `feat/proactive-ui`. Deadline given: **merged by Thu Oct 22, 14:00.**
 
 ## Original brief
 
+> **Status note:** the status blocks below are the source of truth. Where the original wording says
+> “fact IDs”, “trimmed only in 四” or “show the price block”, the corrected status text supersedes it
+> (reference rows instead of invented facts; the contract-note placement for trimmed; the intentional
+> 8B price block for 加上立减500).
+
 Phase 3: build the demo UI from scratch. There is no previous UI work; ignore any earlier Phase 3 prompts.
 
 ### Setup and boundaries
@@ -174,7 +179,7 @@ longer "optional" (Phase 5 merged, they're real `agent.runs` functions) but the 
 adapter degrades to None/0 if either hook ever goes missing again. The NeedsReview stand-in was replaced
 by the real `agent.schemas.NeedsReview` once it merged. "reset clears UI session state" is tested at the
 pure-function level (`ui.components.fresh_session()`), and now also through the real 「重置演示」 flow
-(`test_store_tab_clears_its_session_after_hq_reset`). Full suite: **700 passed, 1 skipped**
+(`test_store_tab_clears_its_session_after_hq_reset`). Full suite: **701 passed, 1 skipped**
 (`tests/test_ui_queue.py` covers the queue/proxy/status regressions; `tests/test_ui_stage2.py` covers
 the Stage 2/3 adapter + rendering and the HQ verify/reset flow).
 

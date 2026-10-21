@@ -43,7 +43,7 @@ def posting_html() -> str:
     window = data["window"]
     return (f'<div style="font-size:13px;color:#666;margin-bottom:6px">最近 {data["days"]} 个记录日'
             f'（{_esc(window[0])} 至 {_esc(window[1])}，截至最新记录）· 发帖天数 / 应发天数</div>'
-            '<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff">'
+            '<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
             f'<thead><tr><th style="{_HEAD}">门店</th><th style="{_HEAD}">已发</th>'
             f'<th style="{_HEAD}">完成度</th><th style="{_HEAD};text-align:right">发帖率</th></tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table>')
@@ -92,7 +92,7 @@ def questions_html() -> str:
         f'<td style="{_CELL};text-align:right">{q["count"]}</td>'
         f'<td style="{_CELL};text-align:right">{q["stores"]} 店</td></tr>'
         for i, q in enumerate(ui_data.question_stats(8)))
-    return ('<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff">'
+    return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
             f'<thead><tr><th style="{_HEAD}">#</th><th style="{_HEAD}">顾客问题</th>'
             f'<th style="{_HEAD};text-align:right">次数</th><th style="{_HEAD};text-align:right">覆盖门店</th>'
             f'</tr></thead><tbody>{rows}</tbody></table>')
@@ -124,7 +124,7 @@ def distribution_html() -> str:
         f'<td style="{_CELL}">{_esc(x["slot_label"])} · {_esc(x["platform"])}</td>'
         f'<td style="{_CELL}">{_esc(x["segment_label"])} · {_esc(x["angle"])}</td></tr>'
         for x in ui_data.recommendation_distribution())
-    return ('<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff">'
+    return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
             f'<thead><tr><th style="{_HEAD}">门店</th><th style="{_HEAD}">今日一条</th>'
             f'<th style="{_HEAD}">槽位 · 平台</th><th style="{_HEAD}">客群 · 角度</th></tr></thead>'
             f'<tbody>{rows}</tbody></table>')

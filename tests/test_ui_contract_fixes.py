@@ -53,6 +53,7 @@ def test_publish_is_ignored_before_a_result_and_for_needs_review():
     assert out[15]["visible"] is True and out[16]["visible"] is True and out[17]["visible"] is True
     store_tab.on_publish(s)
     assert s["published"][cid] is True
+    assert store_tab._render(s)[-1]["value"].startswith("已发布")
 
 
 def test_next_card_uses_the_delivered_card_header():
@@ -176,6 +177,24 @@ def test_prepared_next_card_uses_the_delivered_card():
     assert "活动款" in out[0] and "今日一条" not in out[0]
 
 
+def test_prefetch_images_warms_the_cache_without_rendering():
+    from ui.components import images_ready, prefetch_images
+    from agent.schemas import PostImage
+
+    card = ui_data.default_card("S01")
+    r = _fake_result(card)
+    r = dataclasses.replace(r, post=dataclasses.replace(
+        r.post, images=[PostImage(media_id="media-async-check", position="p1", caption="图")]))
+
+    class D:
+        def fetch_image_bytes(self, media_id):
+            return b"\x89PNG\r\n\x1a\nasync"
+
+    assert not images_ready(r)
+    prefetch_images(r, D())
+    assert images_ready(r)
+
+
 def test_image_placeholder_is_not_cached_as_a_real_image():
     from ui.components import image_data_uri
 
@@ -195,7 +214,8 @@ def test_reset_updates_the_store_dropdown():
     st._load_store(s, "S04")
     ui_data.reset()
     out = st.on_tab_select(s)
-    assert out[-2]["value"] == "S01" and s["store_id"] == "S01"
+    values = [x.get("value") for x in out if isinstance(x, dict) and "value" in x]
+    assert "S01" in values and s["store_id"] == "S01"
 
 
 def test_recovery_rejects_non_store_run_records():

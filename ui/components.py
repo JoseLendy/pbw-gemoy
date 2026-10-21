@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import html
 import re
+import threading
 from typing import Any, Optional
 from uuid import uuid4
 
@@ -154,6 +155,35 @@ def image_data_uri(media_id: str, title: str, deps: Any = None, allow_fetch: boo
         return "data:image/svg+xml;base64," + base64.b64encode(placeholder_png(title)).decode()
     _IMG_CACHE[media_id] = uri
     return uri
+
+
+_IMG_INFLIGHT: set[str] = set()
+_IMG_LOCK = threading.Lock()
+
+
+def images_ready(r: RunResult) -> bool:
+    """True when every post image is already in the in-process cache (or there are none)."""
+    return all(im.media_id in _IMG_CACHE for im in (getattr(getattr(r, "post", None), "images", None) or []))
+
+
+def prefetch_images(r: RunResult, deps: Any = None) -> None:
+    """Warm the image cache without blocking a Gradio page-load/store-switch event. The store tab's
+    timer re-renders the phone when images_ready() becomes true."""
+    fetch = getattr(deps, "fetch_image_bytes", None)
+    if fetch is None:
+        return
+    for im in getattr(getattr(r, "post", None), "images", None) or []:
+        if im.media_id in _IMG_CACHE:
+            continue
+        with _IMG_LOCK:
+            if im.media_id in _IMG_INFLIGHT:
+                continue
+            _IMG_INFLIGHT.add(im.media_id)
+        try:
+            image_data_uri(im.media_id, im.caption or "图片", deps, allow_fetch=True)
+        finally:
+            with _IMG_LOCK:
+                _IMG_INFLIGHT.discard(im.media_id)
 
 
 def _flagged_spans(r: RunResult) -> set[str]:

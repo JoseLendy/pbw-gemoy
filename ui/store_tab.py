@@ -8,6 +8,7 @@ import html
 import os
 import re
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -18,8 +19,9 @@ from agent.formatter import render_download, render_publishable, render_report
 from agent.schemas import RunResult, StaffContext
 from ui.components import (
     LOCKED_LABEL, SLOT_LABELS, banner_html, can_act, card_locked_label, default_card_of, fallback_note,
-    fresh_session, last_real_run_html, last_real_run_notice_html, needs_review_html, other_cards,
-    phone_html, placeholder_png, prepared_post_html, prepared_pub_text, reason_badges, result_kind,
+    fresh_session, images_ready, last_real_run_html, last_real_run_notice_html, needs_review_html,
+    other_cards, phone_html, placeholder_png, prefetch_images, prepared_post_html, prepared_pub_text,
+    reason_badges, result_kind,
     role_notice, stop_html, store_choices, talk_card_html,
 )
 
@@ -55,7 +57,7 @@ class _PreparedDisplay:
 # ---------------------------------------------------------------- pure-ish view helpers (session in, strings out)
 def _card_panel_html(card, prepared: bool, staff: StaffContext | None = None) -> str:
     if card is None:
-        return "<p>今日暂无推荐。</p>"
+        return '<div class="hw-card"><p>今日暂无推荐。</p></div>'
     if prepared:
         head = "今日已为你准备好"
     elif card.is_default:
@@ -77,7 +79,7 @@ def _card_panel_html(card, prepared: bool, staff: StaffContext | None = None) ->
             badge = ' <span class="hw-dev" style="padding:1px 6px">模拟数据</span>' if is_demo else ""
             items.append(f"<li>{html.escape(text)}{badge}</li>")
         parts.append(f'<div><b>为什么推这条</b><ul>{"".join(items)}</ul></div>')
-    return "".join(parts)
+    return '<div class="hw-card">' + "".join(parts) + "</div>"
 
 
 def _chip_status_html(session: dict) -> str:
@@ -116,6 +118,20 @@ def _delivered_card(session: dict, requested, result) -> object:
     return requested
 
 
+def _warm_images(session: dict, result: RunResult, allow_fetch: bool) -> None:
+    """Page-load/store-switch paths must not block on image bytes. Start one background fetch per
+    result and let the store-tab timer swap the phone in when the cache is ready."""
+    if allow_fetch or not isinstance(result, RunResult) or images_ready(result):
+        return
+    key = tuple(im.media_id for im in getattr(getattr(result, "post", None), "images", None) or [])
+    if not key or session.get("image_fetch_key") == key:
+        return
+    session["image_fetch_key"] = key
+    session["image_pending"] = True
+    threading.Thread(target=prefetch_images, args=(result, ui_data.DEPS), daemon=True,
+                     name="hwpc-image-prefetch").start()
+
+
 def _can_publish(session: dict, card) -> bool:
     if card is None or card.locked or not can_act(card, _staff(session)):
         return False
@@ -136,6 +152,8 @@ def _load_store(session: dict, store_id: str) -> None:
     session.setdefault("chips", {})
     session.setdefault("staff", DEMO_STAFF)
     session["show_other"] = False
+    session["image_pending"] = False
+    session.pop("image_fetch_key", None)
     session["overrides_seen"] = ui_data.fact_card_overrides()
     session["reset_token_seen"] = ui_data.reset_token()
     session.pop("edit_message", None)
@@ -169,7 +187,8 @@ def _render(session: dict, allow_fetch: bool = False) -> tuple:
         return ("<p>今日暂无推荐。</p>", gr.update(visible=False), other_row_update, *slot_updates, "",
                gr.update(visible=False), "", "", "", "", "", "",
                gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), "",
-               "", _chip_status_html(session), gr.update(value=session.get("store_id")))
+               "", _chip_status_html(session), gr.update(value=session.get("store_id")),
+               gr.update(visible=False), gr.update(value="标记为已发布"))
 
     staff = _staff(session)
     locked = bool(card.locked)
@@ -181,6 +200,7 @@ def _render(session: dict, allow_fetch: bool = False) -> tuple:
     editable = (isinstance(live, RunResult) and not isinstance(display, _RecoveryDisplay)
                 and can_act(card, staff) and not locked)
     downloadable = isinstance(live, RunResult) and not isinstance(display, _RecoveryDisplay)
+    image_ok = downloadable and bool(getattr(live, "post", None) and live.post.images)
     actual_card = _delivered_card(session, card, live) if isinstance(live, RunResult) else card
     if actual_card is not card:
         # The generated post belongs to the next card; never act on it under the requested card's
@@ -206,6 +226,7 @@ def _render(session: dict, allow_fetch: bool = False) -> tuple:
         status_box = stop_html(LOCKED_LABEL, "新品未解锁")
     elif isinstance(display, _RecoveryDisplay):
         if isinstance(live, RunResult):
+            _warm_images(session, live, allow_fetch)
             status_box = last_real_run_notice_html(display.payload)
             talk_out = talk_card_html(live)
             banner_out = banner_html(live)
@@ -215,6 +236,7 @@ def _render(session: dict, allow_fetch: bool = False) -> tuple:
             status_box = last_real_run_html(display.payload)
     elif isinstance(display, _PreparedDisplay):
         if isinstance(live, RunResult):
+            _warm_images(session, live, allow_fetch)
             note = fallback_note(live)
             if note:
                 if getattr(live, "fallback", None) == "next_card":
@@ -272,8 +294,9 @@ def _render(session: dict, allow_fetch: bool = False) -> tuple:
     return (panel_html, action_update, other_row_update, *slot_updates, edit_msg_html,
            gr.update(visible=recovery_on), recovery_msg, talk_out, status_box, banner_out, phone_out,
            report_md, gr.update(visible=editable), gr.update(visible=publishable),
-           gr.update(visible=downloadable), pub_text, published_label, _chip_status_html(session),
-           gr.update(value=session.get("store_id")))
+           gr.update(visible=downloadable), pub_text, "", _chip_status_html(session),
+           gr.update(value=session.get("store_id")), gr.update(visible=image_ok),
+           gr.update(value=published_label or "标记为已发布"))
 
 
 # ---------------------------------------------------------------- event handlers
@@ -290,6 +313,18 @@ def on_initial(session: dict):
     if not session.get("cards"):
         _load_store(session, STORES[0]["store_id"])
     return (*_render(session), session)
+
+
+def on_image_tick(session: dict):
+    """Swap placeholders for prefetched prepared/recovery images without blocking a local event."""
+    if not session.get("image_pending"):
+        return gr.update(), session
+    card, cid = _current_card(session)
+    live = _display_result(session.get("results", {}).get(cid)) if card is not None else None
+    if not isinstance(live, RunResult) or not images_ready(live):
+        return gr.update(), session
+    session["image_pending"] = False
+    return phone_html(live, None, allow_fetch=False), session
 
 
 def on_tab_select(session: dict):
@@ -335,6 +370,8 @@ def on_generate(session: dict):
         return (*_render(session), session)
     session["results"][cid] = result
     session["prepared"] = False
+    session["image_pending"] = False
+    session.pop("image_fetch_key", None)
     return (*_render(session, allow_fetch=True), session)
 
 
@@ -376,6 +413,8 @@ def _do_edit(session: dict, instruction: str):
     else:
         session["results"][cid] = result
         session["prepared"] = False
+        session["image_pending"] = False
+        session.pop("image_fetch_key", None)
         session.setdefault("published", {}).pop(cid, None)
         session.pop("edit_message", None)
     return (*_render(session, allow_fetch=True), session)
@@ -462,12 +501,16 @@ def build_store_tab(demo: gr.Blocks) -> dict:
     with gr.Group(visible=False) as recovery_group:
         recovery_msg = gr.Markdown()
         recovery_btn = gr.Button("显示最近一次真实运行结果")
-    talk = gr.HTML()
-    status_box = gr.HTML()
-    banner = gr.HTML()
     with gr.Row():
         with gr.Column(scale=1):
-            pass
+            gr.HTML('<div class="hw-workflow"><b>店员今天怎么用</b><br>'
+                    '1. 选门店 → 2. 看「今日一条」和推荐原因 → 3. 点「生成」 → '
+                    '4. 在右侧手机预览检查文案与图片 → 5. 复制/下载，发到门店账号。<br>'
+                    '<span style="font-size:13px;opacity:.85">公众号 / 小红书由店长发布；'
+                    '朋友圈可直接使用。所有事实与图片都按型号从知识库核验。</span></div>')
+            talk = gr.HTML()
+            status_box = gr.HTML()
+            banner = gr.HTML()
         with gr.Column(scale=1):
             phone = gr.HTML()
     with gr.Accordion("详细信息（四段式输出）", open=False):
@@ -480,11 +523,12 @@ def build_store_tab(demo: gr.Blocks) -> dict:
             b_price = gr.Button("加上立减500")
     with gr.Group(visible=False) as pub_group:
         pub = gr.Textbox(label="可直接复制的正文", lines=6, buttons=["copy"])
-        b_pub_btn = gr.Button("已发布 ✓")
+        b_pub_btn = gr.Button("标记为已发布")
     with gr.Group(visible=False) as file_group:
         with gr.Row():
             b_dl = gr.DownloadButton("下载 .md")
-            b_img = gr.DownloadButton("保存图片")
+            with gr.Group(visible=False) as image_group:
+                b_img = gr.DownloadButton("保存图片")
     published_note = gr.Markdown()
     gr.Markdown("### 今天顾客问了什么？")
     with gr.Row():
@@ -493,7 +537,7 @@ def build_store_tab(demo: gr.Blocks) -> dict:
 
     OUTS = [card_panel, action_btn, other_row, *slot_btns, edit_msg, recovery_group, recovery_msg,
             talk, status_box, banner, phone, report, edit_group, pub_group, file_group, pub,
-            published_note, chip_status, store_dd]
+            published_note, chip_status, store_dd, image_group, b_pub_btn]
     full_outs = [*OUTS, session]
 
     # Local-only events bypass the queue entirely (concurrency_limit=None): a running generation can
@@ -515,4 +559,6 @@ def build_store_tab(demo: gr.Blocks) -> dict:
         b.click(lambda s, c=chip_id: on_chip(c, s), [session], full_outs, **_LOCAL)
 
     demo.load(on_initial, [session], full_outs, **_LOCAL)
+    image_timer = gr.Timer(1.5)
+    image_timer.tick(on_image_tick, [session], [phone, session], **_LOCAL)
     return {"session": session, "outputs": full_outs, "on_refresh": on_tab_select}

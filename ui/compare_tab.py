@@ -61,7 +61,7 @@ def _meta_html(card, result=None) -> str:
         parts.insert(0, f"<span style='color:#8a4b00'>已换成下一条推荐"
                         f"{f'（{_esc(slot)}）' if slot else ''}"
                         f"{f'：{_esc(delivered)}' if delivered else ''}</span>")
-    return ('<div style="font-size:13px;line-height:1.7;color:#333;margin:2px 4px 14px">'
+    return ('<div style="font-size:14px;line-height:1.7;color:#1e293b;margin:2px 4px 14px">'
             + "<br>".join(parts) + "</div>")
 
 
@@ -80,7 +80,7 @@ def _result_panel(sid: str, card, result, regenerated: bool) -> str:
         body = stop_html(getattr(result, "message", "") or "该门店生成失败。")
     note = fallback_note(result) if isinstance(result, RunResult) else None
     note_html = f'<div class="hw-banner note">ℹ️ {_esc(note)}</div>' if note else ""
-    return (f'<div style="flex:1 1 430px;min-width:380px;max-width:470px">'
+    return (f'<div class="hw-compare-card" style="flex:1 1 430px;min-width:380px;max-width:470px">'
             f'{head}{note_html}{body}{_meta_html(card, result)}</div>')
 
 

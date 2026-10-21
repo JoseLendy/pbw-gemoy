@@ -47,8 +47,7 @@ def baseline_html(result) -> str:
         f'<li>[{_esc(h.stage)}] {_esc(h.message)}'
         + (f'（「{_esc(h.span)}」）' if h.span else "") + "</li>" for h in hits) or "<li>未命中已知 8D 问题（仍未经核验）</li>"
     return (
-        '<div style="background:#fff8f0;border:1px solid #f0c9a0;border-radius:10px;padding:14px;'
-        'min-height:560px;box-sizing:border-box">'
+        '<div class="hw-baseline-card" style="min-height:560px;box-sizing:border-box">'
         f'<h3 style="margin:0 0 4px;color:#8a3b00">{BASELINE_LABEL}</h3>'
         '<div style="font-size:12px;color:#8a3b00;margin-bottom:10px">'
         '单次普通大模型生成 · 未读取知识库 · 未做事实/合规核验 · 仅用于对比</div>'
@@ -71,7 +70,7 @@ def ours_html(result, note: str | None = None) -> str:
                     f'<pre style="white-space:pre-wrap;font-size:12px;line-height:1.55;background:#f7f7f7;'
                     f'padding:10px;border-radius:6px">{_esc(report)}</pre></details>')
         banner = f'<div class="hw-banner note">ℹ️ {_esc(note)}</div>' if note else ""
-        return ('<div style="background:#f2f8f2;border:1px solid #b9d9b9;border-radius:10px;padding:14px">'
+        return ('<div class="hw-verified-card">'
                 '<h3 style="margin:0 0 4px;color:#1b5e20">我们的结果（知识库核验）</h3>'
                 '<div style="font-size:12px;color:#2e7d32;margin-bottom:8px">'
                 '事实台账 + 逐条原文核验 + 8A–8E 检查</div>'
