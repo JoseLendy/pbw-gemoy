@@ -18,6 +18,7 @@ import argparse
 import dataclasses
 import datetime as dt
 import os
+import statistics
 import sys
 from pathlib import Path
 
@@ -62,6 +63,14 @@ class StoreEval:
     hits_8d: list = dataclasses.field(default_factory=list)       # codes+spans seen in ANY pass
     tags: list = dataclasses.field(default_factory=list)
     text: str = ""                        # publishable text (our article), for similarity only
+    seconds: float = 0.0                  # wall-clock for this store's post, incl. 8E reruns
+    errors: list = dataclasses.field(default_factory=list)       # (stage, code, span) left in the final report
+    sim_flags: list = dataclasses.field(default_factory=list)    # "S01×S02 0.61→0.42" pairs over the threshold
+    regenerated: bool = False
+
+    @property
+    def passed(self) -> bool:
+        return self.status == "ok" and all(self.stage_pass.values())
 
 
 def _recording(run_checks, sink: list):
@@ -130,23 +139,46 @@ def similarity_groups(evals: list[StoreEval]) -> dict[str, list[tuple[str, str, 
     return out
 
 
+def summary(evals: list[StoreEval]) -> dict:
+    """Pass rate within the rewrite budget (MAX_LOOPS = 2) and seconds per generated post."""
+    ok = [e for e in evals if e.status == "ok"]
+    secs = sorted(e.seconds for e in ok)
+    failures: dict[str, list[str]] = {}
+    for e in ok:
+        for stage, code, span in e.errors:
+            failures.setdefault(stage, []).append(f"{e.store_id} {code}" + (f"「{span}」" if span else ""))
+    return {"stores": len(evals), "generated": len(ok), "passed": sum(e.passed for e in evals),
+            "median_s": statistics.median(secs) if secs else 0.0, "max_s": max(secs) if secs else 0.0,
+            "rewrites": sum(e.rewrites for e in ok), "failures": failures}
+
+
 def build_report(evals: list[StoreEval], today, mode: str, pairs=None) -> str:
     mark = {True: "✅", False: "❌"}
+    from agent.llm import temperatures
     lines = [f"# 卡片评测报告 · {today} · {mode}", "",
-             "每家店的今日一条走完整流程（台账 → 写作 → 8A/8B/8C/8D 核验循环）。数值仅供内部调参。", "",
-             "| 门店 | 客群 | 卡片 | 型号 | 状态 | 8A | 8B | 8C | 8D | 改写轮数 | 8D 命中（最终） | 事实编号 |",
-             "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+             "每家店的今日一条走完整流程（台账 → 写作 → 8A/8B/8C/8D 核验循环，最多 2 轮改写）。数值仅供内部调参。",
+             f"温度：{temperatures()}", "",
+             "| 门店 | 客群 | 卡片 | 型号 | 状态 | 8A | 8B | 8C | 8D | 改写轮数 | 秒 | 8E | 8D 命中（最终） | 事实编号 |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for e in evals:
         sp = [mark[e.stage_pass[s]] if e.status == "ok" else "—" for s in STAGES]
         hits = "、".join(f"{c}「{s}」" if s else c for c, s in e.hits_8d) or "—"
         status = e.status if e.status == "ok" else f"{e.status}：{e.message}"
+        sim = "; ".join(e.sim_flags) + (" (已重生成)" if e.regenerated else "") if e.sim_flags else "—"
         lines.append(f"| {e.store_id} {e.store_name} | {e.segment} | {e.slot or '—'} | {e.model_id or '—'} | "
-                     f"{status} | {' | '.join(sp)} | {e.rewrites if e.status == 'ok' else '—'} | {hits} | "
-                     f"{', '.join(e.tags) or '—'} |")
-    ok = [e for e in evals if e.status == "ok"]
-    all_pass = sum(all(e.stage_pass.values()) for e in ok)
-    lines += ["", f"- 生成成功：{len(ok)} / {len(evals)} 家；四项核验全部通过：{all_pass} 家",
-              f"- 平均改写轮数：{(sum(e.rewrites for e in ok) / len(ok)) if ok else 0:.2f}", ""]
+                     f"{status} | {' | '.join(sp)} | {e.rewrites if e.status == 'ok' else '—'} | "
+                     f"{e.seconds:.1f} | {sim} | {hits} | {', '.join(e.tags) or '—'} |")
+    sm = summary(evals)
+    lines += ["", f"- 生成成功：{sm['generated']} / {sm['stores']} 家；≤2 轮改写内四项核验全部通过："
+                  f"**{sm['passed']} / {sm['stores']}**（目标 ≥10）",
+              f"- 每条耗时：中位数 {sm['median_s']:.1f} 秒，最大 {sm['max_s']:.1f} 秒",
+              f"- 平均改写轮数：{(sm['rewrites'] / sm['generated']) if sm['generated'] else 0:.2f}", ""]
+    if sm["failures"]:
+        lines += ["## 未通过项（按核验器分组）", ""]
+        for stage in STAGES:
+            for item in sm["failures"].get(stage, []):
+                lines.append(f"- {stage} · {item}")
+        lines.append("")
     if pairs:
         lines += ["## 8E 跨店去重（before → after）", "",
                   "| 门店 A | 门店 B | before | after | 处理 |", "|---|---|---|---|---|"]
@@ -229,17 +261,26 @@ def main(argv=None) -> int:
             ev.stage_pass = {s: not any(i.stage == s and i.severity == "error" for i in final.issues) for s in STAGES}
             ev.rewrites = r.loops
             ev.hits_8d = [(i.code, i.span) for i in final.issues if i.stage == "8D"]
+            ev.errors = [(i.stage, i.code, i.span) for i in final.issues if i.severity == "error"]
             ev.tags = list(dict.fromkeys(r.post.selling_points))
             ev.text = render_publishable(r.post)
         else:
             ev.status, ev.message = "no_result", "没有返回结果"
+        ev.seconds = batch.seconds.get(sid, 0.0)
+        ev.regenerated = sid in batch.regenerated
+        ev.sim_flags = [f"{p.store_a}×{p.store_b} {p.before}→{p.after}" for p in batch.similarity
+                        if sid in (p.store_a, p.store_b) and max(p.before, p.after) > SIMILARITY_FLAG]
         evals.append(ev)
     report = build_report(evals, today, "fakes（合成数据）" if args.fake else "真实依赖", batch.similarity)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")
-    ok = sum(e.status == "ok" for e in evals)
-    print(f"wrote {out} · {ok}/{len(evals)} stores generated")
+    sm = summary(evals)
+    for e in evals:
+        print(f"{e.store_id} {e.status:11} " + " ".join(f"{s}{'✓' if e.stage_pass.get(s) else '✗'}" for s in STAGES)
+              + f" rewrites={e.rewrites} {e.seconds:.1f}s" + (f" 8E[{'; '.join(e.sim_flags)}]" if e.sim_flags else ""))
+    print(f"wrote {out} · {sm['generated']}/{sm['stores']} generated · {sm['passed']}/{sm['stores']} passed "
+          f"within 2 rewrites · median {sm['median_s']:.1f}s · max {sm['max_s']:.1f}s")
     return 0
 
 
