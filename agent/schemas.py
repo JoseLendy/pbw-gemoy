@@ -332,6 +332,7 @@ class CardPromo:
     mechanic: str
     price_info: Optional[dict] = None   # {label, value, currency, conditions} — the ONLY allowed price source
     source: str = "DEMO"
+    to_dict = _d
 
 
 @dataclass
@@ -339,6 +340,7 @@ class CardQuestion:
     chip_id: str
     text: str
     count: int
+    to_dict = _d
 
 
 @dataclass
