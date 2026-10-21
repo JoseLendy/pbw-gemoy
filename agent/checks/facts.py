@@ -88,11 +88,26 @@ def mask_whitelisted(clean_text: str) -> str:
 
 
 # ------------------------------------------------------------------ fact value sets
+# "1.38/1.36 kg": the unit parser reads only the number in front of the unit; the one before "/" shares it.
+_SLASH_PAIR_RE = re.compile(r"(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)(\s*[A-Za-z%]+|\s*[^\x00-\x7f\s\d/，。；、]{1,2})")
+
+
+def _slash_pair_values(text: str) -> list[tuple[float, str]]:
+    out: list[tuple[float, str]] = []
+    for m in _SLASH_PAIR_RE.finditer(units.nfkc(text or "")):
+        unit = m.group(3)
+        if units.find_all(m.group(2) + unit):        # only when the second number really carries a unit
+            out += [(v, u) for _, v, u in units.find_all(m.group(1) + unit)]
+    return out
+
+
 def fact_values(fact: Fact) -> list[tuple[float, str]]:
-    """(norm_value, norm_unit) pairs a fact can support; multi-valued facts (16 GB / 32 GB) yield several."""
+    """(norm_value, norm_unit) pairs a fact can support; multi-valued facts (16 GB / 32 GB, 1.38/1.36 kg)
+    yield several."""
     if fact.norm_value is not None and fact.norm_unit:
         return [(fact.norm_value, fact.norm_unit)]
-    return [(v, u) for _, v, u in units.find_all(fact.value or "")]
+    vals = [(v, u) for _, v, u in units.find_all(fact.value or "")]
+    return vals + [p for p in _slash_pair_values(fact.value) if p not in vals]
 
 
 def _variant_ok(fact: Fact, variant: str | None) -> bool:

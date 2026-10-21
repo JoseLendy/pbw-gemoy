@@ -351,3 +351,32 @@ def test_the_judge_sees_the_whole_verbatim_fact_as_the_cited_sentence():
     _llm_layer(p, led, llm)
     cited = llm.user.split("<cited>")[1].split("</cited>")[0]
     assert "更适合经常出差的人；系统兼容是选型前置条件。 -> F13" in cited and "\x00" not in llm.user
+
+
+# ------------------------------------------------------------------ "a/b unit" in one fact (false-positive proof)
+def _ledger_with_slash_weight():
+    import copy
+    from tests.fakes import _f
+    led = copy.deepcopy(fake_ledger())
+    led.facts.append(_f(14, "demobook-14", "angle_7", "design", "两种键盘版本重量约 1.38/1.36 kg",
+                        "两种键盘版本重量约 1.38/1.36 kg", kind="claim", src="卖点与限制.md"))
+    return led
+
+
+def test_both_numbers_of_an_a_slash_b_value_belong_to_the_tagged_fact():
+    """Real 2026-10-23 S01: a combined fact wrote two keyboard weights as 'a/b kg'; the unit parser reads only
+    the number in front of the unit, so 8A called 'a kg [F#]' a tag_mismatch and asked for the single-weight
+    fact's tag too, which then broke the 朋友圈 one-fact rule."""
+    led = _ledger_with_slash_weight()
+    p = fake_post("moments")
+    p.body = ["一种键盘版本约 1.38 kg，另一种约 1.36 kg [F14]。"]
+    issues = check_facts(p, led, {}).issues
+    assert not [i for i in issues if i.code in ("tag_mismatch", "unsupported_number")]
+
+
+def test_a_number_outside_the_slash_pair_is_still_a_mismatch():
+    led = _ledger_with_slash_weight()
+    p = fake_post("moments")
+    p.body = ["一种键盘版本约 1.37 kg [F14]。"]
+    issues = check_facts(p, led, {}).issues
+    assert any(i.code in ("tag_mismatch", "unsupported_number") and "1.37" in (i.span or "") for i in issues)
