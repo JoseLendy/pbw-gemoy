@@ -57,8 +57,15 @@ def promo_reason(promo: dict) -> str:
     return f"全国活动「{promo['name']}」进行中（{promo['start']} 至 {promo['end']}）"
 
 
-def release_reason(launch: dt.date, verified: bool) -> str:
-    return f"新品 {launch.isoformat()} 上市" if verified else "新品资料待总部确认，暂不可生成"
+DEMO_RELEASE_REASON = "总部新品推送（演示流程）"
+
+
+def release_reason(launch: dt.date, verified: bool, kb_launch: Optional[dt.date] = None) -> str:
+    """models.csv launch_date only schedules the card (demo). The date is shown only when the KB states
+    the same date (optional models.csv column kb_launch_date); otherwise the line says it is a demo push."""
+    if not verified:
+        return "新品资料待总部确认，暂不可生成"
+    return f"新品 {launch.isoformat()} 上市" if kb_launch == launch else DEMO_RELEASE_REASON
 
 
 def question_reason(text: str, count: int) -> str:

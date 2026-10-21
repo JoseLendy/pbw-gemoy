@@ -129,8 +129,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
@@ -169,7 +169,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.692
+          "fit": 0.403
         },
         "is_default": false,
         "is_demo": true
@@ -302,8 +302,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
@@ -342,7 +342,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.689
+          "fit": 0.417
         },
         "is_default": false,
         "is_demo": true
@@ -531,8 +531,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "student",
         "segment_label": "学生客群",
@@ -571,7 +571,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.715
+          "fit": 0.419
         },
         "is_default": false,
         "is_demo": true
@@ -641,8 +641,8 @@
         "date": "2026-10-21",
         "slot": "potential",
         "slot_label": "潜力款",
-        "model_id": "matebook-pro-s",
-        "display_name": "HUAWEI MateBook Pro S",
+        "model_id": "matebook-x-pro-ultra",
+        "display_name": "HUAWEI MateBook X Pro 酷睿 Ultra 微绒典藏版",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -760,8 +760,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -800,7 +800,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.711
+          "fit": 0.823
         },
         "is_default": false,
         "is_demo": true
@@ -812,8 +812,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "matebook-pro-s",
-        "display_name": "HUAWEI MateBook Pro S",
+        "model_id": "matebook-x-pro-ultra",
+        "display_name": "HUAWEI MateBook X Pro 酷睿 Ultra 微绒典藏版",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -933,8 +933,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -973,7 +973,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.729
+          "fit": 0.853
         },
         "is_default": false,
         "is_demo": true
@@ -985,8 +985,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "matebook-pro-s",
-        "display_name": "HUAWEI MateBook Pro S",
+        "model_id": "matebook-x-pro-ultra",
+        "display_name": "HUAWEI MateBook X Pro 酷睿 Ultra 微绒典藏版",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -1106,8 +1106,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -1146,7 +1146,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.718
+          "fit": 0.799
         },
         "is_default": false,
         "is_demo": true
@@ -1158,8 +1158,8 @@
         "date": "2026-10-21",
         "slot": "customer_question",
         "slot_label": "顾客问答",
-        "model_id": "matebook-pro-s",
-        "display_name": "HUAWEI MateBook Pro S",
+        "model_id": "matebook-x-pro-ultra",
+        "display_name": "HUAWEI MateBook X Pro 酷睿 Ultra 微绒典藏版",
         "platform": "朋友圈",
         "segment": "office",
         "segment_label": "上班族客群",
@@ -1279,8 +1279,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
@@ -1319,7 +1319,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.554
+          "fit": 0.362
         },
         "is_default": false,
         "is_demo": true
@@ -1508,8 +1508,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
@@ -1548,7 +1548,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.577
+          "fit": 0.388
         },
         "is_default": false,
         "is_demo": true
@@ -1681,8 +1681,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "family",
         "segment_label": "家庭客群",
@@ -1721,7 +1721,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.562
+          "fit": 0.366
         },
         "is_default": false,
         "is_demo": true
@@ -1910,8 +1910,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -1950,7 +1950,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.664
+          "fit": 0.535
         },
         "is_default": false,
         "is_demo": true
@@ -2083,8 +2083,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -2123,7 +2123,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.707
+          "fit": 0.622
         },
         "is_default": false,
         "is_demo": true
@@ -2256,8 +2256,8 @@
         "date": "2026-10-21",
         "slot": "new_release",
         "slot_label": "新品款",
-        "model_id": "matebook-fold-ultimate-design",
-        "display_name": "HUAWEI MateBook Fold 非凡大师",
+        "model_id": "matebook-pro-s",
+        "display_name": "HUAWEI MateBook Pro S",
         "platform": "朋友圈",
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
@@ -2296,7 +2296,7 @@
         "promo": null,
         "question": null,
         "scores": {
-          "fit": 0.674
+          "fit": 0.552
         },
         "is_default": false,
         "is_demo": true

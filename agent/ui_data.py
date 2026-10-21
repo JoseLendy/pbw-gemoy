@@ -12,10 +12,14 @@ shared Deps (one catalog, one ima client) is built for the whole app - never two
     verify_new_product(model_id)          -> None                               agent.recommend.store_data.set_fact_card_status
     reset()                               -> None                               agent.recommend.store_data.reset_demo_state
     last_real_run(card_id)                -> dict | None                        agent.runs.latest_run
-    prepared_post(store_id, date) / clear_prepared(date) -> Phase 5, not merged yet: None / no-op if missing.
+    prepared_post(store_id, date)         -> dict | None                        agent.runs.prepared_post
+    clear_prepared(date)                  -> int                                agent.runs.clear_prepared
 
-Detected once at import; `ACTIVE_PATHS` says which optional (Phase 5) functions are wired, logged at
-startup so the UI can show real-vs-fallback status without ever touching the network itself.
+prepared_post/clear_prepared landed in Phase 5 (PR #4, merged); detected once at import like every
+other optional path, so a future rename/removal degrades to None/0 instead of crashing the UI.
+`ACTIVE_PATHS` is logged at startup so the UI can show real-vs-fallback status without touching the
+network itself. prepared_post/last_real_run return the RAW logged dict (agent.runs._payload shape),
+not a live RunResult - see ui.components.prepared_post_html for why and how it's rendered.
 """
 from __future__ import annotations
 
@@ -60,8 +64,8 @@ def _optional(mod_name: str, attr: str) -> Optional[Callable]:
     return fn
 
 
-_prepared_post_fn = _optional("agent.recommend.store_data", "prepared_post")
-_clear_prepared_fn = _optional("agent.recommend.store_data", "clear_prepared")
+_prepared_post_fn = _optional("agent.runs", "prepared_post")
+_clear_prepared_fn = _optional("agent.runs", "clear_prepared")
 
 ACTIVE_PATHS: dict[str, bool] = {
     "prepared_post": _prepared_post_fn is not None,
@@ -71,25 +75,29 @@ log.info("ui_data: active adapter paths = %s; dev_mode=%s fake_fields=%s",
          ACTIVE_PATHS, DEPS.is_dev_mode, DEPS.fake_fields)
 
 
-def prepared_post(store_id: str, date: Optional[str] = None) -> Optional[Any]:
-    """Phase 5. None until merged, or on any failure - the UI must fall back to the normal card flow."""
+def prepared_post(store_id: str, date: Optional[str] = None) -> Optional[dict]:
+    """The raw logged record (agent.runs._payload shape: {"status", "result", "timestamp", ...}), or
+    None if nothing was prepared for that store/date yet, or on any failure - the UI falls back to the
+    normal card flow either way. Render it with ui.components.prepared_post_html, never as a live post."""
     if _prepared_post_fn is None:
         return None
     try:
         return _prepared_post_fn(store_id, date or today())
-    except Exception as e:  # noqa: BLE001 - a missing/half-built Phase 5 path must never break the UI
+    except Exception as e:  # noqa: BLE001 - a missing/half-built optional path must never break the UI
         log.warning("prepared_post failed: %s", e)
         return None
 
 
-def clear_prepared(date: Optional[str] = None) -> None:
-    """Phase 5. No-op until merged. 重置演示 (plan §8) must NOT call this - prepared posts survive reset."""
+def clear_prepared(date: Optional[str] = None) -> int:
+    """重置演示 (plan §8) must NOT call this - prepared posts survive reset. Returns how many were
+    deleted, or 0 if the path isn't wired or the call failed."""
     if _clear_prepared_fn is None:
-        return
+        return 0
     try:
-        _clear_prepared_fn(date or today())
+        return _clear_prepared_fn(date or today())
     except Exception as e:  # noqa: BLE001
         log.warning("clear_prepared failed: %s", e)
+        return 0
 
 
 # ---------------------------------------------------------------- stores / cards
@@ -152,6 +160,9 @@ def plain_error(e: Exception) -> str:
         return "该资料目录没有访问权限，已跳过。"
     if "timed out" in msg.lower() or "timeout" in msg.lower():
         return "知识库或模型响应超时，请稍后重试。"
+    if (code == 402 or "402" in msg or "insufficient balance" in msg.lower() or "余额不足" in msg
+            or "quota" in msg.lower()):
+        return "模型账户额度不足，请联系管理员充值后重试。"
     if "LLM" in msg or "openai" in msg.lower() or "api key" in msg.lower():
         return "模型服务暂时不可用，请稍后重试。"
     if "node" in msg.lower() and "not found" in msg.lower():

@@ -33,6 +33,8 @@ DEFAULT_FACT_TEMPERATURE = 0.0
 DEFAULT_WRITER_TEMPERATURE = 0.85
 DEFAULT_CHECK_TEMPERATURE = 0.0
 JSON_RETRIES = 2
+RATE_RETRIES = 2            # 429 / timeout / 5xx: retried with backoff, each retry logged
+RATE_BACKOFF = (2.0, 6.0)   # seconds before retry 1, 2
 
 
 def _env_temperature(name: str, default: float) -> float:
@@ -166,11 +168,13 @@ class LLM:
             from openai import OpenAI  # type: ignore
         except ImportError as e:  # pragma: no cover
             raise LLMConfigError("缺少依赖 openai，请执行 pip install -r requirements.txt") from e
-        self._client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
+        # max_retries=0: rate-limit / timeout retries happen in _create, with backoff and a log line.
+        self._client = OpenAI(base_url=base_url, api_key=api_key, timeout=timeout, max_retries=0)
         self.timings: dict[str, float] = {}
         self.calls: list[dict] = []          # {"stage", "model", "seconds", "ok", "json_retries"}; never content
         self._json_mode_ok: dict[str, bool] = {}   # per model: does response_format work?
         self._temperature_ignored = False    # set once if the model rejects the temperature parameter
+        self.rate_retries = 0                # 429 / timeout / 5xx retries taken (logged; never content)
 
     # ------------------------------------------------------------------ helpers
     @staticmethod
@@ -182,13 +186,30 @@ class LLM:
         self.timings[stage or "unnamed"] = self.timings.get(stage or "unnamed", 0.0) + dt
         self.calls.append({"stage": stage, "model": model, "seconds": round(dt, 3), "ok": ok,
                            "json_retries": retries})
+        from agent.timing import add
+        add(f"llm.{stage or 'unnamed'}", dt)     # per-run attribution (no-op outside a pipeline run)
+
+    def _call(self, params: dict[str, Any]) -> str:
+        """One completion; 429 / timeout / 5xx are retried RATE_RETRIES times with backoff and logged."""
+        for attempt in range(RATE_RETRIES + 1):
+            try:
+                r = self._client.chat.completions.create(**params)
+                return r.choices[0].message.content or ""
+            except Exception as e:  # noqa: BLE001
+                if attempt >= RATE_RETRIES or not _is_transient(e):
+                    raise
+                wait = RATE_BACKOFF[min(attempt, len(RATE_BACKOFF) - 1)]
+                log.warning("LLM %s (model %s): retry %d/%d in %.0fs", type(e).__name__, params.get("model", ""),
+                            attempt + 1, RATE_RETRIES, wait)
+                self.rate_retries += 1
+                time.sleep(wait)
+        raise AssertionError("unreachable")
 
     def _create(self, params: dict[str, Any]) -> str:
         """One API call. A model that rejects `temperature` is retried without it, once per model."""
         model = params.get("model", "")
         try:
-            r = self._client.chat.completions.create(**params)
-            return r.choices[0].message.content or ""
+            return self._call(params)
         except Exception as e:  # noqa: BLE001
             if "temperature" not in params or not _looks_like_unsupported_temperature(e):
                 raise
@@ -196,8 +217,7 @@ class LLM:
                 log.warning("model %s rejects temperature; sending it without one from now on", model)
                 self._temperature_ignored = True
             params = {k: v for k, v in params.items() if k != "temperature"}
-            r = self._client.chat.completions.create(**params)
-            return r.choices[0].message.content or ""
+            return self._call(params)
 
     def _complete(self, messages: list[dict], model: str, temperature: float,
                   json_mode: bool, **kw: Any) -> str:
@@ -260,6 +280,15 @@ class LLM:
         """Safe for the UI: no key characters."""
         return {"configured": True, "model": self.model, "model_fast": self.model_fast,
                 "api_key": "已配置"}
+
+
+def _is_transient(e: Exception) -> bool:
+    """Rate limit (429), timeout / connection error or a 5xx: worth retrying after a pause."""
+    status = getattr(e, "status_code", None)
+    if isinstance(status, int):                 # an HTTP answer: only 429 and 5xx are worth retrying
+        return status == 429 or status >= 500   # (402 balance / 4xx are final; "429" may sit in a request id)
+    name = type(e).__name__.lower()
+    return any(k in name for k in ("ratelimit", "timeout", "connection"))
 
 
 def _looks_like_unsupported_param(e: Exception) -> bool:

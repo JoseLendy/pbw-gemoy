@@ -1,12 +1,11 @@
 """
-agent.ui_data (Phase 3 UI adapter). Fakes only; no ima, no LLM, no network. Covers: the adapter works
-with and without the optional Phase 5 functions, DEMO_TODAY is used instead of the system clock, and
-reset() never touches prepared posts.
+agent.ui_data (Phase 3 UI adapter). Fakes only; no ima, no LLM, no network. Covers: the adapter degrades
+gracefully if an optional backend hook ever goes missing again, DEMO_TODAY is used instead of the
+system clock, and reset() never touches prepared posts.
 """
 from __future__ import annotations
 
 import dataclasses
-import importlib
 
 import pytest
 
@@ -102,9 +101,9 @@ def test_compare_delegates_to_generate_batch_and_keys_by_store():
 
 # ---------------------------------------------------------------- HQ verify / reset
 def test_verify_new_product_unlocks_the_fact_card():
-    model_id = "matebook-fold-ultimate-design"
     before = next((c for c in ui_data.get_cards("S01", TODAY) if c.slot == "new_release"), None)
     assert before is not None and before.locked and before.locked_reason == "fact_card_draft"
+    model_id = before.model_id   # whichever model is the draft new release today (models.csv may be remapped)
     ui_data.verify_new_product(model_id)
     assert fact_card_overrides().get(model_id) == "verified"
     after = next((c for c in ui_data.get_cards("S01", TODAY) if c.slot == "new_release"), None)
@@ -114,37 +113,48 @@ def test_verify_new_product_unlocks_the_fact_card():
 def test_reset_clears_backend_overrides_but_never_touches_optional_clear_prepared(monkeypatch):
     calls = []
     monkeypatch.setattr(ui_data, "clear_prepared", lambda *a, **k: calls.append(a))
-    ui_data.verify_new_product("matebook-fold-ultimate-design")
+    new_release = next(c for c in ui_data.get_cards("S01", TODAY) if c.slot == "new_release")
+    ui_data.verify_new_product(new_release.model_id)
     assert fact_card_overrides()
     ui_data.reset()
     assert fact_card_overrides() == {}
     assert calls == []   # reset() must never call clear_prepared - prepared posts survive a retake
 
 
-# ---------------------------------------------------------------- optional Phase 5 hooks (not merged yet)
-def test_prepared_post_falls_back_to_none_when_phase5_is_not_merged():
+# ---------------------------------------------------------------- prepared posts (agent.runs, Phase 5)
+def test_active_paths_reports_prepared_post_and_clear_prepared_as_wired():
+    """They landed for real in PR #4 (Phase 5); ACTIVE_PATHS still does the detection so a future
+    rename/removal would degrade instead of crashing the UI, the way every optional path here does."""
+    assert ui_data.ACTIVE_PATHS == {"prepared_post": True, "clear_prepared": True}
+
+
+def test_prepared_post_returns_none_when_nothing_was_prepared_yet():
     assert ui_data.prepared_post("S01", TODAY) is None
 
 
-def test_clear_prepared_falls_back_to_a_noop_when_phase5_is_not_merged():
-    ui_data.clear_prepared(TODAY)   # must not raise
+def test_clear_prepared_returns_zero_when_nothing_was_prepared_yet():
+    assert ui_data.clear_prepared(TODAY) == 0
 
 
-def test_optional_hooks_are_detected_when_present():
-    """Not using the monkeypatch fixture here: adding then deleting the SAME attribute name needs to
-    happen on our own schedule (reload in between), which the fixture's auto-undo can't give us."""
-    import agent.recommend.store_data as store_data
+def test_prepared_post_delegates_to_the_real_agent_runs_function(monkeypatch):
+    monkeypatch.setattr(ui_data, "_prepared_post_fn",
+                        lambda store_id, date: {"store_id": store_id, "date": date})
+    assert ui_data.prepared_post("S01", TODAY) == {"store_id": "S01", "date": TODAY}
 
-    store_data.prepared_post = lambda store_id, date: {"fake": True}
-    store_data.clear_prepared = lambda date: None
-    try:
-        importlib.reload(ui_data)
-        assert ui_data.ACTIVE_PATHS == {"prepared_post": True, "clear_prepared": True}
-        assert ui_data.prepared_post("S01", TODAY) == {"fake": True}
-    finally:
-        del store_data.prepared_post
-        del store_data.clear_prepared
-        importlib.reload(ui_data)   # restore the fallback state for every test after this one
+
+def test_clear_prepared_delegates_and_returns_the_deleted_count(monkeypatch):
+    monkeypatch.setattr(ui_data, "_clear_prepared_fn", lambda date: 3)
+    assert ui_data.clear_prepared(TODAY) == 3
+
+
+def test_prepared_post_falls_back_to_none_if_the_hook_ever_goes_missing_again(monkeypatch):
+    monkeypatch.setattr(ui_data, "_prepared_post_fn", None)
+    assert ui_data.prepared_post("S01", TODAY) is None
+
+
+def test_clear_prepared_falls_back_to_zero_if_the_hook_ever_goes_missing_again(monkeypatch):
+    monkeypatch.setattr(ui_data, "_clear_prepared_fn", None)
+    assert ui_data.clear_prepared(TODAY) == 0
 
 
 # ---------------------------------------------------------------- last_real_run
@@ -163,3 +173,10 @@ def test_plain_error_recognises_the_quota_code():
     e = RuntimeError("quota exceeded")
     e.code = 220021
     assert "已达上限" in ui_data.plain_error(e)
+
+
+def test_plain_error_turns_a_402_balance_error_into_a_friendly_message():
+    msg = ui_data.plain_error(RuntimeError(
+        "Error code: 402 - {'error': {'message': 'Insufficient Balance', 'code': 'invalid_request_error'}}"))
+    assert "额度不足" in msg
+    assert "Insufficient Balance" not in msg and "invalid_request_error" not in msg

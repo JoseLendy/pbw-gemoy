@@ -5,16 +5,14 @@ no ima, no LLM, no network.
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass
-from typing import Any
 
 import pytest
 
 from agent.pipeline import Deps, run_from_card
 from agent.recommend.store_data import default_card, reload
 from agent.schemas import (
-    BaselineResult, CardReason, Clarification, EditBlocked, LockedResult, NeedsHuman, RecommendationCard,
-    StaffContext,
+    BaselineResult, CardReason, CheckIssue, CheckReport, Clarification, EditBlocked, FailingSentence,
+    NeedsHuman, NeedsReview, RecommendationCard, StaffContext,
 )
 from ui import components as C
 
@@ -94,14 +92,13 @@ def test_fresh_session_has_the_expected_shape_and_a_unique_id():
 
 
 # ---------------------------------------------------------------- result classification
-@dataclass
-class NeedsReview:
-    """Stand-in for the Phase 5 type (not merged into schemas.py yet): "carries the card, the best
-    draft, failing sentences + reasons" per the Phase 3 task brief."""
-    card: Any
-    best_draft: str
-    failing_sentences: list
-    reasons: list
+# NeedsReview landed for real in Phase 5 (docs/UI_BACKEND_CONTRACT.md): card, draft (a RunResult, its
+# post must not be published), failing (list[FailingSentence]), message, attempts.
+def _needs_review(card) -> NeedsReview:
+    draft = run_from_card(card, Deps.fake())
+    failing = [FailingSentence(field="body[0]", sentence="问题句子。", stage="8A",
+                               code="unsupported_number", reason="未命中事实台账")]
+    return NeedsReview(card=card, draft=draft, failing=failing, attempts=[card.card_id])
 
 
 def test_result_kind_classifies_every_known_type():
@@ -116,31 +113,22 @@ def test_result_kind_classifies_every_known_type():
         (BaselineResult(card_id="c", model_id="m", platform="朋友圈", prompt="p", text="t", display_text="【x】t"),
          "baseline"),
         (Clarification(questions=[]), "clarification"),
-        (NeedsReview(card=card, best_draft="草稿", failing_sentences=["这句话"], reasons=["未命中事实"]),
-         "needs_review"),
+        (_needs_review(card), "needs_review"),
         (object(), "unknown"),
     ]
     for result, expected in cases:
         assert C.result_kind(result) == expected, expected
 
 
-def test_fallback_note_only_fires_for_next_card():
+def test_fallback_note_matches_the_backend_contract_wording():
     class _R:
         pass
     r = _R()
     assert C.fallback_note(r) is None
     r.fallback = "trimmed"
-    assert C.fallback_note(r) is None
+    assert C.fallback_note(r) == "已删去未通过核验的句子"
     r.fallback = "next_card"
-    assert C.fallback_note(r) == "今日主推暂不可用，已为你准备下一条"
-
-
-def test_needs_review_view_extracts_best_effort_fields():
-    card = _demo_card()
-    stub = NeedsReview(card=card, best_draft="草稿文本", failing_sentences=["问题句子"], reasons=["未命中事实台账"])
-    v = C.needs_review_view(stub)
-    assert v["card"] is card and v["draft"] == "草稿文本"
-    assert v["failing"] == ["问题句子"] and v["reasons"] == ["未命中事实台账"]
+    assert C.fallback_note(r) == "今日一条未通过核验，已换成下一条推荐"
 
 
 # ---------------------------------------------------------------- HTML render panels
@@ -157,12 +145,64 @@ def test_stop_html_escapes_the_message():
     assert "<script>" not in out and "&lt;script&gt;" in out
 
 
-def test_needs_review_html_highlights_the_failing_sentence():
-    stub = NeedsReview(card=_demo_card(), best_draft="开头。问题句子。结尾。",
-                       failing_sentences=["问题句子。"], reasons=["未命中事实台账"])
+def test_needs_review_html_lists_the_message_and_each_failing_reason():
+    stub = _needs_review(_demo_card())
     out = C.needs_review_html(stub)
-    assert '<span class="flag">问题句子。</span>' in out
-    assert "未命中事实台账" in out
+    assert stub.message in out   # plain ASCII/CJK message, no HTML-special chars to escape
+    assert "未命中事实台账" in out and "问题句子。" in out
+
+
+def test_phone_html_on_a_needs_review_draft_highlights_the_failing_span():
+    """needs_review_html only lists reasons; the draft's own check-failure spans get highlighted by the
+    existing phone_html(.flag) mechanism when the UI renders result.draft, not by needs_review_html."""
+    result = run_from_card(_demo_card(), Deps.fake())
+    flagged = dataclasses.replace(
+        result, report=CheckReport([CheckIssue(stage="8A", severity="error", code="unsupported_number",
+                                               message="未命中事实台账", span=result.post.body[0][:6])]))
+    out = C.phone_html(flagged)
+    assert '<span class="flag">' in out
+
+
+# ---------------------------------------------------------------- prepared / last-real-run raw payloads
+def _run_result_payload(fallback=None) -> dict:
+    return {"status": "RunResult",
+           "result": {"post": {"title": "标题[F1]", "intro": "导语", "body": ["正文[F2]"], "cta": "到店",
+                               "images": []}, "fallback": fallback}}
+
+
+def _needs_review_payload() -> dict:
+    return {"status": "NeedsReview",
+           "result": {"card": {}, "draft": {"post": {"title": "草稿标题", "intro": "", "body": ["问题句子。"],
+                                                     "cta": "到店", "images": []}},
+                      "failing": [{"field": "body[0]", "sentence": "问题句子。", "stage": "8A",
+                                  "code": "unsupported_number", "reason": "未命中事实台账"}],
+                      "message": "需人工确认：自动核验未通过，已列出未通过的句子和原因"}}
+
+
+def test_prepared_payload_view_distinguishes_run_result_and_needs_review():
+    v = C.prepared_payload_view(_run_result_payload("trimmed"))
+    assert v["is_review"] is False and v["fallback"] == "trimmed" and v["post"]["title"] == "标题[F1]"
+    v = C.prepared_payload_view(_needs_review_payload())
+    assert v["is_review"] is True and v["post"]["title"] == "草稿标题"
+    assert v["failing"][0]["reason"] == "未命中事实台账"
+
+
+def test_prepared_post_html_shows_the_fallback_note_for_a_passing_record():
+    out = C.prepared_post_html(_run_result_payload("next_card"))
+    assert "今日一条未通过核验，已换成下一条推荐" in out
+    assert "[F1]" not in out and "[F2]" not in out
+
+
+def test_prepared_post_html_shows_needs_review_banner_without_the_non_fresh_disclaimer():
+    out = C.prepared_post_html(_needs_review_payload())
+    assert "需人工确认" in out and "未命中事实台账" in out
+    assert "非本次生成" not in out   # that disclaimer is last_real_run_html's alone
+
+
+def test_prepared_pub_text_is_empty_for_needs_review_but_filled_for_a_pass():
+    assert C.prepared_pub_text(_needs_review_payload()) == ""
+    text = C.prepared_pub_text(_run_result_payload())
+    assert "[F1]" not in text and "标题" in text and "到店" in text
 
 
 def test_last_real_run_html_shows_the_timestamp_and_strips_fact_tags():

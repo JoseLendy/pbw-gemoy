@@ -18,7 +18,8 @@ from agent.schemas import RunResult
 from ui.components import (
     LOCKED_LABEL, SLOT_LABELS, banner_html, card_locked_label, default_card_of, fallback_note,
     fresh_session, last_real_run_html, needs_review_html, other_cards, phone_html, placeholder_png,
-    reason_badges, result_kind, role_notice, stop_html, store_choices, talk_card_html,
+    prepared_post_html, prepared_pub_text, reason_badges, result_kind, role_notice, stop_html,
+    store_choices, talk_card_html,
 )
 
 STORES = ui_data.list_stores()
@@ -27,8 +28,17 @@ DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "hwpc_downloads"
 
 
 class _RecoveryDisplay:
-    """UI-only sentinel: last_real_run() payload shown in place of a fresh result, always labelled
-    with its own timestamp (plan Stage 1: "never present it as a fresh run")."""
+    """UI-only sentinel: last_real_run() raw payload shown in place of a fresh result after a failed
+    generate(), always labelled with its own timestamp (never presented as a fresh run). Excluded from
+    "has a result" so the action button still reads 生成, not 重新生成."""
+
+    def __init__(self, payload: dict):
+        self.payload = payload
+
+
+class _PreparedDisplay:
+    """UI-only sentinel: agent.ui_data.prepared_post()'s raw payload, shown as today's content as-is
+    (「今日已为你准备好」). Counts as "has a result" - the action button reads 重新生成 (live)."""
 
     def __init__(self, payload: dict):
         self.payload = payload
@@ -92,7 +102,7 @@ def _load_store(session: dict, store_id: str) -> None:
     if default is not None:
         prepared = ui_data.prepared_post(store_id)
         if prepared is not None:
-            session["results"][default.card_id] = prepared
+            session["results"][default.card_id] = _PreparedDisplay(prepared)
             session["prepared"] = True
 
 
@@ -136,10 +146,17 @@ def _render(session: dict) -> tuple:
         result = results.get(cid)
         if isinstance(result, _RecoveryDisplay):
             status_box = last_real_run_html(result.payload)
+            pub_text = prepared_pub_text(result.payload)
+        elif isinstance(result, _PreparedDisplay):
+            status_box = prepared_post_html(result.payload, ui_data.DEPS)
+            pub_text = prepared_pub_text(result.payload)
         elif result is not None:
             kind = result_kind(result)
             note = fallback_note(result)
             if note:
+                if getattr(result, "fallback", None) == "next_card":
+                    actual = SLOT_LABELS.get(getattr(result.task, "slot", None), "")
+                    note = f"{note}（{actual}）" if actual else note
                 status_box = f'<div class="hw-banner note">ℹ️ {html.escape(note)}</div>'
             if kind == "run_result":
                 talk_out = talk_card_html(result)
@@ -153,6 +170,9 @@ def _render(session: dict) -> tuple:
                 status_box += stop_html(result.message)
             elif kind == "needs_review":
                 status_box += needs_review_html(result)
+                draft = getattr(result, "draft", None)
+                if isinstance(draft, RunResult):
+                    phone_out = phone_html(draft, ui_data.DEPS)   # read-only: pub_text stays empty, no copy
             elif kind == "baseline":
                 status_box += f'<div class="hw-banner note">{html.escape(result.display_text)}</div>'
 
@@ -221,8 +241,9 @@ def _do_edit(session: dict, instruction: str):
     if card is None:
         return (*_render(session), session)
     prev = session.get("results", {}).get(cid)
-    if prev is None or isinstance(prev, _RecoveryDisplay):
-        session["edit_message"] = (cid, "请先生成一条内容。")
+    if prev is None or isinstance(prev, (_RecoveryDisplay, _PreparedDisplay)):
+        msg = "请先点击「重新生成」。" if isinstance(prev, _PreparedDisplay) else "请先生成一条内容。"
+        session["edit_message"] = (cid, msg)
         return (*_render(session), session)
     try:
         result = ui_data.edit(prev, instruction)

@@ -19,7 +19,8 @@ from uuid import uuid4
 
 from agent.formatter import strip_fact_tags
 from agent.schemas import (
-    BaselineResult, EditBlocked, LockedResult, NeedsHuman, RecommendationCard, RunResult, StaffContext,
+    BaselineResult, EditBlocked, LockedResult, NeedsHuman, NeedsReview, RecommendationCard, RunResult,
+    StaffContext,
 )
 
 # ---------------------------------------------------------------- stores / slots / role rule (pure data)
@@ -73,12 +74,16 @@ def fresh_session() -> dict:
 
 
 # ---------------------------------------------------------------- result classification
+# docs/UI_BACKEND_CONTRACT.md (Phase 5, T4): run_from_card / generate_batch / prepare_today all return
+# one of these per card.
 def result_kind(result: Any) -> str:
     """run_result / locked / needs_human / needs_review / edit_blocked / baseline / clarification /
-    unknown. NeedsReview doesn't exist in schemas.py yet (Phase 5, not merged): detected by class name
-    first, then by shape (carries `card` + a draft field), so this keeps working once it lands."""
+    unknown. NeedsReview is isinstance-checked first; the duck-typed fallback only guards against a
+    future rename, the way every other optional path in this app degrades instead of crashing."""
     if isinstance(result, RunResult):
         return "run_result"
+    if isinstance(result, NeedsReview):
+        return "needs_review"
     if isinstance(result, LockedResult):
         return "locked"
     if isinstance(result, EditBlocked):
@@ -87,30 +92,32 @@ def result_kind(result: Any) -> str:
         return "needs_human"
     if isinstance(result, BaselineResult):
         return "baseline"
-    name = type(result).__name__
-    if name == "NeedsReview" or (hasattr(result, "card") and
-                                 (hasattr(result, "best_draft") or hasattr(result, "draft"))):
+    if hasattr(result, "card") and hasattr(result, "draft") and hasattr(result, "failing"):
         return "needs_review"
     if hasattr(result, "questions"):
         return "clarification"
     return "unknown"
 
 
+# RunResult.fallback (docs/UI_BACKEND_CONTRACT.md): None | "trimmed" | "next_card".
+FALLBACK_NOTES = {"trimmed": "已删去未通过核验的句子", "next_card": "今日一条未通过核验，已换成下一条推荐"}
+
+
 def fallback_note(result: Any) -> Optional[str]:
-    """Results may carry fallback = "trimmed" | "next_card" (Phase 5, optional). Only "next_card" gets
-    its own note here; "trimmed" is mentioned only inside 四、核验结果, already covered by report/pending."""
-    return "今日主推暂不可用，已为你准备下一条" if getattr(result, "fallback", None) == "next_card" else None
+    return FALLBACK_NOTES.get(getattr(result, "fallback", None))
 
 
-def needs_review_view(result: Any) -> dict:
-    """Best-effort extraction for a NeedsReview stand-in, before/after Phase 5 lands: card, the best
-    draft text, the failing sentences (highlighted like a check-failure span) and the reasons given."""
-    draft = getattr(result, "best_draft", None) or getattr(result, "draft", "") or ""
-    failing = (getattr(result, "failing_sentences", None) or getattr(result, "flagged", None)
-              or getattr(result, "failing", None) or [])
-    reasons = getattr(result, "reasons", None) or []
-    return {"card": getattr(result, "card", None), "draft": str(draft),
-            "failing": [str(f) for f in failing], "reasons": [str(r) for r in reasons]}
+def needs_review_html(result: NeedsReview) -> str:
+    """「需人工确认」 panel: result.message + each FailingSentence's reason (and the offending sentence
+    where one was located). The draft itself is rendered separately via phone_html(result.draft, deps) -
+    its own check-failure spans already get the .flag highlight."""
+    li = "".join(
+        f"<li>[{html.escape(f.stage)}] " + (f"「{html.escape(f.sentence)}」" if f.sentence
+                                            else html.escape(f.field or "")) +
+        f" — {html.escape(f.reason)}</li>"
+        for f in (getattr(result, "failing", None) or []))
+    return (f'<div class="hw-banner err">⛔ {html.escape(result.message)}'
+           + (f"<ul>{li}</ul>" if li else "") + '</div>')
 
 
 # ---------------------------------------------------------------- HTML render panels (moved from app.py)
@@ -257,28 +264,71 @@ def stop_html(msg: str, title: str = "已停止输出，需人工确认") -> str
     return f'<div class="hw-stop"><b>⛔ {html.escape(title)}</b><div style="margin-top:6px">{html.escape(msg)}</div></div>'
 
 
-def needs_review_html(result: Any) -> str:
-    """NeedsReview (Phase 5, stand-in until merged): 需人工确认 with failing sentences highlighted."""
-    v = needs_review_view(result)
-    draft = html.escape(v["draft"])
-    for f in v["failing"]:
-        if f:
-            draft = draft.replace(html.escape(f), f'<span class="flag">{html.escape(f)}</span>')
-    reasons = "".join(f"<li>{html.escape(r)}</li>" for r in v["reasons"])
-    return ('<div class="hw-banner err">⛔ 需人工确认<div style="margin:6px 0;white-space:pre-wrap">'
-           f'{draft}</div>' + (f"<ul>{reasons}</ul>" if reasons else "") + '</div>')
+# ---------------------------------------------------------------- raw logged-dict payloads
+# agent.runs.prepared_post() and agent.runs.last_real_run() both hand back the RAW logged record
+# (agent.runs._payload shape: {"status": type(result).__name__, "result": result.to_dict(), ...}) -
+# never a live RunResult/NeedsReview, so these render straight from the dict (no Ledger.get(), no
+# live image plan) and are shared by 「今日已为你准备好」 and the real-run-recovery fallback.
+def prepared_payload_view(payload: dict) -> dict:
+    """{"post": dict, "is_review": bool, "failing": list[dict], "message": str, "fallback": str|None}."""
+    result_dict = payload.get("result") or {}
+    is_review = (payload.get("status") == "NeedsReview"
+                or ("draft" in result_dict and "failing" in result_dict))
+    if is_review:
+        draft = result_dict.get("draft") or {}
+        return {"post": draft.get("post") or {}, "is_review": True,
+               "failing": result_dict.get("failing") or [],
+               "message": result_dict.get("message") or "需人工确认", "fallback": None}
+    return {"post": result_dict.get("post") or {}, "is_review": False, "failing": [],
+           "message": "", "fallback": result_dict.get("fallback")}
+
+
+def _post_dict_html(post: dict, deps: Any = None) -> str:
+    strip = lambda t: strip_fact_tags(t or "")  # noqa: E731
+    imgs = post.get("images") or []
+    img_tags = "".join(
+        f'<img src="{image_data_uri(im.get("media_id", ""), im.get("caption") or "图片", deps)}" alt="图片">'
+        for im in imgs if im.get("media_id"))
+    body = "".join(f'<div class="p">{html.escape(strip(b))}</div>' for b in post.get("body") or [])
+    screen = (f'{img_tags}<h2>{html.escape(strip(post.get("title")))}</h2>'
+             f'<div class="p">{html.escape(strip(post.get("intro")))}</div>{body}'
+             f'<div class="cta">{html.escape(strip(post.get("cta")))}</div>')
+    return f'<div class="hw-phone"><div class="screen">{screen}</div></div>'
+
+
+def prepared_post_html(payload: dict, deps: Any = None) -> str:
+    """「今日已为你准备好」: render a prepared-post record as-is (it genuinely is today's content, so
+    no "not a fresh run" disclaimer - that's only for last_real_run_html's recovery case below)."""
+    v = prepared_payload_view(payload)
+    out = _post_dict_html(v["post"], deps)
+    if v["is_review"]:
+        li = "".join(f"<li>{html.escape(f.get('reason', ''))}" +
+                     (f"：「{html.escape(f.get('sentence'))}」" if f.get("sentence") else "") + "</li>"
+                     for f in v["failing"])
+        return (f'<div class="hw-banner err">⛔ {html.escape(v["message"])}'
+               + (f"<ul>{li}</ul>" if li else "") + "</div>") + out
+    note = FALLBACK_NOTES.get(v["fallback"])
+    if note:
+        out = f'<div class="hw-banner note">ℹ️ {html.escape(note)}</div>' + out
+    return out
+
+
+def prepared_pub_text(payload: dict) -> str:
+    """Publishable copy text for a prepared/last-real-run record; empty for a NeedsReview record (no
+    copy button for unreviewed content, per docs/UI_BACKEND_CONTRACT.md)."""
+    v = prepared_payload_view(payload)
+    if v["is_review"]:
+        return ""
+    strip = lambda t: strip_fact_tags(t or "")  # noqa: E731
+    post = v["post"]
+    parts = [strip(post.get("title")), strip(post.get("intro")), *[strip(b) for b in post.get("body") or []],
+            strip(post.get("cta"))]
+    return "\n\n".join(p for p in parts if p)
 
 
 def last_real_run_html(payload: dict) -> str:
     """Fallback panel for ui_data.last_real_run(): never presented as a fresh run - the label and the
-    original timestamp are always shown together."""
-    res = payload.get("result") or {}
-    post = res.get("post") or {}
-    strip = lambda t: strip_fact_tags(t or "")  # noqa: E731
-    body = "".join(f'<div class="p">{html.escape(strip(b))}</div>' for b in post.get("body") or [])
+    original timestamp are always shown together, on top of the same dict rendering as a prepared post."""
     ts = payload.get("timestamp", "")
     return (f'<div class="hw-banner warn">⏱ 以下为最近一次真实运行结果（非本次生成）· 时间：{html.escape(ts)}</div>'
-           f'<div class="hw-phone"><div class="screen"><div class="body">'
-           f'<h2>{html.escape(strip(post.get("title")))}</h2>'
-           f'<div class="p">{html.escape(strip(post.get("intro")))}</div>{body}'
-           f'<div class="cta">{html.escape(strip(post.get("cta")))}</div></div></div></div>')
+           + prepared_post_html(payload))

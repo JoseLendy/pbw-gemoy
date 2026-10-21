@@ -26,8 +26,8 @@ VOICE_TONE = {
 # Opening instruction per hook id (angles.json). The customer hook is special: it may only quote the log.
 HOOK_OPENING = {
     "scene": "开头用一个具体场景切入（时间、地点、正在做的事），不要先列参数。",
-    "question": "开头用一个顾客真实会问的问题切入；全文反问句不超过 1 个。",
-    "myth": "开头先点出常见的误解，再说明资料里的事实；不贬低其他品牌，不做对比。",
+    "question": "开头直接问读者一个问题（用“你”来问）；不要转述成“顾客常问”“很多人问”；全文反问句不超过 1 个。",
+    "myth": "开头用“你可能以为……”点出一个误解，再说明资料里的事实；不写“有人说/常听人说”；不贬低其他品牌，不做对比。",
     "checklist": "开头用清单式引入（例如“买之前先看这几点”），后面每条对应事实编号。",
 }
 CUSTOMER_HOOK = "customer"
@@ -84,7 +84,7 @@ def _detail_block(task) -> list[str]:
     out: list[str] = []
     landmark = getattr(task, "landmark", None)
     if landmark:
-        out.append(f"可以在正文里自然带一次门店位置：{landmark}。最多出现一次，不要重复，也不要写地址细节之外的信息。")
+        out.append(f"正文里要自然带一次门店位置：{landmark}（这是只有本店写得出的细节）。只出现一次，不要写地址细节之外的信息。")
     nickname = getattr(task, "nickname", None)
     if nickname and (getattr(task, "platform", "") == "moments"):
         out.append(f"结尾可以用「{nickname}」署名，只出现一次。")
@@ -124,9 +124,24 @@ def _promo_block(task) -> list[str]:
     return lines
 
 
-def _sales_block() -> list[str]:
-    return ["不得提销量、排名、人气或流行度：不写 热销、爆款、销量第一、卖断货、抢疯了、很多人买 之类说法。",
-            "不得使用“最 / 第一 / 唯一 / 顶级 / 全网 / 首选”等绝对化用语，包括与产品无关的生活描写。"]
+def _claim_block(task) -> list[str]:
+    """Phase 5 eval: the systematic 8A unsupported_claim / 8B false_promise causes, stated up front."""
+    lines = [
+        "只写事实本身，不要从参数推出体验结论或承诺：不写“不费劲”“轻松些”“不用另买转接头”“不用重新适应”"
+        "“按一下就能开机”“一整天够用”这类结果。可以写这个参数在什么场景会用到，感受留给顾客到店自己试。",
+    ]
+    if not getattr(task, "question", None):
+        lines.append("不得转述别人的话或经历：不写“顾客常问”“常听……说”“很多人问”“有人以为”“同学们都说”。")
+    return lines
+
+
+def _release_block(task) -> list[str]:
+    # The card's demo launch_date only schedules it; it is never given to the writer (Phase 5, Task 2).
+    # Only the new-launch scenario pulls the writer toward 新品 wording; 8B blocks it on every card run.
+    if getattr(task, "scenario", None) != "new_launch":
+        return []
+    return ["不得写“新品、首发、新上市、刚发布、即将上市、新款、开售”等说法，也不得写上市或发布日期，"
+            "除非这句话标注了一条明确写有上市/发布信息的事实编号；事实清单里没有这类事实时，一律不写。"]
 
 
 def brief(task) -> str:
@@ -141,8 +156,8 @@ def brief(task) -> str:
     lines += _detail_block(task)
     lines += _angle_block(task)
     lines += _promo_block(task)
-    lines += _sales_block()
-    lines += ["仍然要满足：每个产品说法后标注事实编号 [F#]；不得引用清单外的任何产品信息。"]
+    lines += _claim_block(task)
+    lines += _release_block(task)
     return "\n".join(f"- {line}" for line in lines if line)
 
 

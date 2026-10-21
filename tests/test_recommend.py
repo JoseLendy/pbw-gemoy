@@ -23,7 +23,7 @@ from agent.recommend.store_data import (
 from agent.schemas import LockedResult, RecommendationCard, RunResult, StaffContext, Task
 
 TODAY = dt.date(2026, 10, 21)
-PLANTED = {("S01", "matebook-14-harmonyos"), ("S04", "matebook-pro-s"),
+PLANTED = {("S01", "matebook-14-harmonyos"), ("S04", "matebook-x-pro-ultra"),
            ("S08", "matebook-d-16-se-2024"), ("S10", "matebook-14-harmonyos")}
 BEST_SELLER = "matebook-14-2024"
 
@@ -281,19 +281,20 @@ def test_set_fact_card_status_unlocks_new_release_and_reload_restores():
     reload()
     locked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
     assert locked.locked and locked.locked_reason == "fact_card_draft"
-    set_fact_card_status("matebook-fold-ultimate-design", "verified")
+    set_fact_card_status("matebook-pro-s", "verified")
     unlocked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
     assert not unlocked.locked and unlocked.locked_reason is None
-    assert unlocked.reasons[1].text.startswith("新品 2026-10-28 上市")
+    # the demo launch_date only schedules the card: the KB does not state it, so no date is shown
+    assert unlocked.reasons[1].text == "总部新品推送（演示流程）" and unlocked.reasons[1].is_demo
     # within ±7 days of launch (Oct 23) the verified release becomes every store's 今日一条
     for sid in ("S01", "S04", "S08"):
         assert default_card(sid, dt.date(2026, 10, 23)).slot == "new_release"
     # the file on disk was never touched
     import csv
     rows = list(csv.DictReader((INPUTS / "models.csv").open(encoding="utf-8")))
-    assert next(r for r in rows if r["model_id"] == "matebook-fold-ultimate-design")["fact_card_status"] == "draft"
+    assert next(r for r in rows if r["model_id"] == "matebook-pro-s")["fact_card_status"] == "draft"
     with pytest.raises(ValueError):
-        set_fact_card_status("matebook-fold-ultimate-design", "published")
+        set_fact_card_status("matebook-pro-s", "published")
     reload()
     assert next(c for c in cards_for("S01", TODAY) if c.slot == "new_release").locked
 
@@ -343,3 +344,13 @@ def test_locked_card_returns_without_calling_llm_or_ima(data):
     assert isinstance(res, LockedResult)
     assert res.message == "新品资料待总部确认，暂不可生成" and res.reason == "fact_card_draft"
     assert res.card is locked
+
+
+def test_recording_day_is_a_staff_moments_day_and_weekly_minimums_hold():
+    quota = json.loads((INPUTS / "platform_quota.json").read_text(encoding="utf-8"))
+    rot = quota["rotation"]
+    assert len(rot) == 7 and rot[dt.date(2026, 10, 23).weekday()] == "朋友圈" and rot[0] == "公众号"
+    for platform, n in quota["weekly_minimum"].items():
+        assert rot.count(platform) >= n
+    for sid in ("S01", "S04", "S08", "S02"):
+        assert default_card(sid, dt.date(2026, 10, 23)).platform == "朋友圈"
