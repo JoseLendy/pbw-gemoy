@@ -33,7 +33,8 @@ def _platform_rules(platform: str) -> str:
 
 
 def _fact_line(f) -> str:
-    return f"{f.id} | {f.attribute} | {f.value} | 变体={f.variant} | 来源={f.source_title}"
+    qual = f" | 限定={f.qualifier}" if getattr(f, "qualifier", "") else ""
+    return f"{f.id} | {f.attribute} | {f.value} | 变体={f.variant}{qual} | 来源={f.source_title}"
 
 
 def _usable(ledger: Ledger, strategy: Strategy) -> tuple[list, list]:
@@ -48,7 +49,7 @@ def _usable(ledger: Ledger, strategy: Strategy) -> tuple[list, list]:
 def _boundaries(ledger: Ledger, chosen: list) -> list[str]:
     """Boundary lines for the chosen facts, plus the uncategorised and "other" (model-wide) lines: the same
     selection the 8B judge enforces (checks.compliance.relevant_boundaries), so the writer is never held to a
-    model-wide line ("背光键盘必须绑定 SKU") it was not shown."""
+    model-wide line (e.g. a "bind to the sold SKU" rule) it was not shown."""
     cats = {f.category for f in chosen}
     return [b["text"] for b in ledger.boundaries
             if b.get("category") in cats or not b.get("category") or b.get("category") == "other"]

@@ -120,3 +120,22 @@ def test_writer_prompt_keeps_angle_as_direction_only():
     from agent.llm import load_prompt
     w = load_prompt("writer")
     assert "切入点只给方向" in w and "事实清单没有写的效果或结论" in w
+
+
+# ------------------------------------------------------------------ conditioned facts (2026-10-23: 超级终端 versions, HDMI qualifier)
+def test_writer_prompt_requires_stating_a_facts_condition_or_choosing_another_point():
+    from agent.llm import load_prompt
+    rules = load_prompt("writer")
+    assert "条件" in rules and "换一个卖点" in rules and "变体" in rules
+    # real 2026-10-23 S06: a KB condition was copied with an absolute word and failed 8B banned_word
+    condition_rule = next(line for line in rules.splitlines() if "换一个卖点" in line)
+    assert "写条件时同样不用" in condition_rule and "写成“以官网为准”" in condition_rule
+
+
+def test_writer_fact_line_shows_the_variant_and_qualifier():
+    import copy
+    from agent.writer import _fact_line
+    f = copy.deepcopy(fake_ledger().facts[0])
+    f.variant, f.qualifier = "Windows 版", "以官网为准"
+    line = _fact_line(f)
+    assert "变体=Windows 版" in line and "限定=以官网为准" in line
