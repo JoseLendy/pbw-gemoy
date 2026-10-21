@@ -342,7 +342,9 @@ def _llm_layer(post: Post, ledger: Ledger, llm) -> list[CheckIssue]:
     cited, uncited = [], []
     for field, raw in _fields(post):
         clean, pairs = strip_fact_tags(raw)
-        tagged = {s for s, _ in pairs}
+        # strip_fact_tags keeps the sentence's final 。！？; the split below drops it. Compare without it, or
+        # every tagged sentence is also sent as "uncited" and comes back as a false uncited_claim.
+        tagged = {s.strip("。！？!?；;\n ").strip() for s, _ in pairs}
         for s, fid in pairs:
             f = ledger.get(fid)
             cited.append({"field": field, "sentence": s, "fact_id": fid, "fact": f.value if f else ""})

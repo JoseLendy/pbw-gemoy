@@ -239,3 +239,35 @@ def test_auto_cite_finds_field_when_llm_omits_it():
     p.intro = "宿舍、教室来回跑，多屏协同让课件直接拖到电脑上。"
     new, fixed = auto_cite(p, [_llm_issue("uncited_claim", "", "多屏协同让课件直接拖到电脑上", "F11")], fake_ledger())
     assert fixed and new.intro.endswith("拖到电脑上 [F11]。")
+
+
+# ------------------------------------------------------------------ Phase 5: 8A LLM input (false-positive proof)
+class _CaptureLLM:
+    def __init__(self):
+        self.user = ""
+
+    def chat_json(self, system, user, stage="", **kw):
+        self.user = user
+        return {"issues": []}
+
+
+def _uncited_block(post):
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(post, fake_ledger(), llm)
+    return llm.user.split("<uncited>")[1].split("</uncited>")[0]
+
+
+def test_llm_layer_does_not_list_a_tagged_sentence_as_uncited():
+    """Real 朋友圈 eval: '…70 Wh 额定容量电池 [F32]。' came back as uncited_claim because the tagged set kept
+    the final 。 and the uncited split dropped it, so every tagged sentence was ALSO sent as uncited."""
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。屏幕 14.2 英寸 [F3]！"]
+    assert "1.25 kg" not in _uncited_block(p) and "14.2" not in _uncited_block(p)
+
+
+def test_llm_layer_still_lists_untagged_sentences():
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。一整天不用充电。"]
+    block = _uncited_block(p)
+    assert "一整天不用充电" in block and "1.25 kg" not in block
