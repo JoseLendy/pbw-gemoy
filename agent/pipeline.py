@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import importlib
 import logging
+import os
 import re
 import time
 from collections import defaultdict
@@ -190,12 +191,12 @@ def _collect_pending(strategy: Strategy, plan: ImagePlan, report: CheckReport,
     return out
 
 
-def _sibling_ledgers(deps: Deps, model, on_progress: Progress) -> dict[str, Ledger]:
+def _sibling_ledgers(deps: Deps, model, on_progress: Progress, day: str) -> dict[str, Ledger]:
+    from agent.fact_cache import get_facts
     out: dict[str, Ledger] = {}
     for sid in model.siblings or []:
         try:
-            sb = deps.get_bundle(sid, deps.catalog)
-            out[sid] = deps.build_ledger(sb, deps.llm)
+            out[sid] = get_facts(deps, sid, day)[1]
         except Exception as e:  # a missing sibling must not stop the run
             log.warning("sibling ledger %s failed: %s", sid, e)
             _say(on_progress, "ledger", f"相近型号 {sid} 资料读取失败，8A 将只检查目标型号")
@@ -226,8 +227,10 @@ def _auto_cite(post: Post, errors: list, ledger: Ledger) -> tuple[Post, list]:
 def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibling_ledgers: dict,
                plan: ImagePlan, deps: Deps, on_progress: Progress = None) -> tuple[Post, CheckReport, int]:
     """run_checks → if errors and loops < MAX_LOOPS: rewrite → run_checks again."""
+    from agent.timing import stage
     loops = 0
-    report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
+    with stage("check.pass1"):
+        report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
     n_facts = len(post.selling_points)
     while not report.passed and loops < MAX_LOOPS:
         errors = [i for i in report.issues if i.severity == "error"]
@@ -239,9 +242,11 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
             errors = [i for i in errors if i not in fixed]
         if errors:
             _say(on_progress, "check", f"发现 {len(errors)} 处问题，定向改写（第 {loops + 1} 轮）…")
-            post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
+            with stage(f"check.rewrite{loops + 1}"):
+                post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
         loops += 1
-        report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
+        with stage(f"check.pass{loops + 1}"):
+            report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
     if report.passed:
         _say(on_progress, "check", f"核验 {n_facts} 个事实点 ✓")
         _say(on_progress, "check", "合规检查 ✓")
@@ -302,15 +307,17 @@ def _from_analyze(task: Task, model, bundle: ModelBundle, ledger: Ledger, siblin
 # ---------------------------------------------------------------- run
 def run(text: str, form: dict | None = None, deps: Deps | None = None,
         on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman:
+    from agent.timing import collect
     deps = deps or default_deps()
     timer = _Timer()
-    _say(on_progress, "intake", "理解需求、匹配型号…")
-    parsed = deps.parse_task(text, deps.catalog, form, deps.llm)
-    timer.lap("intake")
-    if isinstance(parsed, Clarification):
-        _say(on_progress, "intake", "还缺少信息，请补充")
-        return parsed
-    return _from_retrieval(parsed, deps, on_progress, timer)
+    with collect(timer.timings):
+        _say(on_progress, "intake", "理解需求、匹配型号…")
+        parsed = deps.parse_task(text, deps.catalog, form, deps.llm)
+        timer.lap("intake")
+        if isinstance(parsed, Clarification):
+            _say(on_progress, "intake", "还缺少信息，请补充")
+            return parsed
+        return _from_retrieval(parsed, deps, on_progress, timer)
 
 
 # ---------------------------------------------------------------- run from a recommendation card
@@ -319,22 +326,23 @@ LOCKED_MESSAGES = {"fact_card_draft": "新品资料待总部确认，暂不可�
 
 def _from_retrieval(task: Task, deps: Deps, on_progress: Progress, timer: _Timer):
     """Stages 3 → 9 for a task whose model_id is already exact (shared by run and run_from_card)."""
+    import datetime as dt
+    from agent.fact_cache import get_facts
     model = deps.catalog.get(task.model_id)
+    day = task.card_date or dt.date.today().isoformat()
     _say(on_progress, "retrieval", f"读取产品资料：{model.canonical_name}…")
-    bundle = deps.get_bundle(task.model_id, deps.catalog)
-    timer.lap("retrieval")
+    bundle, ledger = get_facts(deps, task.model_id, day)     # per (model, date): stores share it (plan §7)
+    timer.lap("retrieval")      # retrieval + ledger for the target model (cached after the first store)
     if bundle.index_status != "complete":
         _say(on_progress, "retrieval", "知识库索引可能不完整（" + bundle.index_status + "）")
-    _say(on_progress, "ledger", "建立事实台账…")
-    ledger = deps.build_ledger(bundle, deps.llm)
     _say(on_progress, "ledger", f"台账 {len(ledger.facts)} 条事实" +
          (f"，{len(ledger.conflicts)} 处冲突" if ledger.conflicts else ""))
     note = _check_variant(task, ledger)
     if note:
         task.notes = [*task.notes, note]
         _say(on_progress, "ledger", note)
-    sibling_ledgers = _sibling_ledgers(deps, model, on_progress)
-    timer.lap("ledger")
+    sibling_ledgers = _sibling_ledgers(deps, model, on_progress, day)
+    timer.lap("ledger")         # variant check + sibling ledgers
     return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
 
 
@@ -363,11 +371,13 @@ def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: Sta
         return result
     from agent.recommend.to_task import card_to_task
     deps = deps or default_deps()
+    from agent.timing import collect
     timer = _Timer()
-    _say(on_progress, "card", f"今日推荐：{card.slot_label} {card.display_name or card.model_id} → {card.platform}")
-    task = card_to_task(card, staff)       # raises ValueError on a staff voice the segment does not allow
-    timer.lap("intake")
-    result = _from_retrieval(task, deps, on_progress, timer)
+    with collect(timer.timings):
+        _say(on_progress, "card", f"今日推荐：{card.slot_label} {card.display_name or card.model_id} → {card.platform}")
+        task = card_to_task(card, staff)       # raises ValueError on a staff voice the segment does not allow
+        timer.lap("intake")
+        result = _from_retrieval(task, deps, on_progress, timer)
     _log_real(card, result, staff, deps)
     return result
 
@@ -388,6 +398,16 @@ class BatchResult:
     similarity: list[SimilarityPair]
     regenerated: list[str] = field(default_factory=list)
     seconds: dict[str, float] = field(default_factory=dict)   # store_id -> wall-clock incl. 8E reruns
+    regen_seconds: dict[str, float] = field(default_factory=dict)   # store_id -> part of that spent on 8E reruns
+    wall_seconds: float = 0.0               # the whole batch (stores run concurrently)
+
+
+def batch_max_workers() -> int:
+    """BATCH_MAX_WORKERS (default 4): stores generated at the same time. 1 = sequential."""
+    try:
+        return max(1, int(os.getenv("BATCH_MAX_WORKERS", "4")))
+    except ValueError:
+        return 4
 
 
 def _batch_text(result) -> str:
@@ -405,11 +425,16 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
     store id): first with the next hook unused by peers today; if still above the threshold, also with
     the next unused angle. Model, platform and facts never change; customer-question cards keep the
     reserved customer hook. Returns final results plus before/after similarity pairs for the UI / eval report.
+
+    The first pass runs stores concurrently (BATCH_MAX_WORKERS, default 4); results keep the input order and
+    a store's exception becomes that store's result. 8E comparison and regeneration run after that pass,
+    sequentially, exactly as before. Same-model stores share one retrieval + ledger (agent.fact_cache).
     """
     from agent.formatter import render_publishable   # noqa: F401  (used by _batch_text)
     from agent.recommend.common import INPUTS, load_json
     from agent.style.similarity import jaccard, similarity_threshold
 
+    t_batch = time.perf_counter()
     deps = deps or default_deps()
     staff_map = staff_map or {}
     raw = list(cards.values()) if isinstance(cards, dict) else list(cards)
@@ -417,19 +442,35 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
     by_store = {c.store_id: c for c in items}
     results: dict[str, Any] = {}
     seconds: dict[str, float] = defaultdict(float)
+    regen_seconds: dict[str, float] = defaultdict(float)
 
-    def timed_run(card):
+    def timed_run(card, regen: bool = False):
         t0 = time.perf_counter()
         try:
             return run_from_card(card, deps, staff_map.get(card.store_id), on_progress)
         finally:
-            seconds[card.store_id] += time.perf_counter() - t0
+            dt_ = time.perf_counter() - t0
+            seconds[card.store_id] += dt_
+            if regen:
+                regen_seconds[card.store_id] += dt_
 
-    for card in items:
+    def safe_run(card):
         try:
-            results[card.store_id] = timed_run(card)
+            return timed_run(card)
         except Exception as e:  # noqa: BLE001 - one store must not abort the batch
-            results[card.store_id] = e
+            log.warning("batch: store %s failed: %s: %s", card.store_id, type(e).__name__, e)
+            return e
+
+    # Stores run concurrently (BATCH_MAX_WORKERS, default 4); results keep the input order.
+    workers = max(1, min(batch_max_workers(), len(items) or 1))
+    if workers == 1:
+        outs = [safe_run(card) for card in items]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            outs = list(ex.map(safe_run, items))
+    for card, out in zip(items, outs):
+        results[card.store_id] = out
 
     groups: dict[str, list[str]] = defaultdict(list)
     for card in items:
@@ -482,7 +523,7 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                     if not hook_changed and next_angle is not None:
                         new_card.angle = next_angle
                     try:
-                        new_result = timed_run(new_card)
+                        new_result = timed_run(new_card, regen=True)
                     except Exception:  # noqa: BLE001 - keep the original result if the rerun fails
                         continue
                     if not isinstance(new_result, RunResult):
@@ -494,7 +535,7 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                         angle_card = copy.deepcopy(new_card)
                         angle_card.angle = next_angle
                         try:
-                            angle_result = timed_run(angle_card)
+                            angle_result = timed_run(angle_card, regen=True)
                         except Exception:  # noqa: BLE001
                             angle_result = None
                         if isinstance(angle_result, RunResult):
@@ -518,7 +559,9 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                 pairs.append(SimilarityPair(seg, a, b, round(jaccard(before, after), 3),
                                             round(jaccard(peer_text(a), peer_text(b)), 3), b in regenerated))
     batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated,
-                        seconds={sid: round(v, 2) for sid, v in seconds.items()})
+                        seconds={sid: round(v, 2) for sid, v in seconds.items()},
+                        regen_seconds={sid: round(v, 2) for sid, v in regen_seconds.items()},
+                        wall_seconds=round(time.perf_counter() - t_batch, 2))
     if deps is not None and not getattr(deps, "is_dev_mode", True):
         try:
             from agent.runs import log_batch
@@ -613,8 +656,14 @@ def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
     if blocked:
         _say(on_progress, "edit", blocked)
         return EditBlocked(instruction=instruction, message=blocked, prev=prev)
+    from agent.timing import collect
     deps = deps or default_deps()
     timer = _Timer()
+    with collect(timer.timings):
+        return _edit_stages(prev, instruction, deps, on_progress, timer)
+
+
+def _edit_stages(prev: RunResult, instruction: str, deps: Deps, on_progress: Progress, timer: _Timer):
     stage, params = classify_edit(instruction, deps.llm)
     task = copy.deepcopy(prev.task)
     model = prev.model
