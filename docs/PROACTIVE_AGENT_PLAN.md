@@ -5,6 +5,7 @@
 > Deadline: **video submission, Fri Oct 23, 17:00**.
 
 **Changelog**
+- **v2.2 (Wed Oct 21, Phase 2):** the 8D blocklist drops its `absolute` group (absolute claims are 8B's job; a bare 最/第一 substring match would false-flag 最近/第一次). Customer-hook wording loses its 最 ("这几天好几位顾客都在问……"). Recommendation cards gain an explicit, calendar-aware `scenario` field (§10.7), so the pipeline no longer guesses a stage from the segment.
 - **v2 (Wed Oct 21):** organizer confirmed we may use fake data. §10 rewritten around a ready-to-run data kit (`scripts/gen_fake_data.py` + templates in `data/demo/inputs/`). Demo promos may now carry demo prices, with a new price-traceability rule (§4.3, §6.5). Affinity scores moved into `models.csv`. Configs are JSON. Amap POI codes verified. Timeline updated.
 - v1 (Tue Oct 20): initial proposal.
 
@@ -206,7 +207,7 @@ Effect: adds a theme to the angle ("购物节前做功课") and a line in the ex
 End-of-day prompt for staff: "今天顾客问了什么？" with **preset chips** (`question_pool.json`, 10 chips) plus optional free text/voice.
 Next day, the most frequent question (ties go to questions that fit the store's audience) becomes a **顾客问答** card, which always uses the "顾客问答开头" hook.
 
-Rule: a post may say "最近常有顾客问……" **only if that question exists in this store's log**. Never fabricate customer quotes or reviews. In the demo the log itself is fake data, which is fine; the rule is about the copy not inventing beyond the log.
+Rule: a post may say "这几天常有顾客问……" **only if that question exists in this store's log**. Never fabricate customer quotes or reviews. In the demo the log itself is fake data, which is fine; the rule is about the copy not inventing beyond the log.
 
 ---
 
@@ -329,7 +330,7 @@ The writer is told: any spec, number, feature or claim **must** reference a fact
 - Template structures: `不仅.{0,20}更` · `无论.{0,20}还是.{0,20}都` · 三连反问
 - Forced slang: 家人们 · 宝子们 · 绝绝子 · 冲鸭 · 闭眼入
 - Sales claims (rule 3): 热销 · 爆款 · 销量第一 · 卖断货
-- Absolute claims: 最 · 第一 · 唯一 · 顶级 · 全网 · 首选
+- Absolute claims (最 · 第一 · 唯一 · 顶级 · 全网 · 首选) are **not** an 8D rule: they belong to 8B (`config/banned_words.txt`), which has no allow rule. 8D must not match bare 最/第一 by substring, or it would false-flag 最近 / 第一次.
 
 Structural rules: ≤ 1 rhetorical question; ≤ 2 parallel sentences in a row; emoji limits per platform; **must include one concrete detail** (landmark, specific scene, or logged customer question).
 

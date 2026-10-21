@@ -8,7 +8,7 @@
   "hooks": [
     {"id": "scene",    "label": "场景开头",   "example": "下午三点的图书馆，插座全被占了……"},
     {"id": "question", "label": "问题开头",   "example": "轻薄本到底要不要带充电器出门？"},
-    {"id": "customer", "label": "顾客问答开头", "example": "最近好几位顾客都在问……", "requires_logged_question": true},
+    {"id": "customer", "label": "顾客问答开头", "example": "这几天好几位顾客都在问……", "requires_logged_question": true},
     {"id": "myth",     "label": "误区澄清",   "example": "很多人以为……其实……"},
     {"id": "checklist","label": "清单式",     "example": "买之前先看这3点"}
   ],

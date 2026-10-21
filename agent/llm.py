@@ -3,26 +3,74 @@ P4: thin OpenAI-compatible LLM client used by every LLM stage.
 
 Env: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL (strong), LLM_MODEL_FAST (fast).
 - chat_json: JSON mode where the endpoint supports it, else extract the first JSON object.
-  2 retries on invalid JSON. Temperature 0.2 for intake/extraction stages, 0.7 for writing.
+  2 retries on invalid JSON.
 - chat_text: same, returns the raw text.
+- Two-temperature design (plan §6.2): facts are locked at 0, only the writer is creative.
+  FACT_TEMPERATURE (default 0)   ledger / extraction / intake / scenario / reconcile
+  WRITER_TEMPERATURE (default 0.85) writer / rewrite / baseline
+  CHECK_TEMPERATURE (default 0)  8A / 8B / 8C / 8D / 8E and any judge stage
 - Per-stage timings are accumulated in self.timings (seconds, summed per stage name).
 - Never logs or prints keys. Missing env raises LLMConfigError with a message the UI can show.
 """
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
 from pathlib import Path
 from typing import Any, Optional
 
-# Stages that extract/classify (low temperature). Everything else is writing (0.7).
-EXTRACTION_STAGES = {"intake", "scenario", "reconcile", "ledger", "extract", "check", "check_facts",
-                     "check_compliance"}
-TEMP_EXTRACT = 0.2
-TEMP_WRITE = 0.7
+log = logging.getLogger("agent.llm")
+
+# Two-temperature design. Stage -> temperature bucket; anything unlisted is a fact stage.
+WRITER_STAGES = {"writer", "rewrite", "baseline"}
+CHECK_STAGES = {"check", "check_facts", "check_compliance", "check_conformance",
+                "8a", "8b", "8c", "8d", "8e", "judge"}
+
+DEFAULT_FACT_TEMPERATURE = 0.0
+DEFAULT_WRITER_TEMPERATURE = 0.85
+DEFAULT_CHECK_TEMPERATURE = 0.0
 JSON_RETRIES = 2
+
+
+def _env_temperature(name: str, default: float) -> float:
+    """Read a temperature from the environment; a bad value falls back to the default (never crashes)."""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        v = float(raw)
+    except ValueError:
+        log.warning("%s=%r is not a number, using %s", name, raw, default)
+        return default
+    if not (0.0 <= v <= 2.0):
+        log.warning("%s=%r is outside [0, 2], using %s", name, raw, default)
+        return default
+    return v
+
+
+def temperatures() -> dict[str, float]:
+    """The three configured temperatures (plan §6.2). Read on each call so tests and the UI can override."""
+    return {
+        "fact": _env_temperature("FACT_TEMPERATURE", DEFAULT_FACT_TEMPERATURE),
+        "writer": _env_temperature("WRITER_TEMPERATURE", DEFAULT_WRITER_TEMPERATURE),
+        "check": _env_temperature("CHECK_TEMPERATURE", DEFAULT_CHECK_TEMPERATURE),
+    }
+
+
+def temperature_for(stage: str, override: float | None = None) -> float:
+    """Temperature for one stage. An explicit override wins; then writer / check / fact buckets."""
+    if override is not None:
+        return override
+    key = (stage or "").split(":")[0].strip().lower()
+    t = temperatures()
+    if key in WRITER_STAGES:
+        return t["writer"]
+    if key in CHECK_STAGES:
+        return t["check"]
+    return t["fact"]
 
 
 class LLMConfigError(RuntimeError):
@@ -122,14 +170,12 @@ class LLM:
         self.timings: dict[str, float] = {}
         self.calls: list[dict] = []          # {"stage", "model", "seconds", "ok", "json_retries"}; never content
         self._json_mode_ok: dict[str, bool] = {}   # per model: does response_format work?
+        self._temperature_ignored = False    # set once if the model rejects the temperature parameter
 
     # ------------------------------------------------------------------ helpers
     @staticmethod
     def _temperature(stage: str, override: float | None) -> float:
-        if override is not None:
-            return override
-        key = (stage or "").split(":")[0].lower()
-        return TEMP_EXTRACT if key in EXTRACTION_STAGES else TEMP_WRITE
+        return temperature_for(stage, override)
 
     def _record(self, stage: str, model: str, t0: float, ok: bool, retries: int = 0) -> None:
         dt = time.perf_counter() - t0
@@ -137,21 +183,38 @@ class LLM:
         self.calls.append({"stage": stage, "model": model, "seconds": round(dt, 3), "ok": ok,
                            "json_retries": retries})
 
+    def _create(self, params: dict[str, Any]) -> str:
+        """One API call. A model that rejects `temperature` is retried without it, once per model."""
+        model = params.get("model", "")
+        try:
+            r = self._client.chat.completions.create(**params)
+            return r.choices[0].message.content or ""
+        except Exception as e:  # noqa: BLE001
+            if "temperature" not in params or not _looks_like_unsupported_temperature(e):
+                raise
+            if not self._temperature_ignored:
+                log.warning("model %s rejects temperature; sending it without one from now on", model)
+                self._temperature_ignored = True
+            params = {k: v for k, v in params.items() if k != "temperature"}
+            r = self._client.chat.completions.create(**params)
+            return r.choices[0].message.content or ""
+
     def _complete(self, messages: list[dict], model: str, temperature: float,
                   json_mode: bool, **kw: Any) -> str:
-        params: dict[str, Any] = dict(model=model, messages=messages, temperature=temperature)
+        params: dict[str, Any] = dict(model=model, messages=messages)
+        if not self._temperature_ignored:
+            params["temperature"] = temperature
         params.update(kw)
         if json_mode and self._json_mode_ok.get(model, True):
             try:
-                r = self._client.chat.completions.create(response_format={"type": "json_object"}, **params)
-                return r.choices[0].message.content or ""
+                r = self._create({**params, "response_format": {"type": "json_object"}})
+                return r
             except Exception as e:  # endpoint/model doesn't support JSON mode -> plain text + extraction
                 if _looks_like_unsupported_param(e):
                     self._json_mode_ok[model] = False
                 else:
                     raise
-        r = self._client.chat.completions.create(**params)
-        return r.choices[0].message.content or ""
+        return self._create(params)
 
     # ------------------------------------------------------------------ public API
     def chat_json(self, system: str, user: str, stage: str = "", fast: bool = False, **kw: Any) -> dict:
@@ -203,3 +266,10 @@ def _looks_like_unsupported_param(e: Exception) -> bool:
     msg = str(e).lower()
     return any(k in msg for k in ("response_format", "json_object", "unsupported", "invalid_request",
                                   "not support", "unknown parameter", "400"))
+
+
+def _looks_like_unsupported_temperature(e: Exception) -> bool:
+    """True when the failure is specifically about the temperature parameter, not some other 400."""
+    msg = str(e).lower()
+    return "temperature" in msg and any(k in msg for k in ("invalid", "unsupported", "not support", "range",
+                                                           "out of", "expected", "unknown parameter", "400"))
