@@ -41,7 +41,9 @@ from ui.components import banner_html, phone_html, placeholder_png, stop_html, t
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    # explicit path: a bare load_dotenv() walks up from the cwd and, in a git worktree under
+    # .claude/worktrees/, loaded the MAIN checkout's .env into test runs (live ima calls).
+    load_dotenv(Path(__file__).resolve().parent / ".env")
 except Exception:
     pass
 
