@@ -16,7 +16,9 @@ from agent.recommend import card_to_task
 from agent.recommend.common import GENERATED, INPUTS
 from agent.recommend.poi import segment_weights
 from agent.recommend.scoring import MAX_INDEX, MIN_FIT, MIN_PEER_UNITS, RECENT_POST_DAYS
-from agent.recommend.store_data import all_cards, cards_for, default_card, load_store_data
+from agent.recommend.store_data import (
+    all_cards, cards_for, default_card, load_store_data, reload, set_fact_card_status,
+)
 from agent.schemas import LockedResult, RecommendationCard, RunResult, StaffContext, Task
 
 TODAY = dt.date(2026, 10, 21)
@@ -26,6 +28,7 @@ BEST_SELLER = "MODEL_F"
 
 @pytest.fixture(scope="module")
 def data():
+    reload()
     return load_store_data()
 
 
@@ -165,7 +168,7 @@ def test_card_to_task_fills_the_intake_fields(data):
     card = default_card("S01", TODAY, data)
     t = card_to_task(card)
     assert isinstance(t, Task)
-    assert t.model_id == card.model_id and t.platform == "moments" and t.scenario == "back_to_school"
+    assert t.model_id == card.model_id and t.platform == "moments" and t.scenario == "campus_daily"
     assert t.audience and t.raw_text and t.source == "card" and t.card_id == card.card_id
     assert (t.hook, t.voice, t.landmark, t.nickname) == ("myth", "senior", "紫金港校区东门对面", card.nickname)
     assert t.angle == card.angle and t.calendar_theme == "购物节前做功课"
@@ -203,7 +206,69 @@ def test_invalid_staff_voice_raises(data):
 
 def test_new_release_card_maps_to_new_launch_scenario(data):
     card = next(c for c in cards_for("S01", TODAY, data) if c.slot == "new_release")
-    assert card_to_task(card).scenario == "new_launch"
+    assert card.scenario == "new_launch" and card_to_task(card).scenario == "new_launch"
+
+
+# ---------------------------------------------------------------- scenario (decision A): calendar-aware
+def test_scenario_is_on_the_card_and_never_back_to_school_outside_the_window(data):
+    s01 = default_card("S01", TODAY, data)
+    assert s01.scenario == "campus_daily" and s01.scenario != "back_to_school"
+    assert default_card("S04", TODAY, data).scenario == "office"
+    # 双十一 within 30 days of Oct 21 → shopper and family stores get holiday
+    assert default_card("S10", TODAY, data).scenario == "holiday"
+    assert default_card("S08", TODAY, data).scenario == "holiday"
+
+
+def test_scenario_by_date(data):
+    from agent.recommend.slots import scenario_for
+    cal = data.calendar
+    inside = dt.date(2027, 2, 20)          # 开学季 2027-02-15 .. 03-10
+    assert scenario_for("potential", "student", cal, inside) == "back_to_school"
+    assert scenario_for("potential", "family", cal, inside) == "back_to_school"
+    assert scenario_for("new_release", "student", cal, inside) == "new_launch"
+    quiet = dt.date(2026, 7, 15)           # no event within 30 days
+    assert scenario_for("potential", "student", cal, quiet) == "campus_daily"
+    assert scenario_for("potential", "shopper", cal, quiet) == "store_visit"
+    assert scenario_for("potential", "family", cal, quiet) == "family_upgrade"
+    assert scenario_for("potential", "office", cal, dt.date(2026, 11, 5)) == "office"   # office never holiday
+    # a campus store in 开学季 really yields back_to_school through cards_for
+    card = default_card("S01", inside, data)
+    assert card.scenario == "back_to_school"
+
+
+def test_card_with_unknown_scenario_is_rejected(data):
+    bad = dataclasses.replace(default_card("S01", TODAY, data), scenario="no_such_key")
+    with pytest.raises(ValueError, match="scenario"):
+        card_to_task(bad)
+
+
+# ---------------------------------------------------------------- cache + HQ fact-card override (decision E)
+def test_load_store_data_is_cached_process_wide():
+    reload()
+    a, b = load_store_data(), load_store_data()
+    assert a is b
+    assert load_store_data(use_cache=False) is not a
+
+
+def test_set_fact_card_status_unlocks_new_release_and_reload_restores():
+    reload()
+    locked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
+    assert locked.locked and locked.locked_reason == "fact_card_draft"
+    set_fact_card_status("MODEL_N", "verified")
+    unlocked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
+    assert not unlocked.locked and unlocked.locked_reason is None
+    assert unlocked.reasons[1].text.startswith("新品 2026-10-28 上市")
+    # within ±7 days of launch (Oct 23) the verified release becomes every store's 今日一条
+    for sid in ("S01", "S04", "S08"):
+        assert default_card(sid, dt.date(2026, 10, 23)).slot == "new_release"
+    # the file on disk was never touched
+    import csv
+    rows = list(csv.DictReader((INPUTS / "models.csv").open(encoding="utf-8")))
+    assert next(r for r in rows if r["model_id"] == "MODEL_N")["fact_card_status"] == "draft"
+    with pytest.raises(ValueError):
+        set_fact_card_status("MODEL_N", "published")
+    reload()
+    assert next(c for c in cards_for("S01", TODAY) if c.slot == "new_release").locked
 
 
 # ---------------------------------------------------------------- pipeline entry
@@ -219,7 +284,7 @@ def test_run_from_card_end_to_end_on_fakes(data):
     r = run_from_card(card, deps, on_progress=lambda s, m: lines.append((s, m)))
     assert isinstance(r, RunResult)
     assert r.task.source == "card" and r.task.model_id == "demobook-14"
-    assert r.post.platform == "moments" and r.task.scenario == "back_to_school"
+    assert r.post.platform == "moments" and r.task.scenario == "campus_daily"
     assert r.task.voice == "senior" and r.task.landmark == "紫金港校区东门对面"
     assert "intake" not in [s for s, _ in lines]          # no intake stage ran
     assert set(r.timings) >= {"retrieval", "ledger", "analyze", "reconcile", "plan", "write", "check", "total"}

@@ -11,6 +11,7 @@
   "segment": "student",
   "segment_label": "学生客群",
   "angle": "宿舍/图书馆场景",
+  "scenario": "campus_daily",
   "calendar_theme": "购物节前做功课",
   "hook": {
     "id": "myth",

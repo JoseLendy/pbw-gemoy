@@ -30,6 +30,7 @@ SCENARIO_SYNONYMS: dict[str, list[str]] = {
     "store_visit": ["到店", "门店"],
     "new_launch": ["新品", "首发"],
     "holiday": ["送礼", "节日", "双十一", "礼物"],
+    "campus_daily": ["校园日常", "期中", "学期中", "图书馆", "宿舍"],
 }
 
 # Ledger attributes whose listed options are SKU configurations (memory/storage size, colour, keyboard, screen).

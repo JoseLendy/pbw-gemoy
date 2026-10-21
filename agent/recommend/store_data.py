@@ -47,9 +47,47 @@ class StoreData:
         return next(m for m in self.models if m["model_id"] == model_id)
 
 
-def load_store_data(inputs_dir: Path = INPUTS, generated_dir: Path = GENERATED) -> StoreData:
-    """Reads inputs/ (templates) and generated/ (sales + logs). POI: real cache first, else the fixture."""
-    inputs_dir, generated_dir = Path(inputs_dir), Path(generated_dir)
+# ---------------------------------------------------------------- process-wide cache + HQ overrides
+_CACHE: dict[tuple[str, str], StoreData] = {}
+_FACT_CARD_STATUS: dict[str, str] = {}      # model_id -> status set by HQ in this process; never written to disk
+FACT_CARD_STATUSES = ("draft", "verified")
+
+
+def set_fact_card_status(model_id: str, status: str) -> None:
+    """HQ "确认发布" (plan §7): in-memory override of models.csv's fact_card_status for this process.
+    Invalidates the cache so the next cards_for() reflects it. Never writes a file."""
+    if status not in FACT_CARD_STATUSES:
+        raise ValueError(f"status must be one of {FACT_CARD_STATUSES}, got {status!r}")
+    _FACT_CARD_STATUS[model_id] = status
+    _CACHE.clear()
+
+
+def fact_card_overrides() -> dict[str, str]:
+    return dict(_FACT_CARD_STATUS)
+
+
+def reload() -> None:
+    """Drop the cache and every in-memory override; the next load reads the files again."""
+    _FACT_CARD_STATUS.clear()
+    _CACHE.clear()
+
+
+def load_store_data(inputs_dir: Path = INPUTS, generated_dir: Path = GENERATED, use_cache: bool = True) -> StoreData:
+    """Reads inputs/ (templates) and generated/ (sales + logs). POI: real cache first, else the fixture.
+    Cached per (inputs_dir, generated_dir) for the process; HQ fact-card overrides are applied on load."""
+    key = (str(Path(inputs_dir).resolve()), str(Path(generated_dir).resolve()))
+    if use_cache and key in _CACHE:
+        return _CACHE[key]
+    data = _read_store_data(Path(inputs_dir), Path(generated_dir))
+    for m in data.models:
+        if m["model_id"] in _FACT_CARD_STATUS:
+            m["fact_card_status"] = _FACT_CARD_STATUS[m["model_id"]]
+    if use_cache:
+        _CACHE[key] = data
+    return data
+
+
+def _read_store_data(inputs_dir: Path, generated_dir: Path) -> StoreData:
     stores = load_csv(inputs_dir / "stores.csv")
     seg_cfg = load_json(inputs_dir / "segments.json")
     overrides = {k: v for k, v in load_json(inputs_dir / "store_profile_overrides.json").items()

@@ -10,7 +10,7 @@ from typing import Optional
 
 from agent.recommend.common import INPUTS, load_json
 from agent.recommend.profiles import check_voice, voices_by_id
-from agent.schemas import RecommendationCard, StaffContext, Task
+from agent.schemas import RecommendationCard, SCENARIO_LABELS, StaffContext, Task
 
 # Chinese label from the weekly rotation → pipeline platform key (schemas.PLATFORM_LABELS inverse + aliases).
 PLATFORM_KEYS = {"朋友圈": "moments", "门店朋友圈": "moments", "小红书": "xiaohongshu", "公众号": "wechat_article",
@@ -18,11 +18,7 @@ PLATFORM_KEYS = {"朋友圈": "moments", "门店朋友圈": "moments", "小红�
                  "moments": "moments", "xiaohongshu": "xiaohongshu", "wechat_article": "wechat_article",
                  "poster": "poster", "douyin": "douyin"}
 
-# Audience segment → the scenario key the existing scenario.yaml / checkers understand.
-SEGMENT_SCENARIO = {"student": "back_to_school", "office": "office", "family": "family_upgrade", "shopper": "holiday"}
-# Slots that override the segment default.
-SLOT_SCENARIO = {"new_release": "new_launch"}
-# Slot → audience phrasing by segment ("audience" is free text for the scenario stage).
+# Segment → audience phrasing ("audience" is free text for the scenario stage).
 SEGMENT_AUDIENCE = {"student": "周边高校的学生", "office": "附近写字楼的上班族", "family": "周边社区的家庭用户",
                     "shopper": "逛街与送礼的顾客"}
 
@@ -32,10 +28,6 @@ def platform_key(label: str) -> str:
         return PLATFORM_KEYS[label]
     except KeyError:
         raise ValueError(f"unknown platform label {label!r}") from None
-
-
-def scenario_for(card: RecommendationCard) -> str:
-    return SLOT_SCENARIO.get(card.slot) or SEGMENT_SCENARIO[card.segment]
 
 
 def _raw_text(card: RecommendationCard) -> str:
@@ -54,6 +46,8 @@ def card_to_task(card: RecommendationCard, staff: Optional[StaffContext] = None,
     override is not allowed for the card's segment (validated against data/demo/inputs/angles.json)."""
     if not card.model_id:
         raise ValueError(f"card {card.card_id} has no model_id")
+    if card.scenario not in SCENARIO_LABELS:
+        raise ValueError(f"card {card.card_id}: scenario {card.scenario!r} is not a known Scenario key")
     angles = angles or load_json(INPUTS / "angles.json")
     voice_id = card.voice.id if card.voice else None
     nickname = card.nickname
@@ -70,7 +64,7 @@ def card_to_task(card: RecommendationCard, staff: Optional[StaffContext] = None,
         product_query=card.display_name,
         model_id=card.model_id,
         audience=SEGMENT_AUDIENCE[card.segment],
-        scenario=scenario_for(card),
+        scenario=card.scenario,
         platform=platform_key(card.platform),
         source="card", card_id=card.card_id, store_id=card.store_id, store_name=card.store_name,
         slot=card.slot, segment=card.segment, hook=card.hook.id if card.hook else None,

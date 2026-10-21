@@ -16,6 +16,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "宿舍/图书馆场景",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "myth",
@@ -71,6 +72,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "上课携带",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -133,6 +135,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "手机平板电脑多设备协同",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -184,6 +187,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "可以先到店试用吗",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -241,6 +245,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "手机平板电脑多设备协同",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "myth",
@@ -303,6 +308,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "手机平板电脑多设备协同",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "checklist",
@@ -354,6 +360,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "能不能跑设计/剪辑软件",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -411,6 +418,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "上课携带",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "myth",
@@ -466,6 +474,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "宿舍/图书馆场景",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -528,6 +537,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "全天续航",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "myth",
@@ -579,6 +589,7 @@
         "segment": "student",
         "segment_label": "学生客群",
         "angle": "能不能跑设计/剪辑软件",
+        "scenario": "campus_daily",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -636,6 +647,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "数据安全",
+        "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -691,6 +703,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "多任务处理",
+        "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -753,6 +766,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "多任务处理",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -804,6 +818,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "数据安全怎么保障",
+        "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -861,6 +876,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "会议与差旅",
+        "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -923,6 +939,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "会议与差旅",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "checklist",
@@ -974,6 +991,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "出差带着重不重",
+        "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -1031,6 +1049,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "多任务处理",
+        "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -1093,6 +1112,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "会议与差旅",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -1144,6 +1164,7 @@
         "segment": "office",
         "segment_label": "上班族客群",
         "angle": "续航能撑一整天吗",
+        "scenario": "office",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -1201,6 +1222,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "上手简单",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -1258,6 +1280,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "上手简单",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -1309,6 +1332,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "能不能和手机/平板互传文件",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -1366,6 +1390,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "全家共用",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "myth",
@@ -1421,6 +1446,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "全家共用",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -1478,6 +1504,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "全家共用",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -1529,6 +1556,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "能不能和手机/平板互传文件",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -1586,6 +1614,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "长期耐用",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -1643,6 +1672,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "旧电脑资料迁移",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "checklist",
@@ -1694,6 +1724,7 @@
         "segment": "family",
         "segment_label": "家庭客群",
         "angle": "学生用够不够",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -1751,6 +1782,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "送礼怎么选",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "myth",
@@ -1806,6 +1838,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "送礼怎么选",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -1868,6 +1901,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "到店体验理由",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "scene",
@@ -1919,6 +1953,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "可以先到店试用吗",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -1976,6 +2011,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "到店体验理由",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -2038,6 +2074,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "到店体验理由",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "question",
@@ -2089,6 +2126,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "送人选哪款合适",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",
@@ -2146,6 +2184,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "送礼怎么选",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "checklist",
@@ -2208,6 +2247,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "到店体验理由",
+        "scenario": "new_launch",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "checklist",
@@ -2259,6 +2299,7 @@
         "segment": "shopper",
         "segment_label": "逛街/送礼客群",
         "angle": "可以先到店试用吗",
+        "scenario": "holiday",
         "calendar_theme": "购物节前做功课",
         "hook": {
           "id": "customer",

@@ -13,10 +13,41 @@ from collections import defaultdict
 from agent.recommend import explain
 from agent.recommend.common import parse_date, stable_hash
 from agent.recommend.scoring import (
-    NEW_RELEASE_PRIORITY_DAYS, NEW_RELEASE_WINDOW_DAYS, RECENT_POST_DAYS, eligible, fit_table, potential,
+    CALENDAR_LOOKAHEAD_DAYS, NEW_RELEASE_PRIORITY_DAYS, NEW_RELEASE_WINDOW_DAYS, RECENT_POST_DAYS, eligible,
+    fit_table, potential,
 )
 
 SLOT_LABELS = {"potential": "潜力款", "promo": "活动款", "new_release": "新品款", "customer_question": "顾客问答"}
+
+# Scenario keys (agent/schemas.Scenario) by segment outside any calendar window.
+SEGMENT_SCENARIO = {"student": "campus_daily", "office": "office", "family": "family_upgrade",
+                    "shopper": "store_visit"}
+SHOPPING_FESTIVALS = ("双十一", "双十二", "春节")
+BACK_TO_SCHOOL_EVENT = "开学季"
+
+
+def _active_or_soon(ev: dict, today: dt.date, lookahead: int) -> bool:
+    start, end = parse_date(ev["start"]), parse_date(ev["end"])
+    return start <= today <= end or 0 < (start - today).days <= lookahead
+
+
+def scenario_for(slot: str, segment: str, calendar: list[dict], today: dt.date) -> str:
+    """Calendar-aware scenario key for a card (plan decision A, Phase 2):
+    new_release → new_launch; 开学季 active and segment ∈ {student, family} → back_to_school;
+    a shopping festival active or within CALENDAR_LOOKAHEAD_DAYS and segment ∈ {shopper, family} → holiday;
+    otherwise by segment: student → campus_daily (never back_to_school outside 开学季), office → office,
+    family → family_upgrade, shopper → store_visit."""
+    if slot == "new_release":
+        return "new_launch"
+    for ev in calendar:
+        if ev["event"] == BACK_TO_SCHOOL_EVENT and segment in ("student", "family") \
+                and parse_date(ev["start"]) <= today <= parse_date(ev["end"]):
+            return "back_to_school"
+    if segment in ("shopper", "family"):
+        for ev in calendar:
+            if ev["event"] in SHOPPING_FESTIVALS and _active_or_soon(ev, today, CALENDAR_LOOKAHEAD_DAYS):
+                return "holiday"
+    return SEGMENT_SCENARIO[segment]
 # Default-card priority after the "verified release near launch" rule (which is 0).
 _SLOT_PRIORITY = {"potential": 1, "promo": 2, "customer_question": 3, "new_release": 4}
 
@@ -75,6 +106,7 @@ def build_cards(stores, models, signals, idx, promos, calendar, quota, angles, p
                 "model_id": model_id, "display_name": mby[model_id]["display_name"] if model_id else None,
                 "platform": platform, "segment": dom, "segment_label": seg_cfg["segment_labels"][dom],
                 "angle": pick_angle(angles, dom, sid, today, slot),
+                "scenario": scenario_for(slot, dom, calendar, today),
                 "calendar_theme": cal["theme"] if cal else None,
                 "hook": {"id": hook["id"], "label": hook["label"]},
                 "voice": {"id": prof["voice"], "label": prof["voice_label"]},

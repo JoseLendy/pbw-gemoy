@@ -25,10 +25,11 @@ PLATFORM_IMAGE_RANGE = {
 }
 
 Scenario = Literal["back_to_school", "office", "creator", "family_upgrade",
-                   "enterprise", "store_visit", "new_launch", "holiday"]
+                   "enterprise", "store_visit", "new_launch", "holiday", "campus_daily"]
 SCENARIO_LABELS = {
     "back_to_school": "开学季", "office": "职场办公", "creator": "内容创作", "family_upgrade": "家庭换新",
     "enterprise": "企业采购", "store_visit": "门店到店", "new_launch": "新品首发", "holiday": "节日营销",
+    "campus_daily": "校园日常",   # student stores outside the 开学季 window (proactive cards)
 }
 
 # Selling-point categories used by scenario analysis (step 2) and the ledger (step 4).
@@ -357,6 +358,7 @@ class RecommendationCard:
     segment: str                    # student | office | family | shopper
     segment_label: str
     angle: str
+    scenario: Optional[str] = None  # a Scenario key, calendar-aware (agent/recommend/slots.scenario_for)
     calendar_theme: Optional[str] = None
     hook: Optional[CardHook] = None
     voice: Optional[CardVoice] = None
