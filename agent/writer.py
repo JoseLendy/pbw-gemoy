@@ -55,6 +55,16 @@ def _plan_lines(plan: ImagePlan) -> str:
                      for p in plan.items) or "（无可用图片，images 留空）"
 
 
+def brief_block(task: Task) -> str:
+    """The recommendation card's writer brief (hook / voice / landmark / angle / promo / sales ban).
+    Empty string for the manual flow, so that prompt is byte-identical to before Phase 2."""
+    try:
+        from agent.style.profile import brief
+        return brief(task)
+    except Exception:  # a style module failure must never stop a run
+        return ""
+
+
 def _context(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan) -> str:
     chosen, others = _usable(ledger, strategy)
     lo, hi = PLATFORM_IMAGE_RANGE.get(task.platform or "", (0, 0))
@@ -62,6 +72,13 @@ def _context(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan) ->
         f"## 任务\n型号={task.model_id}；人群={strategy.analysis.audience}；场景={task.scenario}；"
         f"平台={PLATFORM_LABELS.get(task.platform or '', task.platform)}；变体={task.variant or '未指定'}\n"
         f"额外要求（若涉及价格、补贴、销量、奖项、评价、测试结果、政策承诺，一律不写）：{task.extra_requirements or '无'}",
+    ]
+    # Proactive flow only: the card's hook / voice / landmark / angle / promo become explicit instructions.
+    # Empty for source == "manual", so the manual prompt is byte-identical to before Phase 2.
+    card_brief = brief_block(task)
+    if card_brief:
+        parts.append("## 门店推荐卡要求（优先级高于通用写作偏好）\n" + card_brief)
+    parts += [
         f"## 策略\n切入点：{strategy.angle}\n行动引导类型：{strategy.cta_type}\n卖点顺序：\n"
         + "\n".join(f"- {sp.fact_id}：{sp.reason}" for sp in strategy.selling_points),
         "## 已选事实（必须引用）\n" + "\n".join(_fact_line(f) for f in chosen),
