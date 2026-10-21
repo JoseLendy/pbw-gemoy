@@ -69,7 +69,7 @@ def test_scan_flags_quotes_ids_and_keys():
     ledger = {"facts": [{"id": "F1", "quote": "这是一段知识库原文引用，长度足够"}]}
     assert ex.scan("说明：这是一段知识库原文引用，长度足够", "", [ledger], set())
     assert ex.scan("图片 media-123456", "", [], {"media-123456"})
-    assert ex.scan("key sk-abcdefghijklmnopqrstuvwx", "", [], set())
+    assert ex.scan("key " + "sk" + "-" + "abcdefghijklmnopqrstuvwx", "", [], set())   # built at run time
     assert not ex.scan("文案：重量约 1.25 kg", "文案：重量约 1.25 kg", [ledger], {"media-1"})
 
 

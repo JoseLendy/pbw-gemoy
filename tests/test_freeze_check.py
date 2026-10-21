@@ -12,7 +12,9 @@ def test_placeholder_pattern():
 
 def test_secret_patterns_catch_key_shapes_but_not_ordinary_text():
     hit = lambda t: any(r.search(t) for r in fc.SECRET_RES)       # noqa: E731
-    assert hit("LLM_API_KEY='sk-abcdefghijklmnopqrstuv'") and hit("a" * 8 + "0123456789abcdef0123456789abcdef")
+    fake_key = "sk" + "-" + "abcdefghijklmnopqrstuv"            # built at run time: no literal key-like token in
+    fake_hex = "0123456789abcdef" * 2                            # this file, so the secrets scan stays strict
+    assert hit(f"LLM_API_KEY='{fake_key}'") and hit(f"id {fake_hex}")
     assert not hit("重量约 1.25 kg [F1]") and not hit("WRITER_TEMPERATURE=0.85")
 
 
