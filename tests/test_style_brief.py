@@ -225,3 +225,8 @@ def test_brief_requires_the_landmark_once_and_exact_qualifiers():
     writer_md = (Path(__file__).resolve().parents[1] / "prompts" / "writer.md").read_text(encoding="utf-8")
     assert f"正文里要自然带一次门店位置：{task.landmark}" in block
     assert "限定词照抄原文" in writer_md and "邀请语、署名和行动引导里不放任何产品说法" in writer_md
+
+
+def test_brief_phrases_usage_as_the_readers_scenario_not_the_writers_experience():
+    block = brief(card_to_task(_card("S01", "potential")))
+    assert "适合每天背去上课的同学" in block and "不要写成你自己或店员的经历" in block
