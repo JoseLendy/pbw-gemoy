@@ -266,7 +266,7 @@ class Post:
 # ---------------------------------------------------------------- step 8: checks
 @dataclass
 class CheckIssue:
-    stage: Literal["8A", "8B", "8C"]
+    stage: Literal["8A", "8B", "8C", "8D"]
     severity: Literal["error", "warn"]
     code: str                      # e.g. "unsupported_number", "sibling_value", "banned_word", "image_count"
     message: str                   # Chinese, shown in 核验结果

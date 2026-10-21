@@ -60,7 +60,8 @@ def load_yaml(name: str) -> dict:
 
 def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task: Task,
             plan: ImagePlan, llm=None) -> CheckReport:
-    """8A → 8B → 8C, merged into one report (8C last because stripping in 8A/8B can break structure)."""
+    """8A → 8B → 8C → 8D, merged into one report (8C before 8D because stripping in 8A/8B can break
+    structure, and 8D's structural counts should see the final text)."""
     from agent.checks.compliance import check_compliance
     from agent.checks.conformance import check_conformance
     from agent.checks.facts import check_facts
@@ -70,6 +71,12 @@ def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task
     report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=llm)
     report = report.merge(check_compliance(post, ledger, task, llm=llm))
     report = report.merge(check_conformance(post, platform, plan))
+    try:  # Phase 2: 8D anti-AI style. A missing/broken style module must never stop a run.
+        from agent.style.antiai import check_style
+        report = report.merge(check_style(post, task, llm))
+    except Exception as e:  # noqa: BLE001
+        import logging
+        logging.getLogger("agent.checks").warning("8D unavailable: %s", e)
     return report
 
 
