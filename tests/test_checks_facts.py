@@ -311,8 +311,6 @@ def _ledger_with_semicolon_claim():
     return led
 
 
-@pytest.mark.xfail(strict=True, reason="PENDING (docs/HANDOVER_BACKEND.md, item 1): 8A splits a verbatim tagged "
-                   "fact at its own '；'. Fix narrowly in agent/checks/facts.py, then remove this marker.")
 def test_a_verbatim_tagged_fact_containing_a_semicolon_is_one_tagged_claim():
     """Real canary: '更适合…移动办公者；系统兼容是选型前置条件 [F56]' (the KB 可用结论 verbatim, tagged once)
     was split at the fact's own '；' and its first half reported as untagged / uncited."""
@@ -331,3 +329,25 @@ def test_an_untagged_spec_before_a_semicolon_is_still_flagged():
     p = fake_post("moments")
     p.body = ["内存 16 GB；更适合经常出差的人；系统兼容是选型前置条件 [F13]。"]
     assert any(i.code == "untagged_claim" and "16 GB" in i.span for i in check_facts(p, led, {}).issues)
+
+
+def test_a_semicolon_fact_tagged_with_another_id_still_splits():
+    """The '；' is kept only when the quote carries its OWN fact's tag; any other tag splits as before."""
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["更适合经常出差的人；系统兼容是选型前置条件 [F1]。"]
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(p, led, llm)
+    assert "更适合经常出差的人" in llm.user.split("<uncited>")[1]
+
+
+def test_the_judge_sees_the_whole_verbatim_fact_as_the_cited_sentence():
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["更适合经常出差的人；系统兼容是选型前置条件 [F13]。"]
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(p, led, llm)
+    cited = llm.user.split("<cited>")[1].split("</cited>")[0]
+    assert "更适合经常出差的人；系统兼容是选型前置条件。 -> F13" in cited and "\x00" not in llm.user

@@ -90,13 +90,16 @@ def main(argv=None) -> int:
     post_images = [PostImage(im.media_id, "文末", im.caption) for im in images]
     a = _numeric(ledger)
     b = _numeric(ledger, exclude={a.id} | {f.id for f in ledger.facts if f.attribute == a.attribute})
-    invite = f"店在{plain.landmark}附近，想上手可以过来看看。" if plain.landmark else "想上手可以来店里看看。"
     cta = "有问题可以私信我。"          # no 周末 / opening-hours promise: the store data has none
 
+    def invite(task):                  # each card's own store landmark (S02's card must not name S01's)
+        return f"店在{task.landmark}附近，想上手可以过来看看。" if task.landmark else "想上手可以来店里看看。"
+
     def draft(*sentences, task=None):
-        return Post(platform="moments", title="", intro="", body=[" ".join(sentences), invite],
+        task = task or plain
+        return Post(platform="moments", title="", intro="", body=[" ".join(sentences), invite(task)],
                     cta=cta, tags=["门店推荐"],
-                    selling_points=[a.id], images=copy.deepcopy(post_images)), (task or plain)
+                    selling_points=[a.id], images=copy.deepcopy(post_images)), task
 
     # Clean drafts are built strictly from the ledger (the writer brief's rules): only tagged facts, values copied
     # verbatim (qualifiers included), usage as the reader's own question, nothing implied beyond the fact.
@@ -112,7 +115,9 @@ def main(argv=None) -> int:
     clean_a = f"挑电脑前先看看它适合谁：{claim.value} [{claim.id}]。"
     clean_b = f"如果你想先确认一项配置，可以看这一项：{entity.value} [{entity.id}]。"
     promo_ok = promo is not None and valid_price_record(promo) is not None
-    clean_c = (f"{clean_a} {rec['label']} {rec['value']} 元 [演示活动]，{rec['conditions']}。" if promo_ok and rec else None)
+    # the reader's own situation first (no product claim), so a bare KB conclusion is not a generic draft
+    scene = "如果你正在挑一台日常办公用的笔记本，比起参数，可以先弄清楚它适不适合你。"
+    clean_c = (f"{scene}{clean_a} {rec['label']} {rec['value']} 元 [演示活动]，{rec['conditions']}。" if promo_ok and rec else None)
     wrong_value = re.sub(r"\d+(?:\.\d+)?", "0.86", a.value, count=1)      # first number → one no fact has
     sib = next((f for f in sib_ledger.facts if f.norm_value is not None and f.attribute in {x.attribute for x in ledger.facts}
                 and not any(x.value == f.value for x in ledger.facts)), None)
@@ -137,7 +142,7 @@ def main(argv=None) -> int:
         (Case("赋能 + 不仅…更…", True), draft(clean_a, "它不仅仅是一台电脑，更是赋能学习的伙伴。")),
         (Case(f"{sibling} 的参数写在 {target} 下", True),
          draft(clean_a, f"这一项是 {sib.value} [{same_attr[sib.attribute]}]。") if sib else draft(clean_a)),
-        (Case("干净稿 1 · 潜力款 · 可用结论原文", False), draft(clean_a)),
+        (Case("干净稿 1 · 潜力款 · 可用结论原文", False), draft(scene, clean_a)),
         (Case("干净稿 2 · 潜力款 · 无边界的参数", False), draft(clean_b)),
     ]
     if clean_c:

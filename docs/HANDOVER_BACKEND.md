@@ -75,3 +75,7 @@ Push `feat/proactive-samples` and open a PR into `feat/proactive-recommender`. *
 
 - **Git history still contains the old KB files** (from commit `ddf3b1a`). Removing them needs a history rewrite and a force-push. Decision: **only after Friday's submission**, and only by the repo owner; until then do not publish the repository.
 - Whether to set a faster `LLM_MODEL_FAST` for the 8A/8B judges (they dominate latency); not changed without the user's OK.
+
+## Status log
+
+- 2026-10-21 · item 1 · (b) fixes landed with proof tests: 8A keeps a verbatim tagged fact's own "；" (xfail removed, +2 guard tests); the active HQ price record is shown to the 8A and 8B judges as `<promo>` (proof test failed before the fix). (a) canary fixes: per-card invite landmark; reader-side scene sentence (first-person version was rightly flagged by 8B and rephrased). Real canary, 3 runs: planted 9/9 every run; clean 2/3 → 2/3 → 1/3. 8A/8B are now clean on all clean drafts; the remaining flags are only 8D `ai_judge`, which flips on an identical draft between runs (at CHECK_TEMPERATURE=0). **Stopped before items 2–3 per instruction 4; waiting on the user.**

@@ -256,3 +256,58 @@ def test_8b_judge_is_told_the_cards_logged_customer_question():
 def test_no_logged_question_means_none_is_shown_to_the_judge():
     _, user = _8b_prompt(_card_task())            # S09 promo card: no logged question
     assert "顾客问题" not in user.split("<store>")[1].split("</store>")[0]
+
+
+# ------------------------------------------------------------------ canary: price record shown to the judges (false-positive proof)
+def _judge_prompts(task, sentence):
+    """The 8A and 8B judge prompts run_all builds for one post (fake ledger, spy LLM)."""
+    from agent.checks import run_all
+    from tests.fakes import fake_plan
+    seen = {}
+
+    class Spy:
+        def chat_json(self, system, user, stage="", **kw):
+            seen[stage] = (system, user)
+            return {"issues": []}
+    p = fake_post("moments")
+    p.body = [sentence]
+    run_all(p, fake_ledger(), SIB, task, fake_plan(), llm=Spy())
+    return seen
+
+
+def _s02_promo_task():
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    return card_to_task(next(c for c in cards_for("S02", "2026-10-23") if c.slot == "promo"))
+
+
+def test_8a_and_8b_judges_are_shown_the_active_price_record():
+    """Real canary clean draft 3: '演示活动价 4999 元 [演示活动]，活动期内有效，以门店实际为准。' matches the active
+    HQ record exactly (8B's code-level price check passes it), yet the 8A judge called it uncited_claim and the
+    8B judge false_promise: neither prompt contained the record."""
+    from agent.checks.prices import valid_price_record
+    task = _s02_promo_task()
+    rec = valid_price_record(task)
+    assert rec is not None
+    seen = _judge_prompts(task, f"{rec['label']} {rec['value']} 元 [演示活动]，{rec['conditions']}。")
+    for stage in ("8A", "8B"):
+        promo = seen[stage][1].split("<promo>")[1].split("</promo>")[0]
+        assert rec["value"] in promo and rec["conditions"] in promo and rec["label"] in promo
+
+
+def test_no_price_record_means_no_promo_block_for_either_judge():
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    task = card_to_task(next(c for c in cards_for("S01", "2026-10-23") if c.slot == "potential"))
+    seen = _judge_prompts(task, "演示活动价 4999 元。")
+    assert all("<promo>" not in seen[s][1] for s in ("8A", "8B"))
+    seen = _judge_prompts(fake_task("moments"), "演示活动价 4999 元。")
+    assert all("<promo>" not in seen[s][1] for s in ("8A", "8B"))
+
+
+def test_a_wrong_price_on_a_promo_card_is_still_blocked_in_code():
+    """Showing the record to the judges must not loosen the code-level price rule."""
+    from agent.checks.prices import check_prices
+    p = fake_post("moments")
+    p.body = ["演示活动价 3999 元，活动期内有效，以门店实际为准。"]
+    assert "price_mismatch" in {i.code for i in check_prices(p, _s02_promo_task())}

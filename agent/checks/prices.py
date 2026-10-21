@@ -165,6 +165,20 @@ def price_request_block(instruction: str, task) -> Optional[str]:
     return f"已拦截「{instruction.strip()}」：{have}，「{what}」无法追溯，未调用写作。{RULE}。"
 
 
+def promo_block(rec: Optional[dict]) -> str:
+    """The active record as a <promo> block for the 8A / 8B LLM judges (like 8B's <store> block). Empty when
+    there is no valid record, so manual runs and cards without a price get exactly the old prompt."""
+    if not rec:
+        return ""
+    demo = f"；演示数据，文中标注 {DEMO_TAG}" if rec.get("source") == "DEMO" else ""
+    return (f"\n<promo>\n总部当前有效的活动价格记录：{rec['label']} {rec['value']} 元；"
+            f"适用条件：{rec['conditions'] or '（无）'}{demo}\n</promo>")
+
+
+PROMO_JUDGE_NOTE = ("<promo> 里是总部当前有效的活动价格记录：原样引用其中金额和适用条件的句子由代码逐字核对，"
+                    "不是产品参数，也不算误导性价格；与记录不一致的金额、记录之外的优惠、补贴或承诺仍然是问题。")
+
+
 def mark_demo_prices(post: Post, task) -> Post:
     """Publishable copy shows [演示活动] right after a DEMO record's price (added once, in code)."""
     rec = valid_price_record(task) if task is not None else None
@@ -185,4 +199,5 @@ def mark_demo_prices(post: Post, task) -> Post:
     return new
 
 
-__all__ = ["check_prices", "price_request_block", "mark_demo_prices", "valid_price_record", "DEMO_TAG", "RULE"]
+__all__ = ["check_prices", "price_request_block", "mark_demo_prices", "valid_price_record", "promo_block",
+           "PROMO_JUDGE_NOTE", "DEMO_TAG", "RULE"]
