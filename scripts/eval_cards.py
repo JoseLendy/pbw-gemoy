@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agent.formatter import render_publishable  # noqa: E402
 from agent.recommend.store_data import default_card, load_store_data  # noqa: E402
-from agent.schemas import LockedResult, NeedsHuman, RunResult  # noqa: E402
+from agent.schemas import LockedResult, NeedsHuman, NeedsReview, RunResult  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "eval" / "report.md"
@@ -67,11 +67,13 @@ class StoreEval:
     errors: list = dataclasses.field(default_factory=list)       # (stage, code, span) left in the final report
     sim_flags: list = dataclasses.field(default_factory=list)    # "S01×S02 0.61→0.42" pairs over the threshold
     regenerated: bool = False
+    fallback: str = ""                    # "" | trimmed | next_card | needs_review (T4 policy)
     timings: dict = dataclasses.field(default_factory=dict)      # RunResult.timings (+ "8E" regen seconds)
 
     @property
     def passed(self) -> bool:
-        return self.status == "ok" and all(self.stage_pass.values())
+        """Passed within the 2 rewrites, with no fallback (the writer's own quality)."""
+        return self.status == "ok" and all(self.stage_pass.values()) and not self.fallback
 
 
 def _recording(run_checks, sink: list):
@@ -148,7 +150,8 @@ def summary(evals: list[StoreEval]) -> dict:
     for e in ok:
         for stage, code, span in e.errors:
             failures.setdefault(stage, []).append(f"{e.store_id} {code}" + (f"「{span}」" if span else ""))
-    return {"stores": len(evals), "generated": len(ok), "passed": sum(e.passed for e in evals),
+    fb = {k: sum(e.fallback == k for e in evals) for k in ("trimmed", "next_card", "needs_review")}
+    return {"stores": len(evals), "generated": len(ok), "passed": sum(e.passed for e in evals), "fallback": fb,
             "median_s": statistics.median(secs) if secs else 0.0, "max_s": max(secs) if secs else 0.0,
             "rewrites": sum(e.rewrites for e in ok), "failures": failures}
 
@@ -200,6 +203,8 @@ def build_report(evals: list[StoreEval], today, mode: str, pairs=None, wall: flo
         lines += ["", f"- 12 店整批耗时（含 8E 重生成）：**{wall:.1f} 秒**"]
     lines += ["", f"- 生成成功：{sm['generated']} / {sm['stores']} 家；≤2 轮改写内四项核验全部通过："
                   f"**{sm['passed']} / {sm['stores']}**（目标 ≥10）",
+              f"- 兜底（T4）：删句后通过 {sm['fallback']['trimmed']} · 换下一条卡片 {sm['fallback']['next_card']} · "
+              f"需人工确认 {sm['fallback']['needs_review']}",
               f"- 每条耗时：中位数 {sm['median_s']:.1f} 秒，最大 {sm['max_s']:.1f} 秒",
               f"- 平均改写轮数：{(sm['rewrites'] / sm['generated']) if sm['generated'] else 0:.2f}", ""]
     ok = [e for e in evals if e.status == "ok"]
@@ -298,7 +303,14 @@ def main(argv=None) -> int:
             ev.status, ev.message = "needs_human", r.message
         elif isinstance(r, Exception):
             ev.status, ev.message = "error", f"{type(r).__name__}: {str(r)[:160]}"
+        elif isinstance(r, NeedsReview):
+            ev.status, ev.message, ev.fallback = "needs_review", r.message, "needs_review"
+            final = r.draft.report
+            ev.stage_pass = {s: not any(i.stage == s and i.severity == "error" for i in final.issues) for s in STAGES}
+            ev.rewrites = r.draft.loops
+            ev.errors = [(i.stage, i.code, i.span) for i in final.issues if i.severity == "error"]
         elif isinstance(r, RunResult):
+            ev.fallback = r.fallback or ""
             final = r.report
             ev.stage_pass = {s: not any(i.stage == s and i.severity == "error" for i in final.issues) for s in STAGES}
             ev.rewrites = r.loops
@@ -323,10 +335,10 @@ def main(argv=None) -> int:
     out.write_text(report, encoding="utf-8")
     sm = summary(evals)
     for e in evals:
-        print(f"{e.store_id} {e.status:11} " + " ".join(f"{s}{'✓' if e.stage_pass.get(s) else '✗'}" for s in STAGES)
-              + f" rewrites={e.rewrites} {e.seconds:.1f}s" + (f" 8E[{'; '.join(e.sim_flags)}]" if e.sim_flags else ""))
+        print(f"{e.store_id} {e.status:12} " + " ".join(f"{s}{'✓' if e.stage_pass.get(s) else '✗'}" for s in STAGES)
+              + f" rewrites={e.rewrites} {e.seconds:.1f}s" + (f" fallback={e.fallback}" if e.fallback else "") + (f" 8E[{'; '.join(e.sim_flags)}]" if e.sim_flags else ""))
     print(f"wrote {out} · {sm['generated']}/{sm['stores']} generated · {sm['passed']}/{sm['stores']} passed "
-          f"within 2 rewrites · median {sm['median_s']:.1f}s · max {sm['max_s']:.1f}s")
+          f"within 2 rewrites · fallback {sm['fallback']} · median {sm['median_s']:.1f}s · max {sm['max_s']:.1f}s")
     med = stage_medians(evals)
     print("stage medians (s): " + " · ".join(f"{k} {med[k]}" for k in TIMING_COLS if k in med))
     print(f"batch wall time: {batch.wall_seconds:.1f}s (BATCH_MAX_WORKERS={os.getenv('BATCH_MAX_WORKERS', '4')})")

@@ -18,12 +18,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from agent.schemas import LockedResult, NeedsHuman, RunResult  # noqa: E402
+from agent.schemas import LockedResult, NeedsHuman, NeedsReview, RunResult  # noqa: E402
 
 
 def _status(result) -> str:
     if isinstance(result, RunResult):
-        return "PASS" if result.report.passed else "FAIL（未通过核验）"
+        tag = f" ({result.fallback})" if result.fallback else ""
+        return ("PASS" if result.report.passed else "FAIL（未通过核验）") + tag
+    if isinstance(result, NeedsReview):
+        return "NEEDS_REVIEW（需人工确认）"
     if isinstance(result, NeedsHuman):
         return "NEEDS_HUMAN"
     if isinstance(result, LockedResult):

@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from agent.schemas import (
-    CardHook, CheckReport, Clarification, EditBlocked, ImagePlan, Ledger, LockedResult, ModelBundle, NeedsHuman,
+    CardHook, CheckReport, Clarification, EditBlocked, FailingSentence, ImagePlan, Ledger, LockedResult, ModelBundle,
+    NeedsHuman, NeedsReview,
     PLATFORM_LABELS, Post, RecommendationCard, RunResult, SCENARIO_LABELS, StaffContext, Strategy, Task,
 )
 
@@ -358,10 +359,24 @@ def _log_real(card, result, staff, deps, kind: str = "run_from_card") -> None:
 
 
 def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: StaffContext | None = None,
-                  on_progress: Progress = None) -> RunResult | LockedResult | NeedsHuman:
+                  on_progress: Progress = None, fallback: bool = True
+                  ) -> RunResult | LockedResult | NeedsHuman | NeedsReview:
     """Proactive entry (PROACTIVE_AGENT_PLAN §3): the card replaces the user sentence, so intake and model
     disambiguation are skipped (the card carries an exact model_id). A locked card returns LockedResult
-    before any LLM or ima call. Otherwise continues from retrieval / scenario exactly like run()."""
+    before any LLM or ima call. Otherwise continues from retrieval / scenario exactly like run().
+
+    A draft that still fails after 2 rewrites goes through the fallback policy (fallback=True): trim the
+    failing sentences → the store's next unlocked card → NeedsReview. An unchecked post is never returned."""
+    result = _run_card(card, deps, staff, on_progress)
+    if fallback and isinstance(result, RunResult) and not result.report.passed:
+        deps = deps or default_deps()
+        result = apply_fallback(card, result, deps, staff, on_progress)
+        if not (isinstance(result, RunResult) and result.fallback == "next_card"):   # next card logged itself
+            _log_real(card, result, staff, deps, kind="fallback")
+    return result
+
+
+def _run_card(card: RecommendationCard, deps: Deps | None, staff: StaffContext | None, on_progress: Progress):
     if card.locked:
         reason = card.locked_reason or "locked"
         msg = LOCKED_MESSAGES.get(reason, "该推荐暂不可生成，请等待总部确认")
@@ -569,6 +584,129 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
         except Exception as e:  # noqa: BLE001 - logging must never break a batch
             log.warning("batch log failed: %s", e)
     return batch
+
+
+# ---------------------------------------------------------------- fallback policy (Phase 5, T4)
+_SENT_PIECE = re.compile(r"[^。！？!?；;\n]+[。！？!?；;\n]*")
+_TAG = re.compile(r"\s*\[F\d+\]")
+_NORM = re.compile(r"[\s，,。！？!?；;：:、“”\"「」（）()]+")
+NEXT_CARD_ORDER = ("potential", "promo", "customer_question", "new_release")
+
+
+def _norm_text(text: str) -> str:
+    return _NORM.sub("", _TAG.sub("", text or ""))
+
+
+def _text_fields(post: Post) -> list[tuple[str, str]]:
+    return [("title", post.title), ("intro", post.intro), *[(f"body[{i}]", b) for i, b in enumerate(post.body)],
+            ("cta", post.cta)]
+
+
+def failing_sentences(post: Post, report: CheckReport) -> list[FailingSentence]:
+    """Each error mapped to the post sentence that carries its span (publishable text, no tags). Errors with
+    no locatable span (e.g. a missing store detail) are listed with an empty sentence."""
+    out: list[FailingSentence] = []
+    fields = _text_fields(post)
+    for i in report.issues:
+        if i.severity != "error":
+            continue
+        span = _norm_text(i.span)
+        hit = None
+        for name, text in fields:
+            if i.field and i.field in dict(fields) and name != i.field:
+                continue
+            for piece in _SENT_PIECE.findall(text or ""):
+                n = _norm_text(piece)
+                if span and n and (span in n or (len(n) >= 4 and n in span)):
+                    hit = (name, _TAG.sub("", piece).strip())
+                    break
+            if hit:
+                break
+        out.append(FailingSentence(field=hit[0] if hit else (i.field or ""), sentence=hit[1] if hit else "",
+                                   stage=i.stage, code=i.code, reason=i.message))
+    return out
+
+
+def _trim(post: Post, failing: list[FailingSentence]) -> Optional[Post]:
+    """The post without the failing sentences, or None if some error had no sentence to remove."""
+    if not failing or any(not f.sentence for f in failing):
+        return None
+    drop: dict[str, set[str]] = defaultdict(set)
+    for f in failing:
+        drop[f.field].add(_norm_text(f.sentence))
+    new = copy.deepcopy(post)
+
+    def cut(name: str, text: str) -> str:
+        keep = [piece for piece in _SENT_PIECE.findall(text or "") if _norm_text(piece) not in drop.get(name, ())]
+        return "".join(keep).strip()
+
+    new.title, new.intro, new.cta = cut("title", post.title), cut("intro", post.intro), cut("cta", post.cta)
+    new.body = [b for b in (cut(f"body[{i}]", b) for i, b in enumerate(post.body)) if b]
+    cited = set(re.findall(r"\[(F\d+)\]", new.all_text()))
+    new.selling_points = [i for i in post.selling_points if i in cited]
+    return new
+
+
+def _deliverable(post: Post) -> bool:
+    """Still a post: a title if the platform has one, at least one fact-backed point, and a CTA."""
+    from agent.platform_rules import PLATFORM_RULES
+    blocks = {b[0] for b in (PLATFORM_RULES.get(post.platform) or {}).get("blocks", [])}
+    return (bool(post.title) or "title" not in blocks) and bool(post.selling_points) and bool(post.cta)
+
+
+def _next_card(card: RecommendationCard) -> Optional[RecommendationCard]:
+    """The store's next unlocked card after this one (潜力款 → 活动款 → 顾客问答 → 新品款 if verified)."""
+    from agent.recommend.store_data import cards_for
+    if not card.date:
+        return None
+    try:
+        cards = cards_for(card.store_id, card.date)
+    except Exception:  # noqa: BLE001
+        return None
+    rank = {slot: i for i, slot in enumerate(NEXT_CARD_ORDER)}
+    later = [c for c in cards if not c.locked and c.slot != card.slot]
+    return min(later, key=lambda c: rank.get(c.slot, 99), default=None)
+
+
+def _errors_n(r) -> int:
+    return sum(1 for i in r.report.issues if i.severity == "error") if isinstance(r, RunResult) else 10 ** 6
+
+
+def apply_fallback(card: RecommendationCard, result: RunResult, deps: Deps, staff=None,
+                   on_progress: Progress = None):
+    """T4 policy for a card run that failed after 2 rewrites. Returns a passing RunResult (fallback set)
+    or NeedsReview. Every delivered post has passed all checks."""
+    attempts = [card.card_id]
+    failing = failing_sentences(result.post, result.report)
+    trimmed_post = _trim(result.post, failing)
+    best = result
+    if trimmed_post is not None:
+        report = deps.run_checks(trimmed_post, result.ledger, getattr(result, "_sibling_ledgers", {}) or {},
+                                 result.task, result.plan, deps.llm)
+        attempts.append("trimmed")
+        if report.passed and _deliverable(trimmed_post):
+            from agent.checks.prices import mark_demo_prices
+            out = copy.copy(result)
+            out.post, out.report, out.fallback = mark_demo_prices(trimmed_post, result.task), report, "trimmed"
+            out.pending = _collect_pending(result.strategy, result.plan, report, result.task)
+            _say(on_progress, "check", f"删去 {len(failing)} 处未通过的句子后核验通过")
+            return out
+    nxt = _next_card(card)
+    if nxt is not None:
+        attempts.append(nxt.card_id)
+        _say(on_progress, "card", f"改用下一条推荐：{nxt.slot_label}")
+        try:
+            other = run_from_card(nxt, deps, staff, on_progress, fallback=False)
+        except Exception as e:  # noqa: BLE001 - the fallback must not crash the batch
+            log.warning("next-card fallback failed for %s: %s", card.store_id, e)
+            other = None
+        if isinstance(other, RunResult) and other.report.passed:
+            other.fallback = "next_card"
+            return other
+        if isinstance(other, RunResult) and _errors_n(other) < _errors_n(best):
+            best = other
+    _say(on_progress, "check", "仍未通过核验：需人工确认")
+    return NeedsReview(card=card, draft=best, failing=failing_sentences(best.post, best.report), attempts=attempts)
 
 
 # ---------------------------------------------------------------- prepared posts (the push model)

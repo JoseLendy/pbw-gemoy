@@ -314,6 +314,28 @@ class RunResult:
     sources: list[SourceRecord] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
     loops: int = 0
+    fallback: Optional[str] = None  # None | "trimmed" | "next_card" (card runs that failed after 2 rewrites)
+
+
+@dataclass
+class FailingSentence:
+    field: str                      # title / intro / body[i] / cta
+    sentence: str                   # publishable text (no [F#] tags)
+    stage: str                      # 8A / 8B / 8C / 8D
+    code: str
+    reason: str                     # Chinese, from the checker
+
+
+@dataclass
+class NeedsReview:
+    """A card run that still failed after 2 rewrites, trimming and the next card. Nothing was delivered:
+    the UI shows 「需人工确认」 with the draft, the failing sentences and why. Never publishable as is."""
+    card: "RecommendationCard"
+    draft: "RunResult"              # the best (fewest errors) checked draft; its post must not be published
+    failing: list[FailingSentence]
+    message: str = "需人工确认：自动核验未通过，已列出未通过的句子和原因"
+    attempts: list[str] = field(default_factory=list)   # e.g. ["S01-…-potential", "trimmed", "S01-…-promo"]
+    to_dict = _d
 
 
 # ---------------------------------------------------------------- recommender (PROACTIVE_AGENT_PLAN §10.7)
