@@ -233,7 +233,8 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
         post, fixed = _auto_cite(post, errors, ledger)
         if fixed:
             log.info("auto-cited %d sentence(s): %s", len(fixed), ", ".join(f"{i.field}+{i.fact_id}" for i in fixed))
-            _say(on_progress, "check", f"补上 {len(fixed)} 处事实编号（{'、'.join(i.fact_id for i in fixed)}）")
+            tags = list(dict.fromkeys(i.fact_id for i in fixed))   # several issues can name one missing tag
+            _say(on_progress, "check", f"补上 {len(tags)} 处事实编号（{'、'.join(tags)}）")
             errors = [i for i in errors if i not in fixed]
         if errors:
             _say(on_progress, "check", f"发现 {len(errors)} 处问题，定向改写（第 {loops + 1} 轮）…")

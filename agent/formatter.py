@@ -126,6 +126,8 @@ def render_report(r: RunResult) -> str:
     # 四、核验结果
     out += [f"## {h4}", ""]
     out += _stage_block(r, "8A", "产品事实", f"{len(used)} 个事实点均来自目标型号台账")
+    out += ["", "**事实编号追溯**（发布文案已去掉编号，这里保留对应关系）", ""]
+    out += [f"- {f.id} → {f.value} → {f.source_title}" for f in used] or ["- 未引用台账事实"]
     out += [""]
     img_lines = ["**图片型号**"]
     bad = [im for im in post.images if im.media_id not in plan_by_id]
@@ -139,6 +141,8 @@ def render_report(r: RunResult) -> str:
     out += _stage_block(r, "8B", "合规", "无绝对化用语、无虚构价格/销量/奖项/政策")
     out += [""]
     out += _stage_block(r, "8C", "平台规范", "结构、篇幅、图片数量符合平台要求")
+    out += [""]
+    out += _stage_block(r, "8D", "文风（去模板化）", "无套话、无模板句式、反问与排比在限度内")
     out += ["", "**待确认信息**", ""]
     out += [f"- ⚠️ {p}" for p in r.pending] if r.pending else ["- ✅ 无"]
     if r.loops:

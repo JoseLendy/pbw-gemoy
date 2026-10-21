@@ -8,6 +8,9 @@ Issue codes (stage "8A"):
   sibling_value        number matches a SIBLING model's fact but not the target's                   error
   sibling_entity       term that only a sibling ledger lists as an entity                           error
   unknown_fact_id      [F#] tag or selling_points id not in the target ledger                       error
+  untagged_claim       sentence with a number / unit / spec count / ledger entity but no [F#]       error
+  tag_mismatch         a number in a tagged sentence belongs to another fact than the one tagged    error
+  excluded_fact        [F#] points at a fact the conflict gate excluded                             error
   variant_mismatch     number belongs to another SKU variant than the one requested                 error
   variant_unspecified  no variant requested, number belongs to one specific variant                 warn
   upper_bound_plain    an upper-bound fact (最高/最长/可达) written as a plain value                  warn
@@ -246,6 +249,69 @@ def _check_ids(post: Post, ledger: Ledger) -> list[CheckIssue]:
     return issues
 
 
+# ------------------------------------------------------------------ fact-ID tagging (plan §6.2, Phase 2)
+# A sentence "sounds factual" when it carries a unit number, a spec-word count, a resolution, or a named
+# term from the ledger's entity list (chip, port, display tech, feature). Generic words like 重量 alone do
+# not count ("电脑的重量每天都在你肩上" is scene-setting, not a claim); the 8A LLM layer catches fuzzy claims.
+# Such a sentence must be tagged; a tagged sentence must agree with its fact; a tag may never point at a
+# fact the conflict gate excluded.
+
+
+def excluded_fact_ids(ledger: Ledger) -> set[str]:
+    """Facts the conflict gate took out: they are never offered to the writer and may never be tagged."""
+    return {fid for c in (ledger.conflicts or []) for fid in c.fact_ids}
+
+
+def _sounds_factual(sentence: str, ledger: Ledger) -> bool:
+    masked = mask_whitelisted(sentence)
+    if units.find_all(masked) or SPEC_NUM_RE.search(masked) or RESOLUTION_RE.search(masked):
+        return True
+    n = _norm(sentence)
+    return any(_norm(e) and _norm(e) in n for e in ledger.entities)
+
+
+def _sentence_pieces(text: str) -> list[str]:
+    return [m.group(0) for m in _SENT_PIECE_RE.finditer(units.nfkc(text or "")) if m.group(0).strip()]
+
+
+def _check_tags(post: Post, ledger: Ledger, variant: str | None) -> list[CheckIssue]:
+    issues: list[CheckIssue] = []
+    excluded = excluded_fact_ids(ledger)
+    for field, raw in _fields(post):
+        if field.startswith("images["):      # captions come from the KB verbatim; the plan check owns them
+            continue
+        for piece in _sentence_pieces(raw):
+            tags = FACT_TAG_RE.findall(piece)
+            clean = FACT_TAG_RE.sub("", piece).strip()
+            if not clean:
+                continue
+            # (c) excluded by the conflict gate
+            for fid in tags:
+                if fid in excluded:
+                    issues.append(_issue("excluded_fact", f"事实 [{fid}] 因资料冲突已被排除，不能引用；删掉这句或换成已确认的事实",
+                                         field, clean, fid))
+            # (a) untagged but factual
+            if not tags and _sounds_factual(clean, ledger):
+                issues.append(_issue("untagged_claim",
+                                     f"这句像产品参数或功能说法，但没有标注事实编号：「{clean}」。"
+                                     f"在句末加上对应的 [F#]，或删掉清单里没有的说法", field, clean))
+                continue
+            # (b) tagged, but a number in the sentence does not belong to any tagged fact
+            if tags:
+                facts = [ledger.get(f) for f in tags if ledger.get(f)]
+                for span, value, unit in units.find_all(mask_whitelisted(clean)):
+                    if not any(units.same_value(v, u, value, unit) for f in facts for v, u in fact_values(f)):
+                        owners = [f for f in _matching_facts(ledger, value, unit)
+                                  if f.id not in excluded and _variant_ok(f, variant)]
+                        if owners:   # the number exists under another id: name it so auto_cite can fix it in code
+                            issues.append(_issue("tag_mismatch",
+                                                 f"数值「{span}」不属于所标编号 {'/'.join(tags)}，"
+                                                 f"应同时标注 [{owners[0].id}]（{owners[0].value}）",
+                                                 field, clean, owners[0].id))
+                        # unsupported numbers are reported by _check_numbers; don't double-report
+    return issues
+
+
 # ------------------------------------------------------------------ invented claims
 def _claim_categories() -> list[tuple[str, str, list[re.Pattern]]]:
     cfg = load_yaml("claim_patterns.yaml").get("categories", {})
@@ -347,26 +413,36 @@ def _cite_in(text: str, sentence: str, fid: str) -> str | None:
 
 
 def auto_cite(post: Post, issues: list[CheckIssue], ledger: Ledger) -> tuple[Post, list[CheckIssue]]:
-    """Fix missing citations in code: an LLM 8A issue that names a fact id of the TARGET ledger, on a sentence
-    that does not carry that tag, gets [Fxx] appended to the sentence. Returns (post, issues fixed)."""
+    """Fix missing citations in code: an 8A issue (LLM uncited/unsupported, or code tag_mismatch) that names a
+    fact id of the TARGET ledger, on a sentence that does not carry that tag, gets [Fxx] appended to the
+    sentence. Excluded (conflicting) facts are never added. Returns (post, issues fixed)."""
     import copy
     new, fixed = copy.deepcopy(post), []
+    added: set[tuple[str, str, str]] = set()     # (field, normalised sentence, fid) cited during THIS pass
+    excluded = excluded_fact_ids(ledger)
     for i in issues:
-        if i.stage != STAGE or i.code not in ("unsupported_claim", "uncited_claim") or not i.span:
+        if i.stage != STAGE or i.code not in ("unsupported_claim", "uncited_claim", "tag_mismatch") or not i.span:
             continue
-        fids = [f for f in _FACT_ID_RE.findall(i.fact_id or "") if ledger.get(f) is not None]
+        fids = [f for f in _FACT_ID_RE.findall(i.fact_id or "") if ledger.get(f) is not None and f not in excluded]
         fields = [i.field] if _get_field(new, i.field) is not None else \
             [f for f, _ in _fields(new) if _get_field(new, f) is not None]
+        key = _norm(FACT_TAG_RE.sub("", i.span)).rstrip("。！？!?；;")
         done = False
         for fid in fids:
+            if any((field, key, fid) in added for field in fields):
+                done = True          # an earlier issue in this pass already added exactly this tag
+                break
             for field in fields:
                 out = _cite_in(_get_field(new, field), i.span, fid)
                 if out is not None:
                     _set_field(new, field, out)
+                    added.add((field, key, fid))
                     if fid not in new.selling_points:
                         new.selling_points.append(fid)
                     done = True
                     break
+            if done:
+                break
         if done:
             fixed.append(i)
     return new, fixed
@@ -380,6 +456,7 @@ def check_facts(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger],
     issues += _check_numbers(post, ledger, siblings, variant)
     issues += _check_entities(post, ledger, siblings)
     issues += _check_ids(post, ledger)
+    issues += _check_tags(post, ledger, variant)
     issues += _check_invented(post, ledger)
     if llm is not None:
         issues += _llm_layer(post, ledger, llm)
