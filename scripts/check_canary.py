@@ -62,7 +62,11 @@ def main(argv=None) -> int:
     from agent.schemas import ImagePlan, PlannedImage, PostImage, Post
     from agent.checks.prices import valid_price_record
 
-    deps = Deps.fake() if args.fake else Deps.real()
+    try:
+        deps = Deps.fake() if args.fake else Deps.real()
+    except Exception as e:  # noqa: BLE001 - e.g. the KB mirror is missing: say why, no traceback
+        print(f"真实依赖不可用：{getattr(e, 'msg', None) or e}")
+        return 2
     if args.fake:   # the real check stack with the fake LLM (Deps.fake's run_checks is canned)
         from agent.checks import run_all
         deps.run_checks = run_all

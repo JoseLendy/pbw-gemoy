@@ -86,7 +86,11 @@ def main(argv=None) -> int:
     from agent.runs import REHEARSAL_DIR, RUNS_DIR
     from agent.style.similarity import similarity_threshold
 
-    deps = Deps.fake() if args.fake else Deps.real()
+    try:
+        deps = Deps.fake() if args.fake else Deps.real()
+    except Exception as e:  # noqa: BLE001 - e.g. the KB mirror is missing: say why, no traceback
+        print(f"真实依赖不可用：{getattr(e, 'msg', None) or e}")
+        return 2
     card_map = _demo if args.fake else (lambda c: c)
     runs_dir = REHEARSAL_DIR if args.fake else None
     today = args.today
