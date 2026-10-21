@@ -31,6 +31,8 @@ python app.py                               # http://0.0.0.0:7860
 
 获取镜像：向队友拷贝知识库镜像压缩包，解压到 `kb_snapshot/kb_v7/`（或用 `KB_LOCAL_DIR` 指向解压目录）。镜像只供本机使用，不得提交、上传或转发。镜像缺失时应用不会崩溃：状态栏显示原因并进入开发模式，命令行脚本打印原因后退出。
 
+> ⚠️ 旧分支里 `kb_snapshot/` 曾被 git 跟踪。从旧分支 pull 到「取消跟踪」之后的提交时，git 会**从磁盘删除**这些文件。pull 前先备份 `kb_snapshot/`；若已被删，可用 `git restore --source=1f6f8f6 --worktree -- kb_snapshot` 从历史恢复到工作区（仍不被跟踪）。
+
 ## 项目结构
 
 ```
