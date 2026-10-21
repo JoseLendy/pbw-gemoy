@@ -179,7 +179,8 @@ def write_post(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan, 
     # tags are always filled
     if not post.tags:
         post.tags = [PLATFORM_LABELS.get(post.platform, post.platform)]
-        if task.scenario:
+        # A card run never gets "新品首发" as a fallback tag: that is a release claim 8B would block.
+        if task.scenario and not (task.source == "card" and task.scenario == "new_launch"):
             from agent.schemas import SCENARIO_LABELS
             post.tags.append(SCENARIO_LABELS.get(task.scenario, task.scenario))
     return post

@@ -129,6 +129,12 @@ def _sales_block() -> list[str]:
             "不得使用“最 / 第一 / 唯一 / 顶级 / 全网 / 首选”等绝对化用语，包括与产品无关的生活描写。"]
 
 
+def _release_block() -> list[str]:
+    # The card's demo launch_date only schedules it; it is never given to the writer (Phase 5, Task 2).
+    return ["不得写“新品、首发、新上市、刚发布、即将上市、新款、开售”等说法，也不得写上市或发布日期，"
+            "除非这句话标注了一条明确写有上市/发布信息的事实编号；事实清单里没有这类事实时，一律不写。"]
+
+
 def brief(task) -> str:
     """Instruction block for the writer, built only from the card's own brief fields.
 
@@ -142,6 +148,7 @@ def brief(task) -> str:
     lines += _angle_block(task)
     lines += _promo_block(task)
     lines += _sales_block()
+    lines += _release_block()
     lines += ["仍然要满足：每个产品说法后标注事实编号 [F#]；不得引用清单外的任何产品信息。"]
     return "\n".join(f"- {line}" for line in lines if line)
 
