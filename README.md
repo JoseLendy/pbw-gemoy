@@ -46,6 +46,14 @@ tests/                  # 单元测试（全部跑在 fakes 上）+ RUN_E2E=1 �
 - 公开演示有限流、按会话配额与全局每小时上限；不提供知识库原文浏览或批量导出。
 - 不输出「最 / 第一 / 唯一 / 顶级 / 全网 / 首选」等绝对化用语；不虚构价格、销量、奖项、评测、政策。
 
+## Demo data（演示数据）
+
+复赛的门店端「今日推荐」跑在一套**合成门店数据**上（门店、销量、活动、顾客提问、发布记录均为模拟，带 `is_demo` 标记；产品事实始终来自 ima 知识库）。数据与生成脚本在 `data/demo/`，说明见 [`data/demo/README.md`](data/demo/README.md)；推荐逻辑在 `agent/recommend/`（`cards_for(store_id, date)` 实时计算），设计文档见 `docs/PROACTIVE_AGENT_PLAN.md`。
+
+```bash
+python scripts/gen_fake_data.py            # 重新生成 data/demo/generated/（seed=42 时与仓库内文件一致）
+```
+
 ---
 
 ## English (short)

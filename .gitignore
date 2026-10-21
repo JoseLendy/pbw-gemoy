@@ -23,3 +23,8 @@ __MACOSX/
 
 # archives (ima-skill/ itself IS committed, unmodified, per WORKFLOW v4)
 *.zip
+
+# demo data kit is tracked on purpose (synthetic store data, no KB content);
+# data/demo/inputs/poi_cache/ files from fetch_poi.py may be committed too
+!data/demo/
+!data/demo/**
