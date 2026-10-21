@@ -97,8 +97,12 @@ _SESSION_RUNS: dict[str, deque] = {}
 _GLOBAL_RUNS: deque = deque()
 
 
-def rate_check(session_id: str) -> str | None:
-    """Returns a Chinese message if the run is not allowed, else None (and records the run)."""
+def rate_check(session_id: str, follow_up: bool = False) -> str | None:
+    """Returns a Chinese message if the run is not allowed, else None (and records the run).
+
+    follow_up=True (answering the Agent's own clarification questions) skips the min-gap check only;
+    the hourly caps still apply.
+    """
     now = time.time()
     with _RATE_LOCK:
         while _GLOBAL_RUNS and now - _GLOBAL_RUNS[0] > 3600:
@@ -106,7 +110,7 @@ def rate_check(session_id: str) -> str | None:
         q = _SESSION_RUNS.setdefault(session_id, deque())
         while q and now - q[0] > 3600:
             q.popleft()
-        if q and now - q[-1] < PER_SESSION_MIN_GAP:
+        if q and not follow_up and now - q[-1] < PER_SESSION_MIN_GAP:
             return f"操作太快了，请 {int(PER_SESSION_MIN_GAP - (now - q[-1])) + 1} 秒后再试。"
         if len(q) >= PER_SESSION_PER_HOUR:
             return "本会话一小时内的生成次数已用完，请稍后再试。"
@@ -325,13 +329,14 @@ def on_generate(text: str, session: dict, a1, a2, a3):
     if not text:
         yield (*_fail(lines, "请先输入一句顾客描述，例如：一位妈妈想给上大学的女儿买 DemoBook 14（演示版），发小红书"), session)
         return
-    blocked = rate_check(session["id"])
+    clar = session.get("clarification")
+    is_follow_up = bool(clar and clar.partial and clar.partial.raw_text == text)
+    blocked = rate_check(session["id"], follow_up=is_follow_up)
     if blocked:
         yield (*_fail(lines, blocked), session)
         return
     form = {}
-    clar = session.get("clarification")
-    if clar and clar.partial and clar.partial.raw_text == text:
+    if is_follow_up:
         for q, ans in zip(clar.questions, (a1, a2, a3)):
             if ans:
                 form[q.slot] = ans
@@ -440,7 +445,7 @@ EXAMPLES = [
 # ---------------------------------------------------------------- UI
 def build() -> gr.Blocks:
     with gr.Blocks(title="华为 PC 图文软文 Agent") as demo:
-        session = gr.State({"id": uuid4().hex})
+        session = gr.State(lambda: {"id": uuid4().hex})
         gr.Markdown("## 华为 PC 图文软文 Agent\n输入一句顾客描述，生成经知识库核验的平台软文。")
         status = gr.HTML(status_html())
         with gr.Row():

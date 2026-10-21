@@ -33,3 +33,27 @@ def test_light_cards_use_dark_text_in_both_modes():
         assert f"color: {fg} !important" in decl_for(sel), sel
         # every descendant pinned, so the dark theme's h4/li/b colours cannot override it
         assert f"color: {fg} !important" in decl_for(f"{sel} *"), sel
+
+
+def test_clarification_follow_up_skips_min_gap_but_not_hourly_cap():
+    import app
+    app._SESSION_RUNS.clear()
+    app._GLOBAL_RUNS.clear()
+    assert app.rate_check("s-follow") is None
+    assert "操作太快了" in app.rate_check("s-follow")           # plain double-click is still blocked
+    assert app.rate_check("s-follow", follow_up=True) is None   # answering the Agent's questions is not
+    for _ in range(app.PER_SESSION_PER_HOUR):                   # hourly cap still applies to follow-ups
+        app.rate_check("s-follow", follow_up=True)
+    assert "一小时" in app.rate_check("s-follow", follow_up=True)
+    app._SESSION_RUNS.clear()
+    app._GLOBAL_RUNS.clear()
+
+
+def test_each_visitor_gets_own_session_id():
+    import app
+    from gradio.state_holder import SessionState
+    demo = app.build()
+    state = SessionState(demo)
+    sid = next(k for k, b in demo.blocks.items() if type(b).__name__ == "State")
+    other = SessionState(demo)
+    assert state[sid]["id"] != other[sid]["id"]
