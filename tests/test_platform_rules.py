@@ -42,9 +42,13 @@ def test_absolutes_are_not_ai_tell_phrases():
 
 def test_prompt_rules_have_no_real_looking_weight():
     """WORKFLOW fix 1: the example must be a placeholder, never a number a writer could copy."""
-    for p in PLATFORMS:
-        text = build_prompt_rules(p)
-        assert "约X kg [F1]" in text
+    from pathlib import Path
+    prompts = Path(__file__).resolve().parents[1] / "prompts"
+    # The tag example lives once, in the system prompt (Phase 5 prompt-bloat guard); it must stay a placeholder.
+    assert "约 X kg [F1]" in (prompts / "system_prompt.md").read_text(encoding="utf-8")
+    texts = [build_prompt_rules(p) for p in PLATFORMS] + [(prompts / n).read_text(encoding="utf-8")
+                                                          for n in ("system_prompt.md", "writer.md")]
+    for text in texts:
         assert "1.3kg" not in text and "1.3 kg" not in text and "1.25" not in text
 
 

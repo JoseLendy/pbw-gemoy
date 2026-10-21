@@ -124,29 +124,22 @@ def _promo_block(task) -> list[str]:
     return lines
 
 
-def _sales_block() -> list[str]:
-    return ["不得提销量、排名、人气或流行度：不写 热销、爆款、销量第一、卖断货、抢疯了、很多人买 之类说法。",
-            "不得使用“最 / 第一 / 唯一 / 顶级 / 全网 / 首选”等绝对化用语，包括与产品无关的生活描写。"]
-
-
 def _claim_block(task) -> list[str]:
     """Phase 5 eval: the systematic 8A unsupported_claim / 8B false_promise causes, stated up front."""
     lines = [
         "只写事实本身，不要从参数推出体验结论或承诺：不写“不费劲”“轻松些”“不用另买转接头”“不用重新适应”"
         "“按一下就能开机”“一整天够用”这类结果。可以写这个参数在什么场景会用到，感受留给顾客到店自己试。",
-        "一句话里有几个参数，就在每个参数后面各标它自己的事实编号；不要给没有参数的句子（如到店邀请）标编号。",
-        "标的编号必须是原文里写着这句内容的那条事实；型号、版本和限定词照抄事实原文，不要省略或简写。",
-        "到店邀请、署名这类句子里不要夹带任何产品说法（例如“不同版本配置不一样”），产品说法只放在带编号的句子里。",
     ]
     if not getattr(task, "question", None):
         lines.append("不得转述别人的话或经历：不写“顾客常问”“常听……说”“很多人问”“有人以为”“同学们都说”。")
-    if getattr(task, "platform", "") == "moments":
-        lines.append("朋友圈只讲一个核心卖点：全文只引用 1 个已选事实编号。")
     return lines
 
 
-def _release_block() -> list[str]:
+def _release_block(task) -> list[str]:
     # The card's demo launch_date only schedules it; it is never given to the writer (Phase 5, Task 2).
+    # Only the new-launch scenario pulls the writer toward 新品 wording; 8B blocks it on every card run.
+    if getattr(task, "scenario", None) != "new_launch":
+        return []
     return ["不得写“新品、首发、新上市、刚发布、即将上市、新款、开售”等说法，也不得写上市或发布日期，"
             "除非这句话标注了一条明确写有上市/发布信息的事实编号；事实清单里没有这类事实时，一律不写。"]
 
@@ -163,10 +156,8 @@ def brief(task) -> str:
     lines += _detail_block(task)
     lines += _angle_block(task)
     lines += _promo_block(task)
-    lines += _sales_block()
     lines += _claim_block(task)
-    lines += _release_block()
-    lines += ["仍然要满足：每个产品说法后标注事实编号 [F#]；不得引用清单外的任何产品信息。"]
+    lines += _release_block(task)
     return "\n".join(f"- {line}" for line in lines if line)
 
 
