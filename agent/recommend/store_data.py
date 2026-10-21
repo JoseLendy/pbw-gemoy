@@ -3,12 +3,14 @@ Load the demo data kit and compute recommendation cards LIVE (plan §3, §10).
 
     data = load_store_data()                       # inputs/ + generated/ (no network, no LLM)
     cards = cards_for("S01", "2026-10-21")          # list[RecommendationCard]
+    card = product_card("S04", "matebook-14-2024", "2026-10-23")   # 三店对比: one product, this store's voice
 
 With the committed generated/ files and seed 42 this equals generated/today_cards.json byte for byte
 in content; the UI can swap from the file to this function without changing anything else.
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,7 +19,7 @@ from typing import Optional
 from agent.recommend import poi, sales, slots
 from agent.recommend.common import GENERATED, INPUTS, load_csv, load_json, parse_date
 from agent.recommend.profiles import build_profiles
-from agent.schemas import RecommendationCard
+from agent.schemas import CardPromo, RecommendationCard
 
 
 @dataclass
@@ -132,3 +134,23 @@ def cards_for(store_id: str, today: dt.date | str, data: Optional[StoreData] = N
 
 def default_card(store_id: str, today: dt.date | str, data: Optional[StoreData] = None) -> Optional[RecommendationCard]:
     return next((c for c in cards_for(store_id, today, data) if c.is_default), None)
+
+
+def product_card(store_id: str, model_id: str, today: dt.date | str,
+                 data: Optional[StoreData] = None) -> Optional[RecommendationCard]:
+    """三店对比 (plan §9): the store's own 活动款 card (its hook / voice / angle / landmark) pointed at one
+    fixed product, so several stores can post about the same model side by side. The model must be in an
+    active campaign; its promo and price come from that campaign's record. None if it is not."""
+    data = data or load_store_data()
+    day = parse_date(today)
+    base = next((c for c in cards_for(store_id, day, data) if c.slot == "promo"), None)
+    camp = next((p for p in data.promos if model_id in p["models"]
+                 and parse_date(p["start"]) <= day <= parse_date(p["end"])), None)
+    if base is None or camp is None:
+        return None
+    card = dataclasses.replace(
+        base, card_id=f"{base.card_id}-{model_id}", model_id=model_id, display_name=data.model(model_id)["display_name"],
+        is_default=False,
+        promo=CardPromo(campaign_id=camp["campaign_id"], name=camp["name"], mechanic=camp["mechanic"],
+                        price_info=(camp.get("price_info") or {}).get(model_id), source=camp["source"]))
+    return card
