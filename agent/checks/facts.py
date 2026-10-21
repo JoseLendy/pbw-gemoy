@@ -10,6 +10,7 @@ Issue codes (stage "8A"):
   unknown_fact_id      [F#] tag or selling_points id not in the target ledger                       error
   untagged_claim       sentence with a number / unit / spec count / ledger entity but no [F#]       error
   tag_mismatch         a number in a tagged sentence belongs to another fact than the one tagged    error
+  os_variant_unstated  a cited fact bound to Windows / Linux, stated without naming that system      error
   excluded_fact        [F#] points at a fact the conflict gate excluded                             error
   variant_mismatch     number belongs to another SKU variant than the one requested                 error
   variant_unspecified  no variant requested, number belongs to one specific variant                 warn
@@ -89,15 +90,25 @@ def mask_whitelisted(clean_text: str) -> str:
 
 # ------------------------------------------------------------------ fact value sets
 # "1.38/1.36 kg": the unit parser reads only the number in front of the unit; the one before "/" shares it.
-_SLASH_PAIR_RE = re.compile(r"(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)(\s*[A-Za-z%]+|\s*[^\x00-\x7f\s\d/，。；、]{1,2})")
+# Only a like-for-like pair: the first number stands alone (not "PD 3.0/", "Wi-Fi 6/", "Gen 2/"), both have the
+# same decimals, and they are within 1.5x of each other (not a fraction like "1/2 英寸").
+_SLASH_PAIR_RE = re.compile(r"(?<![A-Za-z0-9.\-])(?<![A-Za-z0-9.\-]\s)(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)"
+                            r"(\s*[A-Za-z%]+|\s*[^\x00-\x7f\s\d/，。；、]{1,2})")
+
+
+def _decimals(n: str) -> int:
+    return len(n.split(".")[1]) if "." in n else 0
 
 
 def _slash_pair_values(text: str) -> list[tuple[float, str]]:
     out: list[tuple[float, str]] = []
     for m in _SLASH_PAIR_RE.finditer(units.nfkc(text or "")):
-        unit = m.group(3)
-        if units.find_all(m.group(2) + unit):        # only when the second number really carries a unit
-            out += [(v, u) for _, v, u in units.find_all(m.group(1) + unit)]
+        a, b, unit = m.group(1), m.group(2), m.group(3)
+        fa, fb = float(a), float(b)
+        if _decimals(a) != _decimals(b) or not fa or not fb or max(fa, fb) / min(fa, fb) > 1.5:
+            continue
+        if units.find_all(b + unit):                 # only when the second number really carries a unit
+            out += [(v, u) for _, v, u in units.find_all(a + unit)]
     return out
 
 
@@ -289,7 +300,7 @@ _KEEP = "\x00"     # stands in for a "；" that is part of a quoted fact value, 
 
 
 def _protect_quoted_semicolons(text: str, ledger: Ledger) -> str:
-    """A fact value that itself contains "；" (a KB 可用结论 like "更适合…；系统兼容是选型前置条件"), quoted
+    """A fact value that itself contains "；" (a KB 可用结论 of the form "适合…；…是前提"), quoted
     verbatim and followed by its OWN [F#] tag, is one tagged claim: its inner "；" become _KEEP. Nothing else
     changes: text before the quote, or a quote tagged with another fact, still splits at "；" as before."""
     for f in ledger.facts:
@@ -335,6 +346,16 @@ def _check_tags(post: Post, ledger: Ledger, variant: str | None) -> list[CheckIs
                                      f"这句像产品参数或功能说法，但没有标注事实编号：「{clean}」。"
                                      f"在句末加上对应的 [F#]，或删掉清单里没有的说法", field, clean))
                 continue
+            # (d) a fact bound to one system (Windows / Linux) stated without naming it: it would read as true
+            #     for every version (ledger.bind_os_variants; real S04 fingerprint post, 2026-10-23)
+            for fid in tags:
+                f = ledger.get(fid)
+                system = next((s for s in ("Windows", "Linux") if f and s.lower() in _norm(f.variant)), None)
+                if system and system.lower() not in _norm(clean) and system.lower() not in _norm(variant or ""):
+                    issues.append(_issue("os_variant_unstated",
+                                         f"事实 [{fid}]（{f.value}）只适用于 {f.variant}，这句没有写明「{system} 版」，"
+                                         f"会被读成所有版本都有：在句中写明「{system} 版」，或换一个卖点",
+                                         field, clean, fid))
             # (b) tagged, but a number in the sentence does not belong to any tagged fact
             if tags:
                 facts = [ledger.get(f) for f in tags if ledger.get(f)]

@@ -375,9 +375,58 @@ def test_customer_data_noun_is_not_a_customer_quote():
     assert "invented_customer_quote" not in codes(check_compliance(p, fake_ledger(), task))
 
 
-@pytest.mark.parametrize("text", ["很多客户都在问续航", "客户说这台很轻", "顾客反馈键盘好用", "客户资料之外，客户都在问重量"])
+@pytest.mark.parametrize("text", ["很多客户都在问续航", "客户说这台很轻", "顾客反馈键盘好用", "客户资料之外，客户都在问重量",
+                                  "客户信息里大家都在问续航", "客户名单上的老客都说这台轻", "顾客数据显示都推荐这台"])
 def test_real_customer_references_are_still_blocked(text):
     task = _card_task()
     p = fake_post("moments")
     p.body = [text]
     assert "invented_customer_quote" in codes(check_compliance(p, fake_ledger(), task), "error"), text
+
+
+# ------------------------------------------------------------------ a qualifier the KB says must not be dropped
+def _ledger_with_keep_rule():
+    import copy
+    led = copy.deepcopy(fake_ledger())
+    led.boundaries = list(led.boundaries or []) + [
+        {"category": "ports", "text": "DemoPort 标注为 DemoPort 9 XYZ，不应省略 XYZ 限定。", "source_title": "卖点与限制.md"}]
+    return led
+
+
+def test_hdmi_without_the_required_qualifier_fails_in_code():
+    """Real 2026-10-23 S10 (after the writer rule): a port was named without the qualifier the KB says must never be
+    dropped; the LLM judge let it through, so the KB's explicit rule is checked in code."""
+    p = fake_post("moments")
+    p.body = ["接口保留了 DemoPort 和两个 USB-A [F1]。"]
+    issues = check_compliance(p, _ledger_with_keep_rule(), fake_task("moments")).issues
+    assert any(i.code == "qualifier_omitted" and i.severity == "error" for i in issues)
+
+
+def test_hdmi_with_its_qualifier_or_not_mentioned_passes():
+    for body in ("接口有 DemoPort 9 XYZ [F1]。", "接口有两个 USB-A [F1]。"):
+        p = fake_post("moments")
+        p.body = [body]
+        assert not [i for i in check_compliance(p, _ledger_with_keep_rule(), fake_task("moments")).issues
+                    if i.code == "qualifier_omitted"]
+
+
+def test_keep_qualifier_rule_ignores_kb_captions_and_tags():
+    """Review: a KB image caption is copied verbatim and a tag is not a claim; neither can be rewritten."""
+    p = fake_post("moments")
+    p.body = ["接口有两个 USB-A [F1]。"]
+    p.tags = ["DemoPort"]
+    if p.images:
+        p.images[0].caption = "DemoPort 接口特写"
+    assert not [i for i in check_compliance(p, _ledger_with_keep_rule(), fake_task("moments")).issues
+                if i.code == "qualifier_omitted"]
+
+
+@pytest.mark.parametrize("rule", ["左侧 DemoPort 9 标注为 DemoPort 9 XYZ，不应省略 XYZ 限定。",
+                                  "演示屏幕亮度标注为 500 尼特典型值，不应省略典型值限定。"])
+def test_keep_qualifier_rule_never_fires_on_a_misparsed_term(rule):
+    import copy
+    led = copy.deepcopy(fake_ledger())
+    led.boundaries = [{"category": "ports", "text": rule, "source_title": "卖点与限制.md"}]
+    p = fake_post("moments")
+    p.body = ["版本 9 和 2.1 都有，屏幕亮度也不错 [F1]。"]
+    assert not [i for i in check_compliance(p, led, fake_task("moments")).issues if i.code == "qualifier_omitted"]
