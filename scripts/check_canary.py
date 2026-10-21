@@ -62,7 +62,11 @@ def main(argv=None) -> int:
     from agent.schemas import ImagePlan, PlannedImage, PostImage, Post
     from agent.checks.prices import valid_price_record
 
-    deps = Deps.fake() if args.fake else Deps.real()
+    try:
+        deps = Deps.fake() if args.fake else Deps.real()
+    except Exception as e:  # noqa: BLE001 - e.g. the KB mirror is missing: say why, no traceback
+        print(f"真实依赖不可用：{getattr(e, 'msg', None) or e}")
+        return 2
     if args.fake:   # the real check stack with the fake LLM (Deps.fake's run_checks is canned)
         from agent.checks import run_all
         deps.run_checks = run_all
@@ -93,7 +97,14 @@ def main(argv=None) -> int:
                     cta="周末来店里上手试试，或者私信我。", tags=["门店推荐"],
                     selling_points=[a.id], images=copy.deepcopy(post_images)), (task or plain)
 
-    clean_a = f"每天背着去上课，先看这一项：{a.value} [{a.id}]。"
+    # Clean drafts follow the writer brief: reader-side scenarios, and facts whose category carries no KB
+    # 表达边界 qualifier (a weight without the KB's variance note is a correct 8B catch, not a clean draft).
+    bounded = {bd.get("category") for bd in (ledger.boundaries or []) if bd.get("category")}
+    blocked = {fid for c in (ledger.conflicts or []) for fid in c.fact_ids}
+    free = [f for f in ledger.facts if f.norm_value is not None and f.category not in bounded and f.id not in blocked]
+    c = free[0] if free else a
+    d = next((f for f in free if f.attribute != c.attribute), b)
+    clean_a = f"适合每天背去上课的同学，先看这一项：{c.value} [{c.id}]。"
     wrong_value = re.sub(r"\d+(?:\.\d+)?", "0.86", a.value, count=1)      # first number → one no fact has
     sib = next((f for f in sib_ledger.facts if f.norm_value is not None and f.attribute in {x.attribute for x in ledger.facts}
                 and not any(x.value == f.value for x in ledger.facts)), None)
@@ -119,12 +130,11 @@ def main(argv=None) -> int:
         (Case(f"{sibling} 的参数写在 {target} 下", True),
          draft(clean_a, f"这一项是 {sib.value} [{same_attr[sib.attribute]}]。") if sib else draft(clean_a)),
         (Case("干净稿 1", False), draft(clean_a)),
-        (Case("干净稿 2", False), draft(f"在图书馆待一下午，看看这一项：{b.value} [{b.id}]。")),
+        (Case("干净稿 2", False), draft(f"如果你常在图书馆待一下午，可以看看这一项：{d.value} [{d.id}]。")),
     ]
     print(f"canary {day} · {'fakes' if args.fake else 'real deps'} · target {target} · LLM judges on")
     for case, (post, task) in cases:
-        if case.planted is False:
-            post.selling_points = list(dict.fromkeys(re.findall(r"\[(F\d+)\]", post.all_text())))
+        post.selling_points = list(dict.fromkeys(re.findall(r"\[(F\d+)\]", post.all_text())))[:1]
         report = deps.run_checks(post, ledger, siblings, task, plan, deps.llm)
         case.hits = [(i.stage, i.code, (i.span or "")[:24]) for i in report.issues if i.severity == "error"]
         case.reasons = [(i.stage, i.code, (i.span or "")[:40], i.message) for i in report.issues

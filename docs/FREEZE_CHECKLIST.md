@@ -3,6 +3,8 @@
 Deadline: **Fri Oct 23, 17:00**. Record Friday morning; submit by ~15:00 with a 2-hour buffer.
 This is the Phase 4 freeze gate. Tick every item before recording.
 
+**Run `python scripts/freeze_check.py` first.** It checks the automatable items (tests, demo data, catalog guard, placeholders, secrets, kb_snapshot/ untracked, facts for every mapped model, prepared posts, demo_scenes run, labels) and exits non-zero if any fails; tick the rest by hand.
+
 ## Data and model mapping
 
 - [ ] `data/demo/inputs/models.csv` uses real catalog IDs and canonical names; no `<` or `MODEL_` remains.

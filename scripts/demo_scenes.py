@@ -86,7 +86,11 @@ def main(argv=None) -> int:
     from agent.runs import REHEARSAL_DIR, RUNS_DIR
     from agent.style.similarity import similarity_threshold
 
-    deps = Deps.fake() if args.fake else Deps.real()
+    try:
+        deps = Deps.fake() if args.fake else Deps.real()
+    except Exception as e:  # noqa: BLE001 - e.g. the KB mirror is missing: say why, no traceback
+        print(f"真实依赖不可用：{getattr(e, 'msg', None) or e}")
+        return 2
     card_map = _demo if args.fake else (lambda c: c)
     runs_dir = REHEARSAL_DIR if args.fake else None
     today = args.today
@@ -178,6 +182,9 @@ def main(argv=None) -> int:
         before = len(getattr(deps.llm, "calls", []) or [])
         out = edit(r, "加上立减500", deps)
         after = len(getattr(deps.llm, "calls", []) or [])
+        if isinstance(out, EditBlocked) and not args.fake:      # keep a real record (samples/, freeze check)
+            from agent.runs import log_run
+            log_run(ctx["s01_card"], out, kind="edit_blocked")
         return isinstance(out, EditBlocked) and after == before, \
             f"{type(out).__name__}：{getattr(out, 'message', '')[:80]}；写作调用 {after - before} 次"
 
@@ -221,6 +228,8 @@ def main(argv=None) -> int:
         if c0 is None:
             return False, f"{today} 不在 {mid} 的新品窗口内"
         locked0 = c0.locked
+        gate = run_from_card(card_map(c0), deps)              # LockedResult before any ima / LLM call (logged)
+        locked0 = locked0 and isinstance(gate, LockedResult)
         set_fact_card_status(mid, "verified")
         d = default_card("S01", today)
         is_default = d is not None and d.slot == "new_release" and d.model_id == mid
