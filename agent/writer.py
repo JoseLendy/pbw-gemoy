@@ -46,8 +46,12 @@ def _usable(ledger: Ledger, strategy: Strategy) -> tuple[list, list]:
 
 
 def _boundaries(ledger: Ledger, chosen: list) -> list[str]:
+    """Boundary lines for the chosen facts, plus the uncategorised and "other" (model-wide) lines: the same
+    selection the 8B judge enforces (checks.compliance.relevant_boundaries), so the writer is never held to a
+    model-wide line ("背光键盘必须绑定 SKU") it was not shown."""
     cats = {f.category for f in chosen}
-    return [b["text"] for b in ledger.boundaries if b.get("category") in cats or not b.get("category")]
+    return [b["text"] for b in ledger.boundaries
+            if b.get("category") in cats or not b.get("category") or b.get("category") == "other"]
 
 
 def _plan_lines(plan: ImagePlan) -> str:
