@@ -1,0 +1,284 @@
+"""
+Pure display-data helpers + HTML render panels shared by every ui/*_tab.py module and by app.py's
+manual-flow tab. No Gradio imports here: every function takes plain data (a RunResult, a
+RecommendationCard, a session dict, ...) and returns a string / dict / list that any caller can
+render or assert on in a test. Never outputs a model_id or the literal "MODEL_" - always
+card.display_name / model.canonical_name, per CLAUDE.md hard rule 1 and the plan's on-screen rules.
+
+phone_html / talk_card_html / banner_html / stop_html / placeholder_png / image_data_uri were moved
+here from app.py unchanged (behaviour-identical) so ui/store_tab.py can reuse them without a circular
+import; app.py imports them back, so `app.banner_html(...)` etc. keep working for existing callers.
+"""
+from __future__ import annotations
+
+import base64
+import html
+import re
+from typing import Any, Optional
+from uuid import uuid4
+
+from agent.formatter import strip_fact_tags
+from agent.schemas import (
+    BaselineResult, EditBlocked, LockedResult, NeedsHuman, RecommendationCard, RunResult, StaffContext,
+)
+
+# ---------------------------------------------------------------- stores / slots / role rule (pure data)
+SLOT_ORDER = ("potential", "promo", "new_release", "customer_question")
+SLOT_LABELS = {"potential": "潜力款", "promo": "活动款", "new_release": "新品款", "customer_question": "顾客问答"}
+STAFF_ONLY_PLATFORMS = ("公众号", "小红书")   # plan §2.1: these are 由店长发布 for the staff role
+LOCKED_LABEL = "新品资料待总部确认"
+
+
+def store_choices(stores: list[dict]) -> list[tuple[str, str]]:
+    """(label, value) pairs for a Dropdown: label = store_name (never store_id, never a model id)."""
+    return [(s["store_name"], s["store_id"]) for s in stores]
+
+
+def default_card_of(cards: list[RecommendationCard]) -> Optional[RecommendationCard]:
+    return next((c for c in cards if c.is_default), None)
+
+
+def other_cards(cards: list[RecommendationCard]) -> list[RecommendationCard]:
+    """Non-default cards, in the fixed slot order (换一条 reveals these)."""
+    by_slot = {c.slot: c for c in cards if not c.is_default}
+    return [by_slot[s] for s in SLOT_ORDER if s in by_slot]
+
+
+def reason_badges(card: RecommendationCard) -> list[tuple[str, bool]]:
+    """[(text, is_demo)] in order, for 「为什么推这条」; is_demo drives the 模拟数据 badge."""
+    return [(r.text, bool(r.is_demo)) for r in (card.reasons or [])]
+
+
+def can_act(card: RecommendationCard, staff: Optional[StaffContext] = None) -> bool:
+    """plan §2.1: 朋友圈 cards are actionable by everyone; 公众号/小红书 are view-only for staff role."""
+    if card.platform not in STAFF_ONLY_PLATFORMS:
+        return True
+    return getattr(staff, "role", None) != "staff"
+
+
+def role_notice(card: RecommendationCard, staff: Optional[StaffContext] = None) -> Optional[str]:
+    return None if can_act(card, staff) else "由店长发布"
+
+
+def card_locked_label(card: RecommendationCard) -> Optional[str]:
+    return LOCKED_LABEL if card.locked else None
+
+
+# ---------------------------------------------------------------- session state shape (reset-friendly)
+def fresh_session() -> dict:
+    """A blank UI session: 已发布 marks, tapped question chips, last shown result per card. Pure - never
+    touches the backend, so calling it can never clear prepared posts (those live server-side). `id` is
+    a fresh per-session identifier (each call is a new session), not derived from anything backend-side."""
+    return {"id": uuid4().hex, "published": {}, "chips": {}, "results": {}}
+
+
+# ---------------------------------------------------------------- result classification
+def result_kind(result: Any) -> str:
+    """run_result / locked / needs_human / needs_review / edit_blocked / baseline / clarification /
+    unknown. NeedsReview doesn't exist in schemas.py yet (Phase 5, not merged): detected by class name
+    first, then by shape (carries `card` + a draft field), so this keeps working once it lands."""
+    if isinstance(result, RunResult):
+        return "run_result"
+    if isinstance(result, LockedResult):
+        return "locked"
+    if isinstance(result, EditBlocked):
+        return "edit_blocked"
+    if isinstance(result, NeedsHuman):
+        return "needs_human"
+    if isinstance(result, BaselineResult):
+        return "baseline"
+    name = type(result).__name__
+    if name == "NeedsReview" or (hasattr(result, "card") and
+                                 (hasattr(result, "best_draft") or hasattr(result, "draft"))):
+        return "needs_review"
+    if hasattr(result, "questions"):
+        return "clarification"
+    return "unknown"
+
+
+def fallback_note(result: Any) -> Optional[str]:
+    """Results may carry fallback = "trimmed" | "next_card" (Phase 5, optional). Only "next_card" gets
+    its own note here; "trimmed" is mentioned only inside 四、核验结果, already covered by report/pending."""
+    return "今日主推暂不可用，已为你准备下一条" if getattr(result, "fallback", None) == "next_card" else None
+
+
+def needs_review_view(result: Any) -> dict:
+    """Best-effort extraction for a NeedsReview stand-in, before/after Phase 5 lands: card, the best
+    draft text, the failing sentences (highlighted like a check-failure span) and the reasons given."""
+    draft = getattr(result, "best_draft", None) or getattr(result, "draft", "") or ""
+    failing = (getattr(result, "failing_sentences", None) or getattr(result, "flagged", None)
+              or getattr(result, "failing", None) or [])
+    reasons = getattr(result, "reasons", None) or []
+    return {"card": getattr(result, "card", None), "draft": str(draft),
+            "failing": [str(f) for f in failing], "reasons": [str(r) for r in reasons]}
+
+
+# ---------------------------------------------------------------- HTML render panels (moved from app.py)
+_IMG_CACHE: dict[str, str] = {}
+
+
+def placeholder_png(label: str, w: int = 600, h: int = 450) -> bytes:
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">'
+           f'<rect width="100%" height="100%" fill="#dfe6ee"/>'
+           f'<text x="50%" y="48%" font-size="34" text-anchor="middle" fill="#607d8b" font-family="sans-serif">示例图</text>'
+           f'<text x="50%" y="60%" font-size="18" text-anchor="middle" fill="#90a4ae" font-family="sans-serif">'
+           f'{html.escape(label)}</text></svg>')
+    return svg.encode("utf-8")
+
+
+def image_data_uri(media_id: str, title: str, deps: Any = None) -> str:
+    """deps is any object with an optional .fetch_image_bytes(media_id); never raises, never shows the
+    media id - falls back to a labelled placeholder (fake mode, or a fetch failure)."""
+    if media_id in _IMG_CACHE:
+        return _IMG_CACHE[media_id]
+    uri = ""
+    fetch = getattr(deps, "fetch_image_bytes", None)
+    if fetch is not None:
+        try:
+            data = fetch(media_id)
+            mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
+            uri = f"data:{mime};base64," + base64.b64encode(data).decode()
+        except Exception:  # noqa: BLE001 - image fetch must never break the render
+            uri = ""
+    if not uri:
+        uri = "data:image/svg+xml;base64," + base64.b64encode(placeholder_png(title)).decode()
+    _IMG_CACHE[media_id] = uri
+    return uri
+
+
+def _flagged_spans(r: RunResult) -> set[str]:
+    return {i.span for i in r.report.issues if i.severity == "error" and i.span}
+
+
+def _sentence_html(text: str, r: RunResult, flagged: set[str]) -> str:
+    """Each sentence with an [F#] gets an expandable source line (fact value, quote, source title)."""
+    out = []
+    for sent in re.split(r"(?<=[。！？!?])", text):
+        if not sent.strip():
+            continue
+        ids = re.findall(r"\[(F\d+)\]", sent)
+        clean = html.escape(strip_fact_tags(sent))
+        for sp in flagged:
+            if sp and sp in sent:
+                clean = clean.replace(html.escape(sp), f'<span class="flag">{html.escape(sp)}</span>')
+        facts = [r.ledger.get(i) for i in ids if r.ledger.get(i)]
+        if facts:
+            src = "".join(f'<div class="src">依据 {f.id}：{html.escape(f.value)}<br>原文：「{html.escape(f.quote)}」'
+                          f'<br>来源：{html.escape(f.source_title)}</div>' for f in facts)
+            out.append(f'<details><summary><span class="fact">{clean}</span></summary>{src}</details>')
+        else:
+            out.append(clean)
+    return "".join(out)
+
+
+def _img_tag(im, r: RunResult, deps: Any = None) -> str:
+    it = next((p for p in r.plan.items if p.image.media_id == im.media_id), None)
+    title = it.image.title if it else "图片"
+    cap = html.escape(im.caption or (it.caption if it else ""))
+    return f'<img src="{image_data_uri(im.media_id, title, deps)}" alt="{html.escape(title)}"><div class="cap">{cap}</div>'
+
+
+def phone_html(r: RunResult, deps: Any = None) -> str:
+    p, post = r.post.platform, r.post
+    flagged = _flagged_spans(r)
+    S = lambda t: _sentence_html(t, r, flagged)  # noqa: E731
+    title = html.escape(strip_fact_tags(post.title))
+    paras = "".join(f'<div class="p">{S(b)}</div>' for b in post.body)
+    imgs = post.images
+    tags = " ".join(f"<span>#{html.escape(t)}</span>" for t in post.tags)
+    if p == "wechat_article":
+        body_parts = []
+        for k, b in enumerate(post.body):
+            body_parts.append(f'<div class="p">{S(b)}</div>')
+            for im in imgs:
+                if im.position == f"第{k + 1}段后":
+                    body_parts.append(_img_tag(im, r, deps))
+        top = "".join(_img_tag(im, r, deps) for im in imgs if im.position == "标题下方")
+        rest = "".join(_img_tag(im, r, deps) for im in imgs if im.position not in ("标题下方",) and not re.match(r"第\d+段后", im.position))
+        screen = (f'<div class="topbar"><span>‹</span><span>公众号</span><span>···</span></div>'
+                  f'<h2>{title}</h2><div class="meta">华为门店 · 刚刚</div><div class="body">{top}'
+                  f'<div class="p">{S(post.intro)}</div>{"".join(body_parts)}{rest}'
+                  f'<div class="cta">{S(post.cta)}</div></div>')
+        skin = "skin-wechat"
+    elif p == "moments":
+        n = "one" if len(imgs) == 1 else ""
+        screen = (f'<div class="topbar"><span>‹</span><span>朋友圈</span><span>📷</span></div>'
+                  f'<div class="post"><div class="avatar"></div><div style="flex:1"><div class="name">华为授权体验店</div>'
+                  f'{paras}<div class="grid {n}">{"".join(_img_tag(im, r, deps) for im in imgs)}</div>'
+                  f'<div class="cta">{S(post.cta)}</div><div class="time">刚刚</div></div></div>')
+        skin = "skin-moments"
+    elif p == "poster":
+        pts = "".join(f'<div class="pt">{S(b)}</div>' for b in post.body)
+        screen = (f'{"".join(_img_tag(im, r, deps) for im in imgs[:1])}<h2>{title}</h2><div class="sub">{S(post.intro)}</div>'
+                  f'{pts}<div class="cta">{S(post.cta)}</div>')
+        skin = "skin-poster"
+    elif p == "douyin":
+        screen = (f'<div class="gallery">{"".join(_img_tag(im, r, deps) for im in imgs)}</div>'
+                  f'<div class="body"><b>{title}</b><div class="p">{S(post.intro)}</div>{paras}'
+                  f'<div class="cta">{S(post.cta)}</div><div class="tags">{tags}</div></div>')
+        skin = "skin-douyin"
+    else:  # xiaohongshu
+        screen = (f'<div class="author"><div class="avatar"></div><span>华为门店小助手</span></div>'
+                  f'<div class="gallery">{"".join(_img_tag(im, r, deps) for im in imgs)}</div>'
+                  f'<h2>{title}</h2><div class="body"><div class="p">{S(post.intro)}</div>{paras}'
+                  f'<div class="cta">{S(post.cta)}</div><div class="tags">{tags}</div></div>')
+        skin = "skin-xhs"
+    if not imgs:
+        screen = '<div class="cap">（知识库无该型号图片，本文不配图）</div>' + screen
+    return f'<div class="hw-phone {skin}"><div class="notch"></div><div class="screen">{screen}</div></div>'
+
+
+def talk_card_html(r: RunResult) -> str:
+    items = "".join(f"<li>{html.escape(strip_fact_tags(t))}</li>" for t in r.strategy.talk_card)
+    return f'<div class="hw-talk"><h4>💬 导购话术（{html.escape(r.model.canonical_name)}）</h4><ol>{items}</ol></div>'
+
+
+def banner_html(r: RunResult) -> str:
+    errs = [i for i in r.report.issues if i.severity == "error"]
+    shown = set(r.pending)
+    notes = [i for i in r.report.issues if i.severity == "warn" and i.message not in shown]
+    out = []
+    if r.report.passed and not r.pending:
+        out.append('<div class="hw-banner ok">✅ 已核验：所有产品事实均来自知识库台账，图片属于目标型号，未发现合规问题。'
+                   f'（{len(r.post.selling_points)} 个事实点 · {len(r.post.images)} 张图 · 改写 {r.loops} 轮）</div>')
+    if errs:
+        li = "".join(f"<li>{html.escape(i.message)}" + (f"：「{html.escape(i.span)}」" if i.span else "") + "</li>" for i in errs)
+        out.append(f'<div class="hw-banner err">❌ {len(errs)} 处未通过核验（已标红，请人工处理）<ul>{li}</ul></div>')
+    if r.pending:
+        li = "".join(f"<li>{html.escape(p)}</li>" for p in r.pending)
+        out.append(f'<div class="hw-banner warn">⚠️ 待确认<ul>{li}</ul></div>')
+    if notes:  # warnings (e.g. 表达边界) are 核验提示, not 待确认 lines
+        li = "".join(f"<li>{html.escape(i.message)}</li>" for i in notes)
+        out.append(f'<div class="hw-banner note">ℹ️ 核验提示<ul>{li}</ul></div>')
+    return "".join(out)
+
+
+def stop_html(msg: str, title: str = "已停止输出，需人工确认") -> str:
+    return f'<div class="hw-stop"><b>⛔ {html.escape(title)}</b><div style="margin-top:6px">{html.escape(msg)}</div></div>'
+
+
+def needs_review_html(result: Any) -> str:
+    """NeedsReview (Phase 5, stand-in until merged): 需人工确认 with failing sentences highlighted."""
+    v = needs_review_view(result)
+    draft = html.escape(v["draft"])
+    for f in v["failing"]:
+        if f:
+            draft = draft.replace(html.escape(f), f'<span class="flag">{html.escape(f)}</span>')
+    reasons = "".join(f"<li>{html.escape(r)}</li>" for r in v["reasons"])
+    return ('<div class="hw-banner err">⛔ 需人工确认<div style="margin:6px 0;white-space:pre-wrap">'
+           f'{draft}</div>' + (f"<ul>{reasons}</ul>" if reasons else "") + '</div>')
+
+
+def last_real_run_html(payload: dict) -> str:
+    """Fallback panel for ui_data.last_real_run(): never presented as a fresh run - the label and the
+    original timestamp are always shown together."""
+    res = payload.get("result") or {}
+    post = res.get("post") or {}
+    strip = lambda t: strip_fact_tags(t or "")  # noqa: E731
+    body = "".join(f'<div class="p">{html.escape(strip(b))}</div>' for b in post.get("body") or [])
+    ts = payload.get("timestamp", "")
+    return (f'<div class="hw-banner warn">⏱ 以下为最近一次真实运行结果（非本次生成）· 时间：{html.escape(ts)}</div>'
+           f'<div class="hw-phone"><div class="screen"><div class="body">'
+           f'<h2>{html.escape(strip(post.get("title")))}</h2>'
+           f'<div class="p">{html.escape(strip(post.get("intro")))}</div>{body}'
+           f'<div class="cta">{html.escape(strip(post.get("cta")))}</div></div></div></div>')

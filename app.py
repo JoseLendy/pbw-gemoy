@@ -9,7 +9,6 @@ per-session and global rate limits, plain-language errors.
 """
 from __future__ import annotations
 
-import base64
 import html
 import logging
 import os
@@ -25,8 +24,11 @@ os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
 import gradio as gr  # noqa: E402
 
 from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags
-from agent.pipeline import Deps, edit as pipeline_edit, run as pipeline_run, run_all_platforms
+from agent.pipeline import edit as pipeline_edit, run as pipeline_run, run_all_platforms
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult
+from agent.ui_data import DEPS, plain_error, today as demo_today
+from ui import store_tab
+from ui.components import banner_html, phone_html, placeholder_png, stop_html, talk_card_html  # noqa: F401
 
 try:
     from dotenv import load_dotenv
@@ -42,7 +44,8 @@ CSS = (ROOT / "static" / "phone.css").read_text("utf-8")
 KB_NAME = "任德耀新建华为PC知识库"
 
 # ---------------------------------------------------------------- deps + status (cached)
-DEPS: Deps = Deps.auto()
+# DEPS is the single shared Deps for the whole app (manual tab + proactive tabs): one catalog, one ima
+# client. Built once in agent.ui_data and imported here, never re-constructed.
 _STATUS_CACHE: dict = {}
 _STATUS_LOCK = threading.Lock()
 
@@ -121,165 +124,8 @@ def rate_check(session_id: str, follow_up: bool = False) -> str | None:
     return None
 
 
-_SECRET_RE = re.compile(r"(IMA_OPENAPI_\w+|LLM_API_KEY|sk-[A-Za-z0-9]{8,}|[A-Za-z0-9]{32,})")
-
-
-def plain_error(e: Exception) -> str:
-    code = getattr(e, "code", None)
-    msg = str(e)
-    if code == 220021 or "220021" in msg or "次数已达上限" in msg:
-        return "知识库今日调用次数已达上限，已使用缓存/请稍后再试。"
-    if code == 403 or "403" in msg or "无权限" in msg:
-        return "该资料目录没有访问权限，已跳过。"
-    if "timed out" in msg.lower() or "timeout" in msg.lower():
-        return "知识库或模型响应超时，请稍后重试。"
-    if "LLM" in msg or "openai" in msg.lower() or "api key" in msg.lower():
-        return "模型服务暂时不可用，请稍后重试。"
-    if "node" in msg.lower() and "not found" in msg.lower():
-        return "运行环境缺少 Node.js，无法调用知识库。"
-    return "生成失败：" + _SECRET_RE.sub("［已隐藏］", msg)[:200]
-
-
-# ---------------------------------------------------------------- images (fake mode: placeholders)
-_IMG_CACHE: dict[str, str] = {}
-
-
-def placeholder_png(label: str, w: int = 600, h: int = 450) -> bytes:
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}">'
-           f'<rect width="100%" height="100%" fill="#dfe6ee"/>'
-           f'<text x="50%" y="48%" font-size="34" text-anchor="middle" fill="#607d8b" font-family="sans-serif">示例图</text>'
-           f'<text x="50%" y="60%" font-size="18" text-anchor="middle" fill="#90a4ae" font-family="sans-serif">'
-           f'{html.escape(label)}</text></svg>')
-    return svg.encode("utf-8")
-
-
-def image_data_uri(media_id: str, title: str) -> str:
-    if media_id in _IMG_CACHE:
-        return _IMG_CACHE[media_id]
-    uri = ""
-    if DEPS.fetch_image_bytes is not None:
-        try:
-            data = DEPS.fetch_image_bytes(media_id)
-            mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
-            uri = f"data:{mime};base64," + base64.b64encode(data).decode()
-        except Exception as e:
-            log.warning("image fetch failed: %s", plain_error(e))
-    if not uri:
-        uri = "data:image/svg+xml;base64," + base64.b64encode(placeholder_png(title)).decode()
-    _IMG_CACHE[media_id] = uri
-    return uri
-
-
-# ---------------------------------------------------------------- phone mockup
-def _flagged_spans(r: RunResult) -> set[str]:
-    return {i.span for i in r.report.issues if i.severity == "error" and i.span}
-
-
-def _sentence_html(text: str, r: RunResult, flagged: set[str]) -> str:
-    """Each sentence with an [F#] gets an expandable source line (fact value, quote, source title)."""
-    out = []
-    for sent in re.split(r"(?<=[。！？!?])", text):
-        if not sent.strip():
-            continue
-        ids = re.findall(r"\[(F\d+)\]", sent)
-        clean = html.escape(strip_fact_tags(sent))
-        for sp in flagged:
-            if sp and sp in sent:
-                clean = clean.replace(html.escape(sp), f'<span class="flag">{html.escape(sp)}</span>')
-        facts = [r.ledger.get(i) for i in ids if r.ledger.get(i)]
-        if facts:
-            src = "".join(f'<div class="src">依据 {f.id}：{html.escape(f.value)}<br>原文：「{html.escape(f.quote)}」'
-                          f'<br>来源：{html.escape(f.source_title)}</div>' for f in facts)
-            out.append(f'<details><summary><span class="fact">{clean}</span></summary>{src}</details>')
-        else:
-            out.append(clean)
-    return "".join(out)
-
-
-def _img_tag(im, r: RunResult) -> str:
-    it = next((p for p in r.plan.items if p.image.media_id == im.media_id), None)
-    title = it.image.title if it else "图片"
-    cap = html.escape(im.caption or (it.caption if it else ""))
-    return f'<img src="{image_data_uri(im.media_id, title)}" alt="{html.escape(title)}"><div class="cap">{cap}</div>'
-
-
-def phone_html(r: RunResult) -> str:
-    p, post = r.post.platform, r.post
-    flagged = _flagged_spans(r)
-    S = lambda t: _sentence_html(t, r, flagged)  # noqa: E731
-    title = html.escape(strip_fact_tags(post.title))
-    paras = "".join(f'<div class="p">{S(b)}</div>' for b in post.body)
-    imgs = post.images
-    tags = " ".join(f"<span>#{html.escape(t)}</span>" for t in post.tags)
-    if p == "wechat_article":
-        body_parts = []
-        for k, b in enumerate(post.body):
-            body_parts.append(f'<div class="p">{S(b)}</div>')
-            for im in imgs:
-                if im.position == f"第{k + 1}段后":
-                    body_parts.append(_img_tag(im, r))
-        top = "".join(_img_tag(im, r) for im in imgs if im.position == "标题下方")
-        rest = "".join(_img_tag(im, r) for im in imgs if im.position not in ("标题下方",) and not re.match(r"第\d+段后", im.position))
-        screen = (f'<div class="topbar"><span>‹</span><span>公众号</span><span>···</span></div>'
-                  f'<h2>{title}</h2><div class="meta">华为门店 · 刚刚</div><div class="body">{top}'
-                  f'<div class="p">{S(post.intro)}</div>{"".join(body_parts)}{rest}'
-                  f'<div class="cta">{S(post.cta)}</div></div>')
-        skin = "skin-wechat"
-    elif p == "moments":
-        n = "one" if len(imgs) == 1 else ""
-        screen = (f'<div class="topbar"><span>‹</span><span>朋友圈</span><span>📷</span></div>'
-                  f'<div class="post"><div class="avatar"></div><div style="flex:1"><div class="name">华为授权体验店</div>'
-                  f'{paras}<div class="grid {n}">{"".join(_img_tag(im, r) for im in imgs)}</div>'
-                  f'<div class="cta">{S(post.cta)}</div><div class="time">刚刚</div></div></div>')
-        skin = "skin-moments"
-    elif p == "poster":
-        pts = "".join(f'<div class="pt">{S(b)}</div>' for b in post.body)
-        screen = (f'{"".join(_img_tag(im, r) for im in imgs[:1])}<h2>{title}</h2><div class="sub">{S(post.intro)}</div>'
-                  f'{pts}<div class="cta">{S(post.cta)}</div>')
-        skin = "skin-poster"
-    elif p == "douyin":
-        screen = (f'<div class="gallery">{"".join(_img_tag(im, r) for im in imgs)}</div>'
-                  f'<div class="body"><b>{title}</b><div class="p">{S(post.intro)}</div>{paras}'
-                  f'<div class="cta">{S(post.cta)}</div><div class="tags">{tags}</div></div>')
-        skin = "skin-douyin"
-    else:  # xiaohongshu
-        screen = (f'<div class="author"><div class="avatar"></div><span>华为门店小助手</span></div>'
-                  f'<div class="gallery">{"".join(_img_tag(im, r) for im in imgs)}</div>'
-                  f'<h2>{title}</h2><div class="body"><div class="p">{S(post.intro)}</div>{paras}'
-                  f'<div class="cta">{S(post.cta)}</div><div class="tags">{tags}</div></div>')
-        skin = "skin-xhs"
-    if not imgs:
-        screen = '<div class="cap">（知识库无该型号图片，本文不配图）</div>' + screen
-    return f'<div class="hw-phone {skin}"><div class="notch"></div><div class="screen">{screen}</div></div>'
-
-
-def talk_card_html(r: RunResult) -> str:
-    items = "".join(f"<li>{html.escape(strip_fact_tags(t))}</li>" for t in r.strategy.talk_card)
-    return f'<div class="hw-talk"><h4>💬 导购话术（{html.escape(r.model.canonical_name)}）</h4><ol>{items}</ol></div>'
-
-
-def banner_html(r: RunResult) -> str:
-    errs = [i for i in r.report.issues if i.severity == "error"]
-    shown = set(r.pending)
-    notes = [i for i in r.report.issues if i.severity == "warn" and i.message not in shown]
-    out = []
-    if r.report.passed and not r.pending:
-        out.append('<div class="hw-banner ok">✅ 已核验：所有产品事实均来自知识库台账，图片属于目标型号，未发现合规问题。'
-                   f'（{len(r.post.selling_points)} 个事实点 · {len(r.post.images)} 张图 · 改写 {r.loops} 轮）</div>')
-    if errs:
-        li = "".join(f"<li>{html.escape(i.message)}" + (f"：「{html.escape(i.span)}」" if i.span else "") + "</li>" for i in errs)
-        out.append(f'<div class="hw-banner err">❌ {len(errs)} 处未通过核验（已标红，请人工处理）<ul>{li}</ul></div>')
-    if r.pending:
-        li = "".join(f"<li>{html.escape(p)}</li>" for p in r.pending)
-        out.append(f'<div class="hw-banner warn">⚠️ 待确认<ul>{li}</ul></div>')
-    if notes:  # warnings (e.g. 表达边界) are 核验提示, not 待确认 lines
-        li = "".join(f"<li>{html.escape(i.message)}</li>" for i in notes)
-        out.append(f'<div class="hw-banner note">ℹ️ 核验提示<ul>{li}</ul></div>')
-    return "".join(out)
-
-
-def stop_html(msg: str, title: str = "已停止输出，需人工确认") -> str:
-    return f'<div class="hw-stop"><b>⛔ {html.escape(title)}</b><div style="margin-top:6px">{html.escape(msg)}</div></div>'
+# plain_error, placeholder_png, image_data_uri, phone_html, talk_card_html, banner_html, stop_html now
+# live in ui.components (imported above) so ui/store_tab.py can share them without a circular import.
 
 
 # ---------------------------------------------------------------- event handlers
@@ -295,7 +141,7 @@ def _render(r: RunResult, session: dict):
     session["result"] = r
     session["results"] = session.get("results", {})
     session["results"][r.post.platform] = r
-    return phone_html(r), talk_card_html(r), banner_html(r), render_report(r), render_publishable(r.post)
+    return phone_html(r, DEPS), talk_card_html(r), banner_html(r), render_report(r), render_publishable(r.post)
 
 
 def _handle(result, session: dict, progress_lines: list[str]):
@@ -417,7 +263,7 @@ def on_all_platforms(session: dict):
         if isinstance(res, RunResult):
             session.setdefault("results", {})[p] = res
             cols.append(f'<div style="flex:1;min-width:320px"><div style="text-align:center;font-weight:600">'
-                        f'{PLATFORM_LABELS[p]}</div>{banner_html(res)}{phone_html(res)}</div>')
+                        f'{PLATFORM_LABELS[p]}</div>{banner_html(res)}{phone_html(res, DEPS)}</div>')
         else:
             cols.append(f'<div style="flex:1;min-width:320px">{stop_html(getattr(res, "message", "需要补充信息"))}</div>')
     return '<div style="display:flex;gap:12px;flex-wrap:wrap">' + "".join(cols) + "</div>", session
@@ -445,55 +291,70 @@ EXAMPLES = [
 # ---------------------------------------------------------------- UI
 def build() -> gr.Blocks:
     with gr.Blocks(title="华为 PC 图文软文 Agent") as demo:
-        session = gr.State(lambda: {"id": uuid4().hex})
-        gr.Markdown("## 华为 PC 图文软文 Agent\n输入一句顾客描述，生成经知识库核验的平台软文。")
+        gr.Markdown(f"## 华为 PC 图文软文 Agent\n演示日期：{demo_today()}")
         status = gr.HTML(status_html())
-        with gr.Row():
-            text = gr.Textbox(label="顾客描述", placeholder=EXAMPLES[0], lines=2, scale=5)
-            gen = gr.Button("生成", variant="primary", scale=1)
-        gr.Examples(EXAMPLES, inputs=text)
-        with gr.Group(visible=False) as clar_box:
-            gr.Markdown("**还需要补充一点信息：**")
-            r1 = gr.Radio(choices=[], label="", visible=False)
-            r2 = gr.Radio(choices=[], label="", visible=False)
-            r3 = gr.Radio(choices=[], label="", visible=False)
-            cont = gr.Button("继续生成", variant="primary")
-        progress = gr.HTML(elem_classes=["hw-progress"])
-        with gr.Row():
-            with gr.Column(scale=1):
-                talk = gr.HTML()
-                banner = gr.HTML()
+        with gr.Tabs():
+            with gr.Tab("门店端·今日推荐"):
+                store_tab.build_store_tab(demo)
+            with gr.Tab("手动输入"):
+                session = gr.State(lambda: {"id": uuid4().hex})
+                gr.Markdown("输入一句顾客描述，生成经知识库核验的平台软文。")
                 with gr.Row():
-                    b_short = gr.Button("短一点")
-                    b_point = gr.Button("换卖点")
-                    b_angle = gr.Button("换个角度")
+                    text = gr.Textbox(label="顾客描述", placeholder=EXAMPLES[0], lines=2, scale=5)
+                    gen = gr.Button("生成", variant="primary", scale=1)
+                gr.Examples(EXAMPLES, inputs=text)
+                with gr.Group(visible=False) as clar_box:
+                    gr.Markdown("**还需要补充一点信息：**")
+                    r1 = gr.Radio(choices=[], label="", visible=False)
+                    r2 = gr.Radio(choices=[], label="", visible=False)
+                    r3 = gr.Radio(choices=[], label="", visible=False)
+                    cont = gr.Button("继续生成", variant="primary")
+                progress = gr.HTML(elem_classes=["hw-progress"])
                 with gr.Row():
-                    plat = gr.Dropdown(PLATFORM_CHOICES, label="换平台", value=None, scale=2)
-                    b_plat = gr.Button("切换", scale=1)
-                    b_all = gr.Button("全平台", scale=1)
-                pub = gr.Textbox(label="可直接复制的正文", lines=8, buttons=["copy"])
-                b_dl = gr.DownloadButton("下载 .md")
-            with gr.Column(scale=1):
-                phone = gr.HTML()
-        all_out = gr.HTML()
-        with gr.Accordion("详细信息（四段式输出）", open=False):
-            report = gr.Markdown()
-        gr.Markdown("<small>知识库内容仅用于生成与核验，不提供原文浏览或批量导出。密钥仅存于环境变量。</small>")
+                    with gr.Column(scale=1):
+                        talk = gr.HTML()
+                        banner = gr.HTML()
+                        with gr.Row():
+                            b_short = gr.Button("短一点")
+                            b_point = gr.Button("换卖点")
+                            b_angle = gr.Button("换个角度")
+                        with gr.Row():
+                            plat = gr.Dropdown(PLATFORM_CHOICES, label="换平台", value=None, scale=2)
+                            b_plat = gr.Button("切换", scale=1)
+                            b_all = gr.Button("全平台", scale=1)
+                        pub = gr.Textbox(label="可直接复制的正文", lines=8, buttons=["copy"])
+                        b_dl = gr.DownloadButton("下载 .md")
+                    with gr.Column(scale=1):
+                        phone = gr.HTML()
+                all_out = gr.HTML()
+                with gr.Accordion("详细信息（四段式输出）", open=False):
+                    report = gr.Markdown()
+                gr.Markdown("<small>知识库内容仅用于生成与核验，不提供原文浏览或批量导出。密钥仅存于环境变量。</small>")
 
-        outs = [progress, phone, talk, banner, report, pub, clar_box, r1, r2, r3, session]
-        gen.click(on_generate, [text, session, r1, r2, r3], outs)
-        text.submit(on_generate, [text, session, r1, r2, r3], outs)
-        cont.click(on_generate, [text, session, r1, r2, r3], outs)
-        b_short.click(lambda s: (yield from on_edit("短一点", s)), [session], outs)
-        b_point.click(lambda s: (yield from on_edit("换卖点", s)), [session], outs)
-        b_angle.click(lambda s: (yield from on_edit("换个角度", s)), [session], outs)
-        b_plat.click(on_switch_platform, [plat, session], outs)
-        b_all.click(on_all_platforms, [session], [all_out, session])
-        b_dl.click(on_download, [session], [b_dl])
+                outs = [progress, phone, talk, banner, report, pub, clar_box, r1, r2, r3, session]
+                gen.click(on_generate, [text, session, r1, r2, r3], outs)
+                text.submit(on_generate, [text, session, r1, r2, r3], outs)
+                cont.click(on_generate, [text, session, r1, r2, r3], outs)
+                b_short.click(lambda s: (yield from on_edit("短一点", s)), [session], outs)
+                b_point.click(lambda s: (yield from on_edit("换卖点", s)), [session], outs)
+                b_angle.click(lambda s: (yield from on_edit("换个角度", s)), [session], outs)
+                b_plat.click(on_switch_platform, [plat, session], outs)
+                b_all.click(on_all_platforms, [session], [all_out, session])
+                b_dl.click(on_download, [session], [b_dl])
         demo.load(lambda: status_html(), None, status)
     return demo
 
 
 if __name__ == "__main__":
-    build().launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", "7860")), show_error=False,
+    port = int(os.getenv("GRADIO_SERVER_PORT", os.getenv("PORT", "7861")))
+    demo = build()
+    try:
+        demo.launch(server_name="0.0.0.0", server_port=port, show_error=False,
                    css=CSS, allowed_paths=[str(Path(tempfile.gettempdir()) / "hwpc_downloads")])
+    except Exception as e:
+        # Gradio's own post-launch self-check (GET .../startup-events) can race the server thread
+        # coming up and 503 once; the server itself is already listening and fine by then.
+        if "startup-events" not in str(e):
+            raise
+        log.warning("Gradio startup self-check raced the server coming up, continuing: %s", e)
+        demo.block_thread()
