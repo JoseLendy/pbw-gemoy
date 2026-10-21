@@ -186,3 +186,25 @@ def test_manual_flow_has_no_customer_quote_rule():
     from agent.checks.compliance import check_compliance
     r = check_compliance(_card_post("顾客说很好用。重量约 1.25 kg [F1]。"), fake_ledger(), fake_task("moments"))
     assert "invented_customer_quote" not in {i.code for i in r.issues}
+
+
+# ------------------------------------------------------------------ Phase 5 eval: systematic writer causes
+def test_brief_bans_experience_promises_and_one_tag_per_parameter():
+    block = brief(card_to_task(_card("S01", "potential")))
+    assert "不要从参数推出体验结论或承诺" in block and "不用重新适应" in block
+    assert "每个参数后面各标它自己的事实编号" in block
+
+
+def test_brief_bans_hearsay_unless_a_question_is_logged():
+    assert "不得转述别人的话" in brief(card_to_task(_card("S01", "potential")))
+    assert "不得转述别人的话" not in brief(card_to_task(_card("S01", "customer_question")))
+
+
+def test_question_hook_no_longer_invites_a_reported_customer_question():
+    from agent.style.profile import HOOK_OPENING
+    assert "顾客真实会问" not in HOOK_OPENING["question"] and "不要转述" in HOOK_OPENING["question"]
+
+
+def test_moments_brief_asks_for_one_selling_point():
+    task = card_to_task(_card("S01", "potential"))
+    assert task.platform == "moments" and "只引用 1 个已选事实编号" in brief(task)
