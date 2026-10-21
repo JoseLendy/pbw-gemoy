@@ -275,12 +275,24 @@ def kb_backend() -> str:
     return b
 
 
+MIRROR_MISSING = ("本地知识库镜像不存在（KB_LOCAL_DIR，默认 kb_snapshot/kb_v7）。仓库不包含知识库内容："
+                  "请向队友拷贝镜像，或设置 KB_BACKEND=ima 使用实时接口（需要 ima 凭证）。详见 README「本地知识库镜像」。")
+
+
 def make_client(backend: str | None = None):
-    """ImaClient for "ima"; LocalKB / HybridKB (same interface) for "local" / "hybrid"."""
+    """ImaClient for "ima"; LocalKB / HybridKB (same interface) for "local" / "hybrid".
+
+    The mirror is not in the repo. If it is missing: "hybrid" with ima credentials falls back to the live
+    ima client (logged); otherwise ImaError(MIRROR_MISSING), a message the UI / scripts can show as is."""
     backend = backend or kb_backend()
     if backend == "ima":
         return ImaClient()
-    from agent.kb_local import HybridKB, LocalKB
+    from agent.kb_local import HybridKB, LocalKB, local_dir
+    if not local_dir().is_dir():
+        if backend == "hybrid" and _configured():
+            log.warning("local KB mirror missing (%s); using the live ima client", local_dir().name)
+            return ImaClient()
+        raise ImaError(-100, MIRROR_MISSING, "local")
     return HybridKB(ima=ImaClient()) if backend == "hybrid" else LocalKB()
 
 

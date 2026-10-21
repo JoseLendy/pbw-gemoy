@@ -54,6 +54,9 @@ def main(argv=None) -> int:
         deps, runs_dir, card_map = Deps.auto(), None, None
         if deps.is_dev_mode:
             print("prepare_today.py needs real deps, but these would be fakes: " + ", ".join(deps.fake_fields))
+            reason = (deps.status() or {}).get("error")
+            if reason:
+                print(f"原因：{reason}")
             print("Fix the configuration, or pass --fake for a rehearsal.")
             return 2
 

@@ -118,6 +118,9 @@ class Deps:
             fake_fields.remove("status")
         except Exception as e:
             log.info("Deps.auto: ima_wrapper unavailable (%s)", e)
+            reason = getattr(e, "msg", None) or str(e)           # e.g. the mirror-missing message
+            base_status = d.status
+            d.status = lambda: {**base_status(), "error": reason}
         use("agent.catalog", "load_catalog", "catalog", wrap=lambda f: f(client) if client else f())
         use("agent.retrieval", "get_model_bundle", "get_bundle")
         try:

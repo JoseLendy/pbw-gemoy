@@ -266,7 +266,11 @@ def main(argv=None) -> int:
         print("eval_cards.py uses real deps (ima + LLM). Set RUN_E2E=1 to run it, or pass --fake.")
         return 2
     from agent.pipeline import Deps, generate_batch
-    deps = Deps.fake() if args.fake else Deps.real()
+    try:
+        deps = Deps.fake() if args.fake else Deps.real()
+    except Exception as e:  # noqa: BLE001 - e.g. the KB mirror is missing: say why, no traceback
+        print(f"真实依赖不可用：{getattr(e, 'msg', None) or e}")
+        return 2
     if args.fake:
         base_write = deps.write_post
 
