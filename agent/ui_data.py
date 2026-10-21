@@ -23,6 +23,7 @@ not a live RunResult - see ui.components.prepared_post_html for why and how it's
 """
 from __future__ import annotations
 
+import datetime as dt
 import importlib
 import logging
 import os
@@ -32,9 +33,11 @@ from typing import Any, Callable, Optional
 from agent.pipeline import BatchResult, Deps, edit as _pipeline_edit, generate_batch as _generate_batch
 from agent.pipeline import generate_baseline as _generate_baseline
 from agent.pipeline import run_from_card as _run_from_card
-from agent.recommend.common import INPUTS, load_json
+from agent.recommend.common import INPUTS, load_json, parse_date
 from agent.recommend.store_data import (
-    cards_for as _cards_for, load_store_data, reset_demo_state, set_fact_card_status,
+    all_cards as _all_cards, cards_for as _cards_for, default_card as _default_card,
+    fact_card_overrides as _fact_card_overrides, load_store_data,
+    product_card as _product_card, reset_demo_state, set_fact_card_status,
 )
 from agent.runs import latest_run
 from agent.schemas import RecommendationCard, StaffContext
@@ -110,6 +113,20 @@ def get_cards(store_id: str, date: Optional[str] = None) -> list[RecommendationC
     return _cards_for(store_id, date or today())
 
 
+def default_card(store_id: str, date: Optional[str] = None) -> Optional[RecommendationCard]:
+    return _default_card(store_id, date or today())
+
+
+def product_card(store_id: str, model_id: str, date: Optional[str] = None) -> Optional[RecommendationCard]:
+    """Stage 2: this store's 活动款 card, pointed at one fixed product (None if not in a campaign)."""
+    return _product_card(store_id, model_id, date or today())
+
+
+def fact_card_overrides() -> dict[str, str]:
+    """HQ verifications made in this process (model_id -> draft/verified)."""
+    return dict(_fact_card_overrides())
+
+
 def question_pool() -> dict:
     """question_pool.json "chips": {chip_id: {text, segments}} - the UI's end-of-day chip list."""
     return dict(load_json(INPUTS / "question_pool.json")["chips"])
@@ -137,14 +154,134 @@ def verify_new_product(model_id: str) -> None:
     set_fact_card_status(model_id, "verified")
 
 
+_RESET_TOKEN = 0
+
+
 def reset() -> None:
     """重置演示 (plan §8/§9): backend only (fact-card overrides + data cache). The UI must separately
-    clear its own session state (已发布 / chips / shown results) - see ui.components.fresh_session()."""
+    clear its own session state (已发布 / chips / shown results) - see ui.components.fresh_session().
+    reset_token() tells another tab/session that the backend state changed."""
+    global _RESET_TOKEN
     reset_demo_state()
+    _RESET_TOKEN += 1
+
+
+def reset_token() -> int:
+    """Bumped by reset(); the store tab clears its session when this differs from what it last saw."""
+    return _RESET_TOKEN
 
 
 def last_real_run(card_id: str) -> Optional[dict]:
     return latest_run(card_id)
+
+
+# ---------------------------------------------------------------- HQ panels (offline, local files only)
+def publish_stats(days: int = 14) -> dict:
+    """Posting rate per store over the last `days` dates in publish_log.csv (local fixture)."""
+    data = load_store_data()
+    dates = sorted({r["date"] for r in data.publish})[-days:]
+    stats = []
+    for s in data.stores:
+        rows = [r for r in data.publish if r["store_id"] == s["store_id"] and r["date"] in dates]
+        posted = sum(str(r.get("posted", "")).lower() == "true" for r in rows)
+        stats.append({"store_id": s["store_id"], "store_name": s["store_name"],
+                      "posted": posted, "days": len(dates) or 1,
+                      "rate": posted / (len(dates) or 1), "low": False})
+    ordered = sorted(stats, key=lambda x: (x["rate"], x["store_id"]))
+    for row in ordered[:3]:
+        row["low"] = True
+    return {"window": [dates[0], dates[-1]] if dates else ["", ""], "days": len(dates), "stats": stats}
+
+
+def question_stats(limit: int = 8) -> list[dict]:
+    """Aggregated customer questions (chip text), most frequent first."""
+    data = load_store_data()
+    agg: dict[str, dict] = {}
+    for q in data.questions:
+        key = q.get("chip_id") or q.get("text") or "?"
+        row = agg.setdefault(key, {"chip_id": key, "text": q.get("text") or key,
+                                   "count": 0, "stores": set()})
+        row["count"] += 1
+        if q.get("store_id"):
+            row["stores"].add(q["store_id"])
+    out = [{"chip_id": r["chip_id"], "text": r["text"], "count": r["count"],
+            "stores": len(r["stores"])} for r in agg.values()]
+    return sorted(out, key=lambda x: (-x["count"], x["chip_id"]))[:limit]
+
+
+def weekly_plan(date: Optional[str] = None) -> dict:
+    """platform_quota.json's weekly rotation, anchored to the demo date."""
+    data = load_store_data()
+    day = parse_date(date or today())
+    start = day - dt.timedelta(days=day.weekday())
+    labels = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    days = [{"label": labels[i], "date": (start + dt.timedelta(days=i)).isoformat(),
+             "platform": data.quota["rotation"][i], "is_today": i == day.weekday()} for i in range(7)]
+    return {"days": days, "minimum": dict(data.quota.get("weekly_minimum") or {}),
+            "today": day.isoformat()}
+
+
+def recommendation_distribution(date: Optional[str] = None) -> list[dict]:
+    """Each store's 今日一条: model / slot / platform / segment / angle."""
+    data = load_store_data()
+    day = date or today()
+    all_today = _all_cards(data, day)
+    out = []
+    for s in data.stores:
+        cards = all_today.get(s["store_id"], [])
+        card = next((c for c in cards if c.get("is_default")), cards[0] if cards else None)
+        if not card:
+            continue
+        out.append({"store_id": s["store_id"], "store_name": s["store_name"],
+                    "display_name": card.get("display_name") or "",
+                    "slot_label": card.get("slot_label") or "",
+                    "platform": card.get("platform") or "",
+                    "segment_label": card.get("segment_label") or "",
+                    "angle": card.get("angle") or ""})
+    return out
+
+
+def new_release_drafts() -> list[dict]:
+    """Draft new-release fact cards (models.csv): field groups + source titles, never KB values.
+    Values are pending HQ review; only the field names and the source documents are shown."""
+    data = load_store_data()
+    out = []
+    for m in data.models:
+        if str(m.get("is_new_release", "")).lower() != "true":
+            continue
+        refs, seen = [], set()
+        for key in ("why_student", "why_office", "why_family", "why_shopper"):
+            raw = (m.get(key) or "").strip()
+            if "—" not in raw:
+                continue
+            fields, source = (part.strip() for part in raw.split("—", 1))
+            if not fields or not source or (fields, source) in seen:
+                continue
+            seen.add((fields, source))
+            refs.append({"fact_id": f"F{len(refs) + 1}", "fields": fields,
+                         "source_title": source.rsplit("/", 1)[-1], "source_path": source})
+        status = m.get("fact_card_status") or "draft"
+        out.append({"model_id": m["model_id"], "display_name": m["display_name"],
+                    "launch_date": m.get("launch_date") or "", "status": status,
+                    "verified": status == "verified", "refs": refs})
+    return out
+
+
+def compare_products(date: Optional[str] = None) -> list[dict]:
+    """Products in an active campaign on the demo date - the fixed product options for 三店对比."""
+    data = load_store_data()
+    day = parse_date(date or today())
+    out, seen = [], set()
+    for p in data.promos:
+        if not (parse_date(p["start"]) <= day <= parse_date(p["end"])):
+            continue
+        for model_id in p.get("models") or []:
+            if model_id in seen:
+                continue
+            seen.add(model_id)
+            out.append({"model_id": model_id, "display_name": data.model(model_id)["display_name"],
+                        "campaign": p.get("name") or ""})
+    return out
 
 
 # ---------------------------------------------------------------- plain-language errors (never leak keys/ids)
@@ -172,6 +309,8 @@ def plain_error(e: Exception) -> str:
 
 __all__ = [
     "DEPS", "ACTIVE_PATHS", "today", "prepared_post", "clear_prepared", "list_stores", "get_cards",
-    "question_pool", "generate", "baseline", "edit", "compare", "verify_new_product", "reset",
-    "last_real_run", "plain_error",
+    "default_card", "product_card", "fact_card_overrides", "question_pool", "generate", "baseline",
+    "edit", "compare", "verify_new_product", "reset", "reset_token", "last_real_run",
+    "publish_stats", "question_stats", "weekly_plan", "recommendation_distribution",
+    "new_release_drafts", "compare_products", "plain_error",
 ]

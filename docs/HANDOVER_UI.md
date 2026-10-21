@@ -17,12 +17,19 @@ this file is the runbook and the bug list.
   生成/重新生成, quick edits (短一点/换卖点/换个角度 + the 加上立减500 price-block demo), 已发布 marking,
   download (.md text, one image at a time), the 显示最近一次真实运行结果 recovery offer after a failed
   generate, and the end-of-day customer-question chips.
-- `app.py`: assembles 门店端·今日推荐 + 手动输入 (unchanged) under one header.
-- The branch has been merged with `origin/feat/proactive-recommender` (brings in PR #4 / Phase 5: new
-  model mapping, the fallback policy - trimmed / next_card / `NeedsReview` - prepared posts, latency
-  tracking). `ui/components.py` and `agent/ui_data.py` were updated to the real
-  `docs/UI_BACKEND_CONTRACT.md` contract after that merge.
-- Stages 2-4 (三店对比, 总部端, 对照组, staff picker / 绑定演示 / 发布效果) are **not started**.
+- `ui/compare_tab.py`: Stage 2, 三店对比. One product + one platform; fixed S01/S04/S08/S02; four
+  phone previews with each store's segment/scenario/voice/landmark/hook; 8E before→after scores and
+  regenerated badges.
+- `ui/hq_tab.py`: Stage 2, 总部端. 14-day posting rate (lowest 3 highlighted), new-release draft review
+  with fact IDs / fields / source titles, 确认发布 (store tab re-fetches and unlocks on return),
+  customer questions, weekly plan with today highlighted, recommendation distribution, 重置演示.
+- `ui/baseline_tab.py`: Stage 3, 对照组. Left `baseline()` always under
+  「对照组：未经约束的普通大模型输出」 with 8D hits marked; right our verified `generate()` result.
+- `app.py`: assembles 门店端·今日推荐 + 三店对比 + 总部端 + 对照组 + 手动输入 (unchanged) under one header.
+- The branch has been merged with `origin/feat/proactive-recommender` (brings in PR #4 / Phase 5 and
+  PR #5 / freeze prep: new model mapping, fallback policy, prepared posts, latency tracking, KB mirror
+  untracked). `ui/components.py` and `agent/ui_data.py` follow the real `docs/UI_BACKEND_CONTRACT.md`.
+- Stage 4 (staff picker / 绑定演示 / 发布效果) is **not started** (optional in the spec).
 
 ## How to run it
 

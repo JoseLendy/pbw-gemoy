@@ -48,13 +48,15 @@ later at the user's explicit request (see "Later instructions" below), which is 
   Detect optional functions once at import and log which path is active at startup. Use the existing Deps.auto (fakes without keys, real with keys).
 - Result types: handle RunResult, Clarification, NeedsHuman, LockedResult, EditBlocked, BaselineResult, and NeedsReview (coming from Phase 5: detect by class name/attributes so the code works before it exists; it carries the card, the best draft, failing sentences + reasons). Results may carry fallback = "trimmed" | "next_card".
 
-**Status: DONE, partially superseded.** `ui/components.py` and `agent/ui_data.py` exist with exactly this
-adapter surface (plus `list_stores`, `question_pool`, `plain_error`, which the spec implies but doesn't
-name). Only `ui/store_tab.py` exists so far - `compare_tab.py`, `hq_tab.py`, `baseline_tab.py`,
-`binding_tab.py` are **PENDING** (Stages 2-4, not started). `NeedsReview`/`prepared_post`/`clear_prepared`
-were originally built defensively (duck-typed / "not merged yet") exactly as instructed, then **updated
-to the real Phase 5 contract** once PR #4 merged - see "Later instructions" below; the detection pattern
-itself (log which path is active, degrade gracefully if a hook goes missing again) was kept.
+**Status: DONE for Stages 1-3.** `ui/components.py` and `agent/ui_data.py` provide the full adapter
+surface (plus `list_stores`, `question_pool`, `plain_error`, and the offline HQ helpers added in Stage 2:
+`product_card`, `publish_stats`, `question_stats`, `weekly_plan`, `recommendation_distribution`,
+`new_release_drafts`, `compare_products`, `fact_card_overrides`, `reset_token`).
+`store_tab.py`, `compare_tab.py`, `hq_tab.py` and `baseline_tab.py` are built; only `binding_tab.py`
+(Stage 4, optional) is **PENDING**. `NeedsReview`/`prepared_post`/`clear_prepared` were originally built
+defensively (duck-typed / "not merged yet") exactly as instructed, then **updated to the real Phase 5
+contract** once PR #4 merged - see "Later instructions" below; the detection pattern itself (log which
+path is active, degrade gracefully if a hook goes missing again) was kept.
 
 ### Demo date
 
@@ -105,14 +107,23 @@ The UI's "today" comes from env DEMO_TODAY (default 2026-10-23), never the syste
 
 === CHECKPOINT 2: commit, push, report, STOP until I say "continue". ===
 
-**Status: PENDING. Not started.**
+**Status: DONE (2026-10-21).** `ui/compare_tab.py` (fixed S01/S04/S08/S02, product + platform,
+4 side-by-side phones, per-store meta, 8E before→after table, regenerated badge) and `ui/hq_tab.py`
+(14-day posting rate with lowest 3 highlighted, new-release review panel with fact IDs / field groups /
+source titles, 确认发布 → store cards re-fetch on tab select, customer questions, weekly plan with today
+highlighted, recommendation distribution, 重置演示 clearing backend + store-tab session while keeping
+prepared posts). `agent/ui_data.py` gained the offline HQ/product-card adapter functions. Screenshots:
+`eval/ui_screens/12-compare-result.png`, `13-hq-initial.png`, `14-hq-verified.png`,
+`15-store-new-release-unlocked.png`, `16-store-after-reset.png`.
 
 #### Stage 3 — 对照组 tab
 
 - Pick a store's default card → left: ui_data.baseline(card), always titled 「对照组：未经约束的普通大模型输出」 with its 8D hits highlighted; right: our generate() result for the same card. The baseline never appears anywhere without that label.
 
-**Status: PENDING. Not started.** (`agent.ui_data.baseline()` exists and is already covered by
-`tests/test_ui_data.py`, since it's part of the adapter surface built in Stage 1 - only the tab UI is missing.)
+**Status: DONE (2026-10-21).** `ui/baseline_tab.py`: pick a store's 今日一条, left renders the
+`BaselineResult` with the exact 「对照组：未经约束的普通大模型输出」 title and 8D hit spans marked;
+right renders our `generate()` result with the phone preview and 四、核验结果 fold. Both run on the
+same card/model/platform. Screenshot: `eval/ui_screens/17-baseline.png`.
 
 #### Stage 4 — optional, only if time allows (cut in this order if short: engagement → binding → staff picker)
 
@@ -149,9 +160,10 @@ Keep the full existing suite green.
 longer "optional" (Phase 5 merged, they're real `agent.runs` functions) but the tests still check the
 adapter degrades to None/0 if either hook ever goes missing again. The NeedsReview stand-in was replaced
 by the real `agent.schemas.NeedsReview` once it merged. "reset clears UI session state" is tested at the
-pure-function level (`ui.components.fresh_session()`); wiring an actual 「重置演示」 button to call it is
-Stage 2's 总部端, not built yet. Full suite: **617 passed, 1 skipped** after the queue fix
-(`tests/test_ui_queue.py` adds the page-load/store-switch/status/proxy regressions).
+pure-function level (`ui.components.fresh_session()`), and now also through the real 「重置演示」 flow
+(`test_store_tab_clears_its_session_after_hq_reset`). Full suite: **682 passed, 1 skipped**
+(`tests/test_ui_queue.py` covers the queue/proxy/status regressions; `tests/test_ui_stage2.py` covers
+the Stage 2/3 adapter + rendering and the HQ verify/reset flow).
 
 ### Report at each checkpoint
 

@@ -99,6 +99,8 @@ def _load_store(session: dict, store_id: str) -> None:
     session.setdefault("published", {})
     session.setdefault("chips", {})
     session["show_other"] = False
+    session["overrides_seen"] = ui_data.fact_card_overrides()
+    session["reset_token_seen"] = ui_data.reset_token()
     session.pop("edit_message", None)
     session.pop("recovery", None)
     default = default_card_of(cards)
@@ -181,6 +183,10 @@ def _render(session: dict) -> tuple:
             elif kind == "baseline":
                 status_box += f'<div class="hw-banner note">{html.escape(result.display_text)}</div>'
 
+    if not locked and results.get(cid) is None:
+        phone_out = ('<div style="height:360px;display:flex;align-items:center;justify-content:center;'
+                     'border:1px dashed #d0d0d0;border-radius:12px;color:#999;font-size:14px;'
+                     'margin:8px 0">生成后将在这里显示手机预览</div>')
     published_label = "已发布 ✓（已记录）" if (has_result and session.get("published", {}).get(cid)) else "标记为已发布"
     return (panel_html, action_update, other_row_update, *slot_updates, edit_msg_html,
            gr.update(visible=recovery_on), recovery_msg, talk_out, status_box, banner_out, phone_out,
@@ -198,6 +204,21 @@ def on_initial(session: dict):
     session = session or fresh_session()
     if not session.get("cards"):
         _load_store(session, STORES[0]["store_id"])
+    return (*_render(session), session)
+
+
+def on_tab_select(session: dict):
+    """Returning from 总部端: reset clears this session; a verified new product reloads the cards so the
+    newly unlocked 新品款 appears without restarting the app."""
+    session = session or fresh_session()
+    if session.get("reset_token_seen") != ui_data.reset_token():
+        sid = session.get("id")
+        session.clear()
+        session.update(fresh_session())
+        session["id"] = sid
+        _load_store(session, STORES[0]["store_id"])
+    elif session.get("cards") and session.get("overrides_seen") != ui_data.fact_card_overrides():
+        _load_store(session, session.get("store_id") or STORES[0]["store_id"])
     return (*_render(session), session)
 
 
@@ -328,7 +349,7 @@ def on_save_image(session: dict):
 
 
 # ---------------------------------------------------------------- build
-def build_store_tab(demo: gr.Blocks) -> None:
+def build_store_tab(demo: gr.Blocks) -> dict:
     session = gr.State(fresh_session)
     gr.Markdown(f"演示日期：{ui_data.today()}")
     store_dd = gr.Dropdown(choices=store_choices(STORES), value=STORES[0]["store_id"],
@@ -392,3 +413,4 @@ def build_store_tab(demo: gr.Blocks) -> None:
         b.click(lambda s, c=chip_id: on_chip(c, s), [session], full_outs, **_LOCAL)
 
     demo.load(on_initial, [session], full_outs, **_LOCAL)
+    return {"session": session, "outputs": full_outs, "on_refresh": on_tab_select}

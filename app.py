@@ -36,7 +36,7 @@ from agent.formatter import render_download, render_publishable, render_report, 
 from agent.pipeline import edit as pipeline_edit, run as pipeline_run, run_all_platforms
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult
 from agent.ui_data import DEPS, plain_error, today as demo_today
-from ui import store_tab
+from ui import baseline_tab, compare_tab, hq_tab, store_tab
 from ui.components import banner_html, phone_html, placeholder_png, stop_html, talk_card_html  # noqa: F401
 
 try:
@@ -332,8 +332,11 @@ def build() -> gr.Blocks:
         gr.Markdown(f"## 华为 PC 图文软文 Agent\n演示日期：{demo_today()}")
         status = gr.HTML(status_html())
         with gr.Tabs():
-            with gr.Tab("门店端·今日推荐"):
-                store_tab.build_store_tab(demo)
+            with gr.Tab("门店端·今日推荐") as store_tab_ui:
+                store_handles = store_tab.build_store_tab(demo)
+            compare_tab.build_compare_tab()
+            hq_tab.build_hq_tab()
+            baseline_tab.build_baseline_tab()
             with gr.Tab("手动输入"):
                 session = gr.State(lambda: {"id": uuid4().hex})
                 gr.Markdown("输入一句顾客描述，生成经知识库核验的平台软文。")
@@ -379,6 +382,9 @@ def build() -> gr.Blocks:
                 b_plat.click(on_switch_platform, [plat, session], outs, **_GEN_QUEUE)
                 b_all.click(on_all_platforms, [session], [all_out, session], **_GEN_QUEUE)
                 b_dl.click(on_download, [session], [b_dl], concurrency_limit=None, show_progress="hidden")
+        # Returning from 总部端 introduces newly verified/unlocked cards (and a reset clears the session).
+        store_tab_ui.select(store_handles["on_refresh"], [store_handles["session"]],
+                            store_handles["outputs"], concurrency_limit=None, show_progress="hidden")
         # The status bar must never block or delay page load: render the cache immediately and let the
         # timer pick up the background check's result a moment later.
         status_timer = gr.Timer(2.0)
