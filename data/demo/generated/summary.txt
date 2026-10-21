@@ -4,7 +4,7 @@ storetype        POI      dominant w     潜力款      index  default card
 S01  campus      fixture  student  0.533 matebook-14-harmonyos0.365  潜力款 matebook-14-harmonyos
 S02  campus      fixture  student  0.5   -        -      活动款 matebook-14-harmonyos
 S03  campus      fixture  student  0.596 matebook-d-14-20240.595  潜力款 matebook-d-14-2024
-S04  office      fixture  office   0.781 matebook-pro-s0.525  潜力款 matebook-pro-s
+S04  office      fixture  office   0.781 matebook-x-pro-ultra0.525  潜力款 matebook-x-pro-ultra
 S05  office      fixture  office   0.81  -        -      活动款 matebook-14-2024
 S06  office      fixture  office   0.704 -        -      活动款 matebook-14-2024
 S07  residential fixture  family   0.98  -        -      活动款 matebook-d-16-se-2024

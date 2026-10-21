@@ -47,7 +47,7 @@ TOTAL_UNITS = {1: 15, 2: 30, 3: 50}          # avg weekly units per store tier
 # clear, explainable 潜力款 picks. Change freely, then re-run and read the sanity table.
 PLANTED = {
     ("S01", "matebook-14-harmonyos"): 0.40,   # campus store under-sells the light/long-battery model
-    ("S04", "matebook-pro-s"): 0.45,          # CBD store under-sells the business model
+    ("S04", "matebook-x-pro-ultra"): 0.45,    # CBD store under-sells the business model
     ("S08", "matebook-d-16-se-2024"): 0.50,   # residential store under-sells the family model
     ("S10", "matebook-14-harmonyos"): 0.45,   # mall store under-sells the same light model (gift angle, not study angle)
 }

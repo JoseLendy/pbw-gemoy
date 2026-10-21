@@ -17,7 +17,7 @@
   {
     "campaign_id": "DEMO-1111-EXP",
     "name": "双十一到店体验周",
-    "models": ["matebook-14-harmonyos", "matebook-pro-s", "matebook-d-16-se-2024", "matebook-14-2024"],
+    "models": ["matebook-14-harmonyos", "matebook-x-pro-ultra", "matebook-d-16-se-2024", "matebook-14-2024"],
     "start": "2026-11-01",
     "end": "2026-11-11",
     "mechanic": "到店体验 + 以旧换新咨询",

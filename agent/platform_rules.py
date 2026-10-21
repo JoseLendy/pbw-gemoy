@@ -147,16 +147,14 @@ AI_TELL_PATTERNS: list[tuple[str, str]] = [
 MAX_EXCLAMATIONS = 2
 REPEATED_OPENING_MIN = 3
 
+# Rules already stated in prompts/system_prompt.md (fact tags, prices, competitors, personal experience)
+# are not repeated here (Phase 5 prompt-bloat guard); both reach the writer together.
 WRITING_RULES: list[str] = [
     "像一个熟悉产品的真人在说话：用具体的事实和场景，不堆砌形容词。",
-    "每一个产品数值和功能都要标注事实编号，例如写“重量约X kg [F1]”；没有编号的参数一律不写。",
     "不用套话：不写 赋能、打造、不仅仅是…更是、综上所述、总而言之、值得一提的是、让我们…、在当今…时代、无论是…还是…。",
     "不用破折号「——」；全文感叹号不超过 2 个；避免连续三句用同样的开头。",
     "长短句交错，段落短；一段只讲一件事。",
-    "不写价格、优惠、销量、库存、奖项、评价、测试成绩、售后政策，除非事实清单里有对应条目。",
     "不出现绝对化用语（最、第一、唯一、顶级、全网、首选等），上限值写成“可达 / 最多 X”。",
-    "不提及任何其他品牌或竞品，不做对比。",
-    "不编造个人使用经历（亲测、我用了X天、入手X个月）。",
 ]
 
 # ----------------------------------------------------------------- helpers

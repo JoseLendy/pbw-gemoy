@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import importlib
 import logging
+import os
 import re
 import time
 from collections import defaultdict
@@ -21,7 +22,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from agent.schemas import (
-    CardHook, CheckReport, Clarification, EditBlocked, ImagePlan, Ledger, LockedResult, ModelBundle, NeedsHuman,
+    CardHook, CheckReport, Clarification, EditBlocked, FailingSentence, ImagePlan, Ledger, LockedResult, ModelBundle,
+    NeedsHuman, NeedsReview,
     PLATFORM_LABELS, Post, RecommendationCard, RunResult, SCENARIO_LABELS, StaffContext, Strategy, Task,
 )
 
@@ -190,12 +192,12 @@ def _collect_pending(strategy: Strategy, plan: ImagePlan, report: CheckReport,
     return out
 
 
-def _sibling_ledgers(deps: Deps, model, on_progress: Progress) -> dict[str, Ledger]:
+def _sibling_ledgers(deps: Deps, model, on_progress: Progress, day: str) -> dict[str, Ledger]:
+    from agent.fact_cache import get_facts
     out: dict[str, Ledger] = {}
     for sid in model.siblings or []:
         try:
-            sb = deps.get_bundle(sid, deps.catalog)
-            out[sid] = deps.build_ledger(sb, deps.llm)
+            out[sid] = get_facts(deps, sid, day)[1]
         except Exception as e:  # a missing sibling must not stop the run
             log.warning("sibling ledger %s failed: %s", sid, e)
             _say(on_progress, "ledger", f"相近型号 {sid} 资料读取失败，8A 将只检查目标型号")
@@ -226,8 +228,10 @@ def _auto_cite(post: Post, errors: list, ledger: Ledger) -> tuple[Post, list]:
 def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibling_ledgers: dict,
                plan: ImagePlan, deps: Deps, on_progress: Progress = None) -> tuple[Post, CheckReport, int]:
     """run_checks → if errors and loops < MAX_LOOPS: rewrite → run_checks again."""
+    from agent.timing import stage
     loops = 0
-    report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
+    with stage("check.pass1"):
+        report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
     n_facts = len(post.selling_points)
     while not report.passed and loops < MAX_LOOPS:
         errors = [i for i in report.issues if i.severity == "error"]
@@ -239,9 +243,11 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
             errors = [i for i in errors if i not in fixed]
         if errors:
             _say(on_progress, "check", f"发现 {len(errors)} 处问题，定向改写（第 {loops + 1} 轮）…")
-            post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
+            with stage(f"check.rewrite{loops + 1}"):
+                post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
         loops += 1
-        report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
+        with stage(f"check.pass{loops + 1}"):
+            report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
     if report.passed:
         _say(on_progress, "check", f"核验 {n_facts} 个事实点 ✓")
         _say(on_progress, "check", "合规检查 ✓")
@@ -302,15 +308,17 @@ def _from_analyze(task: Task, model, bundle: ModelBundle, ledger: Ledger, siblin
 # ---------------------------------------------------------------- run
 def run(text: str, form: dict | None = None, deps: Deps | None = None,
         on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman:
+    from agent.timing import collect
     deps = deps or default_deps()
     timer = _Timer()
-    _say(on_progress, "intake", "理解需求、匹配型号…")
-    parsed = deps.parse_task(text, deps.catalog, form, deps.llm)
-    timer.lap("intake")
-    if isinstance(parsed, Clarification):
-        _say(on_progress, "intake", "还缺少信息，请补充")
-        return parsed
-    return _from_retrieval(parsed, deps, on_progress, timer)
+    with collect(timer.timings):
+        _say(on_progress, "intake", "理解需求、匹配型号…")
+        parsed = deps.parse_task(text, deps.catalog, form, deps.llm)
+        timer.lap("intake")
+        if isinstance(parsed, Clarification):
+            _say(on_progress, "intake", "还缺少信息，请补充")
+            return parsed
+        return _from_retrieval(parsed, deps, on_progress, timer)
 
 
 # ---------------------------------------------------------------- run from a recommendation card
@@ -319,22 +327,23 @@ LOCKED_MESSAGES = {"fact_card_draft": "新品资料待总部确认，暂不可�
 
 def _from_retrieval(task: Task, deps: Deps, on_progress: Progress, timer: _Timer):
     """Stages 3 → 9 for a task whose model_id is already exact (shared by run and run_from_card)."""
+    import datetime as dt
+    from agent.fact_cache import get_facts
     model = deps.catalog.get(task.model_id)
+    day = task.card_date or dt.date.today().isoformat()
     _say(on_progress, "retrieval", f"读取产品资料：{model.canonical_name}…")
-    bundle = deps.get_bundle(task.model_id, deps.catalog)
-    timer.lap("retrieval")
+    bundle, ledger = get_facts(deps, task.model_id, day)     # per (model, date): stores share it (plan §7)
+    timer.lap("retrieval")      # retrieval + ledger for the target model (cached after the first store)
     if bundle.index_status != "complete":
         _say(on_progress, "retrieval", "知识库索引可能不完整（" + bundle.index_status + "）")
-    _say(on_progress, "ledger", "建立事实台账…")
-    ledger = deps.build_ledger(bundle, deps.llm)
     _say(on_progress, "ledger", f"台账 {len(ledger.facts)} 条事实" +
          (f"，{len(ledger.conflicts)} 处冲突" if ledger.conflicts else ""))
     note = _check_variant(task, ledger)
     if note:
         task.notes = [*task.notes, note]
         _say(on_progress, "ledger", note)
-    sibling_ledgers = _sibling_ledgers(deps, model, on_progress)
-    timer.lap("ledger")
+    sibling_ledgers = _sibling_ledgers(deps, model, on_progress, day)
+    timer.lap("ledger")         # variant check + sibling ledgers
     return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
 
 
@@ -350,10 +359,24 @@ def _log_real(card, result, staff, deps, kind: str = "run_from_card") -> None:
 
 
 def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: StaffContext | None = None,
-                  on_progress: Progress = None) -> RunResult | LockedResult | NeedsHuman:
+                  on_progress: Progress = None, fallback: bool = True
+                  ) -> RunResult | LockedResult | NeedsHuman | NeedsReview:
     """Proactive entry (PROACTIVE_AGENT_PLAN §3): the card replaces the user sentence, so intake and model
     disambiguation are skipped (the card carries an exact model_id). A locked card returns LockedResult
-    before any LLM or ima call. Otherwise continues from retrieval / scenario exactly like run()."""
+    before any LLM or ima call. Otherwise continues from retrieval / scenario exactly like run().
+
+    A draft that still fails after 2 rewrites goes through the fallback policy (fallback=True): trim the
+    failing sentences → the store's next unlocked card → NeedsReview. An unchecked post is never returned."""
+    result = _run_card(card, deps, staff, on_progress)
+    if fallback and isinstance(result, RunResult) and not result.report.passed:
+        deps = deps or default_deps()
+        result = apply_fallback(card, result, deps, staff, on_progress)
+        if not (isinstance(result, RunResult) and result.fallback == "next_card"):   # next card logged itself
+            _log_real(card, result, staff, deps, kind="fallback")
+    return result
+
+
+def _run_card(card: RecommendationCard, deps: Deps | None, staff: StaffContext | None, on_progress: Progress):
     if card.locked:
         reason = card.locked_reason or "locked"
         msg = LOCKED_MESSAGES.get(reason, "该推荐暂不可生成，请等待总部确认")
@@ -363,11 +386,13 @@ def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: Sta
         return result
     from agent.recommend.to_task import card_to_task
     deps = deps or default_deps()
+    from agent.timing import collect
     timer = _Timer()
-    _say(on_progress, "card", f"今日推荐：{card.slot_label} {card.display_name or card.model_id} → {card.platform}")
-    task = card_to_task(card, staff)       # raises ValueError on a staff voice the segment does not allow
-    timer.lap("intake")
-    result = _from_retrieval(task, deps, on_progress, timer)
+    with collect(timer.timings):
+        _say(on_progress, "card", f"今日推荐：{card.slot_label} {card.display_name or card.model_id} → {card.platform}")
+        task = card_to_task(card, staff)       # raises ValueError on a staff voice the segment does not allow
+        timer.lap("intake")
+        result = _from_retrieval(task, deps, on_progress, timer)
     _log_real(card, result, staff, deps)
     return result
 
@@ -387,6 +412,17 @@ class BatchResult:
     results: dict[str, Any]                 # store_id -> RunResult | LockedResult | NeedsHuman | Exception
     similarity: list[SimilarityPair]
     regenerated: list[str] = field(default_factory=list)
+    seconds: dict[str, float] = field(default_factory=dict)   # store_id -> wall-clock incl. 8E reruns
+    regen_seconds: dict[str, float] = field(default_factory=dict)   # store_id -> part of that spent on 8E reruns
+    wall_seconds: float = 0.0               # the whole batch (stores run concurrently)
+
+
+def batch_max_workers() -> int:
+    """BATCH_MAX_WORKERS (default 4): stores generated at the same time. 1 = sequential."""
+    try:
+        return max(1, int(os.getenv("BATCH_MAX_WORKERS", "4")))
+    except ValueError:
+        return 4
 
 
 def _batch_text(result) -> str:
@@ -404,22 +440,52 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
     store id): first with the next hook unused by peers today; if still above the threshold, also with
     the next unused angle. Model, platform and facts never change; customer-question cards keep the
     reserved customer hook. Returns final results plus before/after similarity pairs for the UI / eval report.
+
+    The first pass runs stores concurrently (BATCH_MAX_WORKERS, default 4); results keep the input order and
+    a store's exception becomes that store's result. 8E comparison and regeneration run after that pass,
+    sequentially, exactly as before. Same-model stores share one retrieval + ledger (agent.fact_cache).
     """
     from agent.formatter import render_publishable   # noqa: F401  (used by _batch_text)
     from agent.recommend.common import INPUTS, load_json
     from agent.style.similarity import jaccard, similarity_threshold
 
+    t_batch = time.perf_counter()
     deps = deps or default_deps()
     staff_map = staff_map or {}
     raw = list(cards.values()) if isinstance(cards, dict) else list(cards)
     items = [c if isinstance(c, RecommendationCard) else RecommendationCard.from_dict(c) for c in raw]
     by_store = {c.store_id: c for c in items}
     results: dict[str, Any] = {}
-    for card in items:
+    seconds: dict[str, float] = defaultdict(float)
+    regen_seconds: dict[str, float] = defaultdict(float)
+
+    def timed_run(card, regen: bool = False):
+        t0 = time.perf_counter()
         try:
-            results[card.store_id] = run_from_card(card, deps, staff_map.get(card.store_id), on_progress)
+            return run_from_card(card, deps, staff_map.get(card.store_id), on_progress)
+        finally:
+            dt_ = time.perf_counter() - t0
+            seconds[card.store_id] += dt_
+            if regen:
+                regen_seconds[card.store_id] += dt_
+
+    def safe_run(card):
+        try:
+            return timed_run(card)
         except Exception as e:  # noqa: BLE001 - one store must not abort the batch
-            results[card.store_id] = e
+            log.warning("batch: store %s failed: %s: %s", card.store_id, type(e).__name__, e)
+            return e
+
+    # Stores run concurrently (BATCH_MAX_WORKERS, default 4); results keep the input order.
+    workers = max(1, min(batch_max_workers(), len(items) or 1))
+    if workers == 1:
+        outs = [safe_run(card) for card in items]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            outs = list(ex.map(safe_run, items))
+    for card, out in zip(items, outs):
+        results[card.store_id] = out
 
     groups: dict[str, list[str]] = defaultdict(list)
     for card in items:
@@ -472,7 +538,7 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                     if not hook_changed and next_angle is not None:
                         new_card.angle = next_angle
                     try:
-                        new_result = run_from_card(new_card, deps, staff_map.get(later), on_progress)
+                        new_result = timed_run(new_card, regen=True)
                     except Exception:  # noqa: BLE001 - keep the original result if the rerun fails
                         continue
                     if not isinstance(new_result, RunResult):
@@ -484,7 +550,7 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                         angle_card = copy.deepcopy(new_card)
                         angle_card.angle = next_angle
                         try:
-                            angle_result = run_from_card(angle_card, deps, staff_map.get(later), on_progress)
+                            angle_result = timed_run(angle_card, regen=True)
                         except Exception:  # noqa: BLE001
                             angle_result = None
                         if isinstance(angle_result, RunResult):
@@ -507,7 +573,10 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
                     continue
                 pairs.append(SimilarityPair(seg, a, b, round(jaccard(before, after), 3),
                                             round(jaccard(peer_text(a), peer_text(b)), 3), b in regenerated))
-    batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated)
+    batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated,
+                        seconds={sid: round(v, 2) for sid, v in seconds.items()},
+                        regen_seconds={sid: round(v, 2) for sid, v in regen_seconds.items()},
+                        wall_seconds=round(time.perf_counter() - t_batch, 2))
     if deps is not None and not getattr(deps, "is_dev_mode", True):
         try:
             from agent.runs import log_batch
@@ -515,6 +584,173 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
         except Exception as e:  # noqa: BLE001 - logging must never break a batch
             log.warning("batch log failed: %s", e)
     return batch
+
+
+# ---------------------------------------------------------------- fallback policy (Phase 5, T4)
+_SENT_PIECE = re.compile(r"[^。！？!?；;\n]+[。！？!?；;\n]*")
+_TAG = re.compile(r"\s*\[F\d+\]")
+_NORM = re.compile(r"[\s，,。！？!?；;：:、“”\"「」（）()]+")
+NEXT_CARD_ORDER = ("potential", "promo", "customer_question", "new_release")
+
+
+def _norm_text(text: str) -> str:
+    return _NORM.sub("", _TAG.sub("", text or ""))
+
+
+def _text_fields(post: Post) -> list[tuple[str, str]]:
+    return [("title", post.title), ("intro", post.intro), *[(f"body[{i}]", b) for i, b in enumerate(post.body)],
+            ("cta", post.cta)]
+
+
+def failing_sentences(post: Post, report: CheckReport) -> list[FailingSentence]:
+    """Each error mapped to the post sentence that carries its span (publishable text, no tags). Errors with
+    no locatable span (e.g. a missing store detail) are listed with an empty sentence."""
+    out: list[FailingSentence] = []
+    fields = _text_fields(post)
+    for i in report.issues:
+        if i.severity != "error":
+            continue
+        span = _norm_text(i.span)
+        hit = None
+        for name, text in fields:
+            if i.field and i.field in dict(fields) and name != i.field:
+                continue
+            for piece in _SENT_PIECE.findall(text or ""):
+                n = _norm_text(piece)
+                if span and n and (span in n or (len(n) >= 4 and n in span)):
+                    hit = (name, _TAG.sub("", piece).strip())
+                    break
+            if hit:
+                break
+        out.append(FailingSentence(field=hit[0] if hit else (i.field or ""), sentence=hit[1] if hit else "",
+                                   stage=i.stage, code=i.code, reason=i.message))
+    return out
+
+
+def _trim(post: Post, failing: list[FailingSentence]) -> Optional[Post]:
+    """The post without the failing sentences, or None if some error had no sentence to remove."""
+    if not failing or any(not f.sentence for f in failing):
+        return None
+    drop: dict[str, set[str]] = defaultdict(set)
+    for f in failing:
+        drop[f.field].add(_norm_text(f.sentence))
+    new = copy.deepcopy(post)
+
+    def cut(name: str, text: str) -> str:
+        keep = [piece for piece in _SENT_PIECE.findall(text or "") if _norm_text(piece) not in drop.get(name, ())]
+        return "".join(keep).strip()
+
+    new.title, new.intro, new.cta = cut("title", post.title), cut("intro", post.intro), cut("cta", post.cta)
+    new.body = [b for b in (cut(f"body[{i}]", b) for i, b in enumerate(post.body)) if b]
+    cited = set(re.findall(r"\[(F\d+)\]", new.all_text()))
+    new.selling_points = [i for i in post.selling_points if i in cited]
+    return new
+
+
+def _deliverable(post: Post) -> bool:
+    """Still a post: a title if the platform has one, at least one fact-backed point, and a CTA."""
+    from agent.platform_rules import PLATFORM_RULES
+    blocks = {b[0] for b in (PLATFORM_RULES.get(post.platform) or {}).get("blocks", [])}
+    return (bool(post.title) or "title" not in blocks) and bool(post.selling_points) and bool(post.cta)
+
+
+def _next_card(card: RecommendationCard) -> Optional[RecommendationCard]:
+    """The store's next unlocked card after this one (潜力款 → 活动款 → 顾客问答 → 新品款 if verified)."""
+    from agent.recommend.store_data import cards_for
+    if not card.date:
+        return None
+    try:
+        cards = cards_for(card.store_id, card.date)
+    except Exception:  # noqa: BLE001
+        return None
+    rank = {slot: i for i, slot in enumerate(NEXT_CARD_ORDER)}
+    later = [c for c in cards if not c.locked and c.slot != card.slot]
+    return min(later, key=lambda c: rank.get(c.slot, 99), default=None)
+
+
+def _errors_n(r) -> int:
+    return sum(1 for i in r.report.issues if i.severity == "error") if isinstance(r, RunResult) else 10 ** 6
+
+
+def apply_fallback(card: RecommendationCard, result: RunResult, deps: Deps, staff=None,
+                   on_progress: Progress = None):
+    """T4 policy for a card run that failed after 2 rewrites. Returns a passing RunResult (fallback set)
+    or NeedsReview. Every delivered post has passed all checks."""
+    attempts = [card.card_id]
+    failing = failing_sentences(result.post, result.report)
+    trimmed_post = _trim(result.post, failing)
+    best = result
+    if trimmed_post is not None:
+        report = deps.run_checks(trimmed_post, result.ledger, getattr(result, "_sibling_ledgers", {}) or {},
+                                 result.task, result.plan, deps.llm)
+        attempts.append("trimmed")
+        if report.passed and _deliverable(trimmed_post):
+            from agent.checks.prices import mark_demo_prices
+            out = copy.copy(result)
+            out.post, out.report, out.fallback = mark_demo_prices(trimmed_post, result.task), report, "trimmed"
+            out.pending = _collect_pending(result.strategy, result.plan, report, result.task)
+            _say(on_progress, "check", f"删去 {len(failing)} 处未通过的句子后核验通过")
+            return out
+    nxt = _next_card(card)
+    if nxt is not None:
+        attempts.append(nxt.card_id)
+        _say(on_progress, "card", f"改用下一条推荐：{nxt.slot_label}")
+        try:
+            other = run_from_card(nxt, deps, staff, on_progress, fallback=False)
+        except Exception as e:  # noqa: BLE001 - the fallback must not crash the batch
+            log.warning("next-card fallback failed for %s: %s", card.store_id, e)
+            other = None
+        if isinstance(other, RunResult) and other.report.passed:
+            other.fallback = "next_card"
+            return other
+        if isinstance(other, RunResult) and _errors_n(other) < _errors_n(best):
+            best = other
+    _say(on_progress, "check", "仍未通过核验：需人工确认")
+    return NeedsReview(card=card, draft=best, failing=failing_sentences(best.post, best.report), attempts=attempts)
+
+
+# ---------------------------------------------------------------- prepared posts (the push model)
+@dataclass
+class PreparedDay:
+    date: str
+    batch: BatchResult
+    paths: dict[str, Any]                   # store_id -> prepared record path
+    locked: dict[str, str]                  # store_id -> why nothing was generated (locked / no card)
+    errors: dict[str, str] = field(default_factory=dict)   # store_id -> crash; nothing stored, old post kept
+
+
+def prepare_today(date, deps: Deps | None = None, runs_dir=None, on_progress: Progress = None,
+                  card_map: Optional[Callable[[RecommendationCard], RecommendationCard]] = None) -> PreparedDay:
+    """Morning run: every store's default card for `date` through generate_batch (8E included). Each final
+    result is stored as that store's prepared post (agent.runs.log_prepared); staff open the app to it and
+    重新生成 runs live. Locked cards (and stores without an unlocked card) are skipped and listed.
+    card_map is for the --fake rehearsal only (maps each card onto the synthetic DemoBook)."""
+    from agent.recommend.store_data import default_card, load_store_data
+    from agent.runs import log_prepared
+    deps = deps or default_deps()
+    data = load_store_data()
+    cards, locked = [], {}
+    for st in data.stores:
+        card = default_card(st["store_id"], date, data)
+        if card is None:
+            locked[st["store_id"]] = "今日无可生成的卡片"
+        elif card.locked:
+            locked[st["store_id"]] = LOCKED_MESSAGES.get(card.locked_reason or "", "该推荐暂不可生成，请等待总部确认")
+        else:
+            cards.append(card_map(card) if card_map else card)
+    batch = generate_batch(cards, deps, on_progress=on_progress)
+    by_store = {c.store_id: c for c in cards}
+    paths, errors = {}, {}
+    for sid, result in batch.results.items():
+        if isinstance(result, Exception):     # never overwrite a stored post with a crash (e.g. LLM 402)
+            errors[sid] = f"{type(result).__name__}: {str(result)[:160]}"
+            continue
+        # The morning card is stored; if 8E changed hook / angle, result.task records what actually ran.
+        sims = [dict(p.__dict__) for p in batch.similarity if sid in (p.store_a, p.store_b)]
+        paths[sid] = log_prepared(by_store[sid], result, seconds=batch.seconds.get(sid), similarity=sims,
+                                  regenerated=sid in batch.regenerated, dev_mode=deps.is_dev_mode,
+                                  runs_dir=runs_dir)
+    return PreparedDay(date=str(date), batch=batch, paths=paths, locked=locked, errors=errors)
 
 
 # ---------------------------------------------------------------- edit
@@ -562,8 +798,14 @@ def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
     if blocked:
         _say(on_progress, "edit", blocked)
         return EditBlocked(instruction=instruction, message=blocked, prev=prev)
+    from agent.timing import collect
     deps = deps or default_deps()
     timer = _Timer()
+    with collect(timer.timings):
+        return _edit_stages(prev, instruction, deps, on_progress, timer)
+
+
+def _edit_stages(prev: RunResult, instruction: str, deps: Deps, on_progress: Progress, timer: _Timer):
     stage, params = classify_edit(instruction, deps.llm)
     task = copy.deepcopy(prev.task)
     model = prev.model

@@ -179,7 +179,8 @@ def write_post(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan, 
     # tags are always filled
     if not post.tags:
         post.tags = [PLATFORM_LABELS.get(post.platform, post.platform)]
-        if task.scenario:
+        # A card run never gets "新品首发" as a fallback tag: that is a release claim 8B would block.
+        if task.scenario and not (task.source == "card" and task.scenario == "new_launch"):
             from agent.schemas import SCENARIO_LABELS
             post.tags.append(SCENARIO_LABELS.get(task.scenario, task.scenario))
     return post
@@ -210,7 +211,10 @@ def rewrite(post: Post, issues: list[CheckIssue], task: Task, strategy: Strategy
         current["images"] = [im.__dict__ for im in post.images]
     msgs = [{"field": i.field, "code": i.code, "message": i.message, "span": i.span, "fact_id": i.fact_id}
             for i in issues if i.severity == "error"]
+    usable = [f for f in chosen + others if f.id in allowed]
     user = (_context(task, strategy, ledger, plan)
+            + "\n\n## 本轮可用的事实编号（改写只能引用这些；其他编号会被删除）\n"
+            + "\n".join(_fact_line(f) for f in usable)
             + "\n\n## 需要修改的字段（当前内容）\n" + json.dumps(current, ensure_ascii=False)
             + "\n\n## 核验问题\n" + json.dumps(msgs, ensure_ascii=False)
             + "\n\n只输出需要修改的字段。不得新增事实。")

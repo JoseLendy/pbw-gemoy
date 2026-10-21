@@ -71,3 +71,25 @@ def test_stray_absolute_word_triggers_one_self_repair():
     post = write_post(fake_task(), fake_strategy(), fake_ledger(), plan, llm)
     assert "最" not in post.all_text()
     assert post.title == "开学装备清单"
+
+
+class _PromptLLM(FakeLLM):
+    def chat_json(self, system, user, stage="", **kw):
+        self.full = (system, user)
+        return super().chat_json(system, user, stage, **kw)
+
+
+def test_rewrite_prompt_lists_exactly_the_ids_it_may_cite():
+    """The rewrite may only cite already-cited or chosen facts; the prompt must say so explicitly, or the
+    model tags a background fact, the tag is stripped and the sentence fails 8A again."""
+    plan = fake_plan()
+    before = fake_post("xiaohongshu")
+    issues = [CheckIssue("8A", "error", "untagged_claim", "缺编号", field="body[0]")]
+    llm = _PromptLLM({"rewrite": {}})
+    rewrite(before, issues, fake_task(), fake_strategy(), fake_ledger(), plan, llm)
+    system, user = llm.full
+    section = user.split("## 本轮可用的事实编号")[1].split("## 需要修改的字段")[0]
+    allowed = set(before.selling_points) | {sp.fact_id for sp in fake_strategy().selling_points}
+    listed = {line.split(" | ")[0] for line in section.strip().splitlines()[1:]}
+    assert listed == allowed and "F5" not in listed
+    assert "整句删除" in system

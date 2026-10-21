@@ -36,3 +36,15 @@ def test_report_flags_high_similarity():
     b = ev.StoreEval("S02", "B", "student", status="ok", stage_pass={s: True for s in ev.STAGES}, text="同样的一段文案内容")
     md = ev.build_report([a, b], "2026-10-21", "test")
     assert "| S01 | S02 | 1.0 ⚠️ |" in md
+
+
+def test_report_has_seconds_rewrite_budget_and_failures_by_checker():
+    ok = ev.StoreEval("S01", "A", "student", status="ok", stage_pass={s: True for s in ev.STAGES}, seconds=30.0)
+    bad = ev.StoreEval("S02", "B", "student", status="ok",
+                       stage_pass={**{s: True for s in ev.STAGES}, "8B": False}, rewrites=2, seconds=50.0,
+                       errors=[("8B", "release_unsupported", "新品")], sim_flags=["S01×S02 0.6→0.4"])
+    sm = ev.summary([ok, bad])
+    assert sm["passed"] == 1 and sm["median_s"] == 40.0 and sm["max_s"] == 50.0
+    md = ev.build_report([ok, bad], "2026-10-23", "test")
+    assert "**1 / 2**" in md and "中位数 40.0 秒" in md and "8B · S02 release_unsupported「新品」" in md
+    assert "S01×S02 0.6→0.4" in md

@@ -24,7 +24,11 @@ def _rows() -> list[dict]:
 
 def _catalog():
     from agent.catalog import INDEX_PATH, LOCAL_INDEX_PATH, Catalog
-    for path in (INDEX_PATH, LOCAL_INDEX_PATH):
+    from agent.ima_wrapper import kb_backend
+    # Check against the index the configured backend loads (agent.catalog.load_catalog): the mirror
+    # index for local/hybrid, the ima index for ima.
+    order = (LOCAL_INDEX_PATH, INDEX_PATH) if kb_backend() in ("local", "hybrid") else (INDEX_PATH, LOCAL_INDEX_PATH)
+    for path in order:
         if path.exists():
             cat = Catalog(json.loads(path.read_text("utf-8")))
             return {mid: m.canonical_name for mid, m in cat.models.items()}

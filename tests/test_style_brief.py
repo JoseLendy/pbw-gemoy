@@ -125,10 +125,15 @@ def test_calendar_theme_never_implies_a_discount():
 
 
 def test_sales_data_is_banned_from_the_copy():
-    block = brief(card_to_task(_card("S01")))
-    assert "不得提销量" in block
-    for word in ("热销", "爆款", "销量第一", "卖断货"):
-        assert word in block                # named in the ban, not as an option
+    """The card brief no longer repeats it (prompt-bloat guard): the system prompt bans 销量 claims and
+    8A blocks 热销 / 爆款 in code, whatever the writer does."""
+    from pathlib import Path
+    from agent.checks.facts import check_facts
+    from tests.fakes import fake_post
+    assert "销量" in Path("prompts/system_prompt.md").read_text(encoding="utf-8")
+    p = fake_post("moments")
+    p.body = ["这款是店里的热销爆款，重量约 1.25 kg [F1]。"]
+    assert any(i.code.startswith("invented_") for i in check_facts(p, fake_ledger(), {}).issues)
 
 
 def test_no_promo_record_bans_every_price_wording():
@@ -186,3 +191,37 @@ def test_manual_flow_has_no_customer_quote_rule():
     from agent.checks.compliance import check_compliance
     r = check_compliance(_card_post("顾客说很好用。重量约 1.25 kg [F1]。"), fake_ledger(), fake_task("moments"))
     assert "invented_customer_quote" not in {i.code for i in r.issues}
+
+
+# ------------------------------------------------------------------ Phase 5 eval: systematic writer causes
+def test_brief_bans_experience_promises_and_one_tag_per_parameter():
+    from pathlib import Path
+    block = brief(card_to_task(_card("S01", "potential")))
+    assert "不要从参数推出体验结论或承诺" in block and "不用重新适应" in block
+    writer_md = (Path(__file__).resolve().parents[1] / "prompts" / "writer.md").read_text(encoding="utf-8")
+    assert "每个参数后面各标它自己的事实编号" in writer_md          # merged into the shared writer prompt
+
+
+def test_brief_bans_hearsay_unless_a_question_is_logged():
+    assert "不得转述别人的话" in brief(card_to_task(_card("S01", "potential")))
+    assert "不得转述别人的话" not in brief(card_to_task(_card("S01", "customer_question")))
+
+
+def test_question_hook_no_longer_invites_a_reported_customer_question():
+    from agent.style.profile import HOOK_OPENING
+    assert "顾客真实会问" not in HOOK_OPENING["question"] and "不要转述" in HOOK_OPENING["question"]
+
+
+def test_moments_brief_asks_for_one_selling_point():
+    from agent.platform_rules import build_prompt_rules
+    task = card_to_task(_card("S01", "potential"))
+    assert task.platform == "moments" and "selling_points 只放一个事实编号" in build_prompt_rules("moments")
+
+
+def test_brief_requires_the_landmark_once_and_exact_qualifiers():
+    task = card_to_task(_card("S01", "potential"))
+    block = brief(task)
+    from pathlib import Path
+    writer_md = (Path(__file__).resolve().parents[1] / "prompts" / "writer.md").read_text(encoding="utf-8")
+    assert f"正文里要自然带一次门店位置：{task.landmark}" in block
+    assert "限定词照抄原文" in writer_md and "邀请语、署名和行动引导里不放任何产品说法" in writer_md
