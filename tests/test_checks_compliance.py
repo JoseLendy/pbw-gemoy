@@ -238,3 +238,21 @@ def test_8b_judge_is_told_the_cards_store_context():
 def test_manual_flow_8b_prompt_has_no_store_block():
     _, user = _8b_prompt(fake_task("moments"))
     assert "<store>" not in user
+
+
+def test_8b_judge_is_told_the_cards_logged_customer_question():
+    """Real 朋友圈 eval run 4, S09 customer_question card: '这几天有家长来问：学生用够不够' quotes the store's
+    logged question (4 times in 7 days) exactly as the brief asks, but the 8B judge, never shown the log,
+    called it an invented customer experience."""
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    task = card_to_task(next(c for c in cards_for("S09", "2026-10-23") if c.slot == "customer_question"))
+    system, user = _8b_prompt(task)
+    store = user.split("<store>")[1].split("</store>")[0]
+    assert task.question["text"] in store and str(task.question["count"]) in store
+    assert "记录过的顾客问题" in system
+
+
+def test_no_logged_question_means_none_is_shown_to_the_judge():
+    _, user = _8b_prompt(_card_task())            # S09 promo card: no logged question
+    assert "顾客问题" not in user.split("<store>")[1].split("</store>")[0]
