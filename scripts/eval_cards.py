@@ -67,6 +67,7 @@ class StoreEval:
     errors: list = dataclasses.field(default_factory=list)       # (stage, code, span) left in the final report
     sim_flags: list = dataclasses.field(default_factory=list)    # "S01×S02 0.61→0.42" pairs over the threshold
     regenerated: bool = False
+    timings: dict = dataclasses.field(default_factory=dict)      # RunResult.timings (+ "8E" regen seconds)
 
     @property
     def passed(self) -> bool:
@@ -152,7 +153,33 @@ def summary(evals: list[StoreEval]) -> dict:
             "rewrites": sum(e.rewrites for e in ok), "failures": failures}
 
 
-def build_report(evals: list[StoreEval], today, mode: str, pairs=None) -> str:
+# Stage columns of the timing table (RunResult.timings keys; nested check.* keys are parts of "check").
+TIMING_COLS = ("retrieval", "ledger", "analyze", "reconcile", "write", "check", "check.pass1", "check.rewrite1",
+               "check.pass2", "check.rewrite2", "check.pass3", "check.8A", "check.8B", "check.8C", "check.8D",
+               "llm.8D", "8E", "total")
+
+
+def stage_medians(evals: list[StoreEval]) -> dict[str, float]:
+    keys = sorted({k for e in evals if e.status == "ok" for k in e.timings})
+    out = {}
+    for k in keys:
+        vals = [e.timings[k] for e in evals if e.status == "ok" and k in e.timings]
+        out[k] = round(statistics.median(vals), 1)
+    return out
+
+
+def llm_stage_table(calls: list[dict]) -> list[str]:
+    by: dict[tuple, list[float]] = {}
+    for c in calls or []:
+        by.setdefault((c.get("stage") or "?", c.get("model") or "?"), []).append(c.get("seconds") or 0.0)
+    lines = ["| LLM 阶段 | 模型 | 次数 | 合计秒 | 中位秒 | 最大秒 |", "|---|---|---|---|---|---|"]
+    for (stage, model), v in sorted(by.items(), key=lambda kv: -sum(kv[1])):
+        lines.append(f"| {stage} | {model} | {len(v)} | {sum(v):.1f} | {statistics.median(v):.1f} | {max(v):.1f} |")
+    return lines
+
+
+def build_report(evals: list[StoreEval], today, mode: str, pairs=None, wall: float | None = None,
+                 llm_calls: list | None = None) -> str:
     mark = {True: "✅", False: "❌"}
     from agent.llm import temperatures
     lines = [f"# 卡片评测报告 · {today} · {mode}", "",
@@ -169,10 +196,25 @@ def build_report(evals: list[StoreEval], today, mode: str, pairs=None) -> str:
                      f"{status} | {' | '.join(sp)} | {e.rewrites if e.status == 'ok' else '—'} | "
                      f"{e.seconds:.1f} | {sim} | {hits} | {', '.join(e.tags) or '—'} |")
     sm = summary(evals)
+    if wall is not None:
+        lines += ["", f"- 12 店整批耗时（含 8E 重生成）：**{wall:.1f} 秒**"]
     lines += ["", f"- 生成成功：{sm['generated']} / {sm['stores']} 家；≤2 轮改写内四项核验全部通过："
                   f"**{sm['passed']} / {sm['stores']}**（目标 ≥10）",
               f"- 每条耗时：中位数 {sm['median_s']:.1f} 秒，最大 {sm['max_s']:.1f} 秒",
               f"- 平均改写轮数：{(sm['rewrites'] / sm['generated']) if sm['generated'] else 0:.2f}", ""]
+    ok = [e for e in evals if e.status == "ok"]
+    if ok:
+        lines += ["## 分阶段耗时（秒，墙钟）", "",
+                  "check.* 是 check 的组成部分；8A/8B/8D 在每轮核验内并行，所以它们之和可大于 check.passN。", "",
+                  "| 门店 | " + " | ".join(TIMING_COLS) + " |", "|---" * (len(TIMING_COLS) + 1) + "|"]
+        for e in ok:
+            lines.append(f"| {e.store_id} | " + " | ".join(
+                f"{e.timings[c]:.1f}" if c in e.timings else "—" for c in TIMING_COLS) + " |")
+        med = stage_medians(evals)
+        lines.append("| **中位数** | " + " | ".join(f"{med[c]:.1f}" if c in med else "—" for c in TIMING_COLS) + " |")
+        lines.append("")
+    if llm_calls:
+        lines += ["## LLM 调用耗时（按阶段与模型）", ""] + llm_stage_table(llm_calls) + [""]
     if sm["failures"]:
         lines += ["## 未通过项（按核验器分组）", ""]
         for stage in STAGES:
@@ -264,14 +306,18 @@ def main(argv=None) -> int:
             ev.errors = [(i.stage, i.code, i.span) for i in final.issues if i.severity == "error"]
             ev.tags = list(dict.fromkeys(r.post.selling_points))
             ev.text = render_publishable(r.post)
+            ev.timings = dict(r.timings or {})
         else:
             ev.status, ev.message = "no_result", "没有返回结果"
         ev.seconds = batch.seconds.get(sid, 0.0)
         ev.regenerated = sid in batch.regenerated
+        if sid in batch.regen_seconds:
+            ev.timings["8E"] = batch.regen_seconds[sid]
         ev.sim_flags = [f"{p.store_a}×{p.store_b} {p.before}→{p.after}" for p in batch.similarity
                         if sid in (p.store_a, p.store_b) and max(p.before, p.after) > SIMILARITY_FLAG]
         evals.append(ev)
-    report = build_report(evals, today, "fakes（合成数据）" if args.fake else "真实依赖", batch.similarity)
+    report = build_report(evals, today, "fakes（合成数据）" if args.fake else "真实依赖", batch.similarity,
+                          wall=batch.wall_seconds, llm_calls=getattr(deps.llm, "calls", None))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(report, encoding="utf-8")
@@ -281,6 +327,9 @@ def main(argv=None) -> int:
               + f" rewrites={e.rewrites} {e.seconds:.1f}s" + (f" 8E[{'; '.join(e.sim_flags)}]" if e.sim_flags else ""))
     print(f"wrote {out} · {sm['generated']}/{sm['stores']} generated · {sm['passed']}/{sm['stores']} passed "
           f"within 2 rewrites · median {sm['median_s']:.1f}s · max {sm['max_s']:.1f}s")
+    med = stage_medians(evals)
+    print("stage medians (s): " + " · ".join(f"{k} {med[k]}" for k in TIMING_COLS if k in med))
+    print(f"batch wall time: {batch.wall_seconds:.1f}s (BATCH_MAX_WORKERS={os.getenv('BATCH_MAX_WORKERS', '4')})")
     print(f"calls: LLM {len(getattr(deps.llm, 'calls', []) or [])} · "
           f"ima {getattr(getattr(deps.catalog, 'client', None), 'live_calls', 'n/a')}")
     return 0

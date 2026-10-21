@@ -68,6 +68,7 @@ def main(argv=None) -> int:
     for sid, why in sorted(day.locked.items()):
         print(f"{sid:6} {'SKIPPED':22} {'-':>8} {'-':>8}  {why}")
     print(f"stored: {len(day.paths)} prepared post(s) under {runs_dir or 'runs/'}{day.date}/prepared/")
+    print(f"batch wall time: {day.batch.wall_seconds:.1f}s")
     return 0
 
 

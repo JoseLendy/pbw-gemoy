@@ -117,7 +117,7 @@ def main(argv=None) -> int:
         secs = sorted(day.batch.seconds.values())
         ok = len(day.paths) == len(res) and len(runs) == len(res)
         bad = {sid: type(r).__name__ for sid, r in res.items() if not isinstance(r, RunResult)}
-        return ok, (f"{len(day.paths)} 条已存储；{passed}/{len(res)} 通过核验；锁定 {sorted(day.locked) or '无'}；"
+        return ok, (f"整批 {day.batch.wall_seconds}s；{len(day.paths)} 条已存储；{passed}/{len(res)} 通过核验；锁定 {sorted(day.locked) or '无'}；"
                     f"8E 重生成 {day.batch.regenerated or '无'}；最慢 {secs[-1] if secs else 0:.1f}s"
                     + (f"；未生成 {bad}" if bad else ""))
 
@@ -147,7 +147,7 @@ def main(argv=None) -> int:
         sims = "；".join(f"{p.store_a}×{p.store_b} {p.before}→{p.after}" for p in batch.similarity) or "—"
         ctx["compare"] = batch
         return (len(passed) == len(COMPARE_STORES) and not over,
-                f"通过 {passed}；相似度 {sims}；超阈值 {over or '无'}；各店秒数 {batch.seconds}")
+                f"通过 {passed}；相似度 {sims}；超阈值 {over or '无'}；整批 {batch.wall_seconds}s；各店秒数 {batch.seconds}")
 
     def need_s01():
         r = ctx.get("s01")
