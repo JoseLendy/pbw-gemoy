@@ -284,7 +284,8 @@ def test_set_fact_card_status_unlocks_new_release_and_reload_restores():
     set_fact_card_status("matebook-fold-ultimate-design", "verified")
     unlocked = next(c for c in cards_for("S01", TODAY) if c.slot == "new_release")
     assert not unlocked.locked and unlocked.locked_reason is None
-    assert unlocked.reasons[1].text.startswith("新品 2026-10-28 上市")
+    # the demo launch_date only schedules the card: the KB does not state it, so no date is shown
+    assert unlocked.reasons[1].text == "总部新品推送（演示流程）" and unlocked.reasons[1].is_demo
     # within ±7 days of launch (Oct 23) the verified release becomes every store's 今日一条
     for sid in ("S01", "S04", "S08"):
         assert default_card(sid, dt.date(2026, 10, 23)).slot == "new_release"

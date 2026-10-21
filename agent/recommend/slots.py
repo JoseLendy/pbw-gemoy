@@ -164,8 +164,10 @@ def build_cards(stores, models, signals, idx, promos, calendar, quota, angles, p
             if abs((launch - today).days) > NEW_RELEASE_WINDOW_DAYS:
                 continue
             verified = m["fact_card_status"] == "verified"
+            kb_launch = parse_date(m["kb_launch_date"]) if m.get("kb_launch_date") else None
+            text = explain.release_reason(launch, verified, kb_launch)
             cards.append(card("new_release", m["model_id"],
-                              [explain.reason(explain.release_reason(launch, verified), "release", False)],
+                              [explain.reason(text, "release", text == explain.DEMO_RELEASE_REASON)],
                               locked=not verified, locked_reason=None if verified else "fact_card_draft"))
         # 顾客问答
         if q_counts[sid]:
