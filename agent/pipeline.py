@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
 from agent.schemas import (
-    CheckReport, Clarification, ImagePlan, Ledger, ModelBundle, NeedsHuman, PLATFORM_LABELS,
-    Post, RunResult, SCENARIO_LABELS, Strategy, Task,
+    CheckReport, Clarification, ImagePlan, Ledger, LockedResult, ModelBundle, NeedsHuman, PLATFORM_LABELS,
+    Post, RecommendationCard, RunResult, SCENARIO_LABELS, StaffContext, Strategy, Task,
 )
 
 log = logging.getLogger("agent.pipeline")
@@ -306,7 +306,15 @@ def run(text: str, form: dict | None = None, deps: Deps | None = None,
     if isinstance(parsed, Clarification):
         _say(on_progress, "intake", "还缺少信息，请补充")
         return parsed
-    task: Task = parsed
+    return _from_retrieval(parsed, deps, on_progress, timer)
+
+
+# ---------------------------------------------------------------- run from a recommendation card
+LOCKED_MESSAGES = {"fact_card_draft": "新品资料待总部确认，暂不可生成"}
+
+
+def _from_retrieval(task: Task, deps: Deps, on_progress: Progress, timer: _Timer):
+    """Stages 3 → 9 for a task whose model_id is already exact (shared by run and run_from_card)."""
     model = deps.catalog.get(task.model_id)
     _say(on_progress, "retrieval", f"读取产品资料：{model.canonical_name}…")
     bundle = deps.get_bundle(task.model_id, deps.catalog)
@@ -324,6 +332,25 @@ def run(text: str, form: dict | None = None, deps: Deps | None = None,
     sibling_ledgers = _sibling_ledgers(deps, model, on_progress)
     timer.lap("ledger")
     return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
+
+
+def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: StaffContext | None = None,
+                  on_progress: Progress = None) -> RunResult | LockedResult | NeedsHuman:
+    """Proactive entry (PROACTIVE_AGENT_PLAN §3): the card replaces the user sentence, so intake and model
+    disambiguation are skipped (the card carries an exact model_id). A locked card returns LockedResult
+    before any LLM or ima call. Otherwise continues from retrieval / scenario exactly like run()."""
+    if card.locked:
+        reason = card.locked_reason or "locked"
+        msg = LOCKED_MESSAGES.get(reason, "该推荐暂不可生成，请等待总部确认")
+        _say(on_progress, "card", msg)
+        return LockedResult(card=card, reason=reason, message=msg)
+    from agent.recommend.to_task import card_to_task
+    deps = deps or default_deps()
+    timer = _Timer()
+    _say(on_progress, "card", f"今日推荐：{card.slot_label} {card.display_name or card.model_id} → {card.platform}")
+    task = card_to_task(card, staff)       # raises ValueError on a staff voice the segment does not allow
+    timer.lap("intake")
+    return _from_retrieval(task, deps, on_progress, timer)
 
 
 # ---------------------------------------------------------------- edit

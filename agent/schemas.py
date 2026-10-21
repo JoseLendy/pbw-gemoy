@@ -381,6 +381,15 @@ class RecommendationCard:
 
 
 @dataclass
+class LockedResult:
+    """run_from_card() on a locked card: nothing was generated, no LLM or ima call was made."""
+    card: "RecommendationCard"
+    reason: str                     # card.locked_reason, e.g. "fact_card_draft"
+    message: str                    # Chinese, shown to the user: 新品资料待总部确认，暂不可生成
+    to_dict = _d
+
+
+@dataclass
 class StaffContext:
     """Who is posting (demo mode, no auth). Only voice / nickname may differ from the store card."""
     staff_id: str
