@@ -311,3 +311,73 @@ def test_a_wrong_price_on_a_promo_card_is_still_blocked_in_code():
     p = fake_post("moments")
     p.body = ["演示活动价 3999 元，活动期内有效，以门店实际为准。"]
     assert "price_mismatch" in {i.code for i in check_prices(p, _s02_promo_task())}
+
+
+# ------------------------------------------------------------------ 2026-10-23: card brief shown to the 8B judge (false-positive proof)
+def _scene_card_task():
+    """A card whose writer brief asks for a scene opening in the store manager's voice."""
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    for store in ("S04", "S06", "S01", "S02", "S03", "S05", "S07", "S08", "S09", "S10", "S11", "S12"):
+        for c in cards_for(store, "2026-10-23"):
+            t = card_to_task(c)
+            if t.hook == "scene" and t.voice == "manager":
+                return t
+    raise AssertionError("no scene/manager card on 2026-10-23")
+
+
+def test_8b_judge_is_told_the_cards_opening_and_voice():
+    """Real 朋友圈 run S04 promo 2026-10-23: the brief told the writer to open with a concrete scene (time, place,
+    what the reader is doing) written as the READER's scene, and to say when a parameter matters. The draft did
+    exactly that (a second-person meeting/travel scene, then where the battery figure matters); the 8B judge,
+    never shown the brief, called it an invented personal experience."""
+    from agent.style.profile import HOOK_OPENING, VOICE_TONE
+    task = _scene_card_task()
+    system, user = _8b_prompt(task)
+    brief = user.split("<brief>")[1].split("</brief>")[0]
+    assert HOOK_OPENING["scene"] in brief and VOICE_TONE["manager"] in brief
+    assert "<brief>" in system and "不算编造经历" in system
+
+
+def test_brief_note_keeps_invented_experience_and_promises_in_scope():
+    """Guard: the note only covers reader-side scenes; author / staff / other-customer experience and outcomes
+    or service promises not in the facts stay problems, and every original category is still asked for."""
+    system, _ = _8b_prompt(_scene_card_task())
+    for must in ("虚假承诺", "无依据的比较", "误导性价格", "贬低其他品牌", "编造个人使用经历", "表达边界",
+                 "作者、店员或其他顾客的亲身经历", "体验结果", "服务承诺", "仍然是问题"):
+        assert must in system, must
+
+
+def test_manual_flow_8b_prompt_has_no_brief_block():
+    system, user = _8b_prompt(fake_task("moments"))
+    assert "<brief>" not in user and "<brief>" not in system
+
+
+def test_judge_flag_on_a_card_run_is_still_an_error():
+    """Guard: a first-person invented experience the judge flags on a card run still blocks (no filtering)."""
+    task = _scene_card_task()
+    p = fake_post("moments")
+    p.body = ["我自己背着它跑了一周会议室，电量一整天都够用 [F6]。"]
+    llm = FakeLLM({"8B": {"issues": [{"field": "body[0]", "quote": p.body[0], "code": "false_promise",
+                                      "message": "编造店员亲身使用经历，并承诺续航结果"}]}})
+    r = check_compliance(p, fake_ledger(), task, llm=llm)
+    assert "false_promise" in codes(r, "error")
+
+
+# ------------------------------------------------------------------ 2026-10-23: '客户资料' is not a customer quote
+def test_customer_data_noun_is_not_a_customer_quote():
+    """Real 朋友圈 run S04 potential 2026-10-23: a sentence saying the reader's work files and 客户资料 are on the
+    laptop was blocked as invented_customer_quote because 客户 … 都在 matched."""
+    task = _card_task()                     # card run, no logged question
+    assert not task.question
+    p = fake_post("moments")
+    p.body = ["工作文件、客户资料都在电脑里，开机这一步值得先看。"]
+    assert "invented_customer_quote" not in codes(check_compliance(p, fake_ledger(), task))
+
+
+@pytest.mark.parametrize("text", ["很多客户都在问续航", "客户说这台很轻", "顾客反馈键盘好用", "客户资料之外，客户都在问重量"])
+def test_real_customer_references_are_still_blocked(text):
+    task = _card_task()
+    p = fake_post("moments")
+    p.body = [text]
+    assert "invented_customer_quote" in codes(check_compliance(p, fake_ledger(), task), "error"), text
