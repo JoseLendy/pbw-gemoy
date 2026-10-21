@@ -69,6 +69,23 @@ class Task:
     platform: Optional[str] = None          # a Platform key
     extra_requirements: list[str] = field(default_factory=list)  # e.g. "加上500元补贴" (checks decide)
     notes: list[str] = field(default_factory=list)  # 待确认 lines from intake (e.g. a variant not in the KB)
+    # -- recommender brief (PROACTIVE_AGENT_PLAN §10.7). All optional with defaults: the manual intake flow
+    #    never sets them. Filled by agent/recommend/to_task.card_to_task; read by Phase 2 writer / checkers.
+    source: Literal["manual", "card"] = "manual"
+    card_id: Optional[str] = None
+    store_id: Optional[str] = None
+    store_name: Optional[str] = None
+    slot: Optional[str] = None              # potential | promo | new_release | customer_question
+    segment: Optional[str] = None           # student | office | family | shopper
+    hook: Optional[str] = None              # hook id from angles.json
+    voice: Optional[str] = None             # voice id from angles.json (staff override already applied)
+    landmark: Optional[str] = None
+    nickname: Optional[str] = None
+    angle: Optional[str] = None
+    calendar_theme: Optional[str] = None
+    promo: Optional[dict] = None            # CardPromo.to_dict(): the ONLY allowed price source
+    question: Optional[dict] = None         # CardQuestion.to_dict(): the only allowed customer-question source
+    staff: Optional[dict] = None            # StaffContext.to_dict() if a person was given
     to_dict = _d
 
 
@@ -283,3 +300,92 @@ class RunResult:
     sources: list[SourceRecord] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
     loops: int = 0
+
+
+# ---------------------------------------------------------------- recommender (PROACTIVE_AGENT_PLAN §10.7)
+# Field names match data/demo/templates/recommendation_card.example.json exactly. A card is per STORE;
+# a StaffContext only overrides voice / nickname for one person's version of the post (plan §2.1 demo
+# mode: no login, no auth, no session).
+@dataclass
+class CardReason:
+    text: str
+    source: Literal["poi", "sales", "promo", "release", "questions", "calendar"]
+    is_demo: bool = True            # drives the 模拟 badge
+
+
+@dataclass
+class CardHook:
+    id: str                         # scene | question | customer | myth | checklist (angles.json)
+    label: str
+
+
+@dataclass
+class CardVoice:
+    id: str                         # manager | techie | senior (angles.json)
+    label: str
+
+
+@dataclass
+class CardPromo:
+    campaign_id: str
+    name: str
+    mechanic: str
+    price_info: Optional[dict] = None   # {label, value, currency, conditions} — the ONLY allowed price source
+    source: str = "DEMO"
+
+
+@dataclass
+class CardQuestion:
+    chip_id: str
+    text: str
+    count: int
+
+
+@dataclass
+class RecommendationCard:
+    card_id: str
+    store_id: str
+    store_name: str
+    date: str                       # ISO date
+    slot: Literal["potential", "promo", "new_release", "customer_question"]
+    slot_label: str                 # 潜力款 / 活动款 / 新品款 / 顾客问答
+    model_id: Optional[str]         # writer must fetch facts for exactly this ID
+    display_name: Optional[str]
+    platform: str                   # Chinese label from the weekly rotation (朋友圈 / 小红书 / 公众号)
+    segment: str                    # student | office | family | shopper
+    segment_label: str
+    angle: str
+    calendar_theme: Optional[str] = None
+    hook: Optional[CardHook] = None
+    voice: Optional[CardVoice] = None
+    landmark: str = ""
+    nickname: str = ""
+    reasons: list[CardReason] = field(default_factory=list)
+    locked: bool = False
+    locked_reason: Optional[str] = None    # "fact_card_draft" → show 待总部确认, don't generate
+    promo: Optional[CardPromo] = None
+    question: Optional[CardQuestion] = None
+    scores: dict = field(default_factory=dict)   # fit / index / potential / share / peer_share; never in copy
+    is_default: bool = False
+    is_demo: bool = True
+    to_dict = _d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RecommendationCard":
+        d = dict(d)
+        d["reasons"] = [r if isinstance(r, CardReason) else CardReason(**r) for r in d.get("reasons") or []]
+        for key, typ in (("hook", CardHook), ("voice", CardVoice), ("promo", CardPromo), ("question", CardQuestion)):
+            v = d.get(key)
+            d[key] = typ(**v) if isinstance(v, dict) else v
+        return cls(**d)
+
+
+@dataclass
+class StaffContext:
+    """Who is posting (demo mode, no auth). Only voice / nickname may differ from the store card."""
+    staff_id: str
+    display_name: str
+    role: Literal["staff", "manager"] = "staff"
+    voice: Optional[str] = None     # voice id override; must be allowed for the card's segment
+    nickname: Optional[str] = None  # sign-off override
+    to_dict = _d
