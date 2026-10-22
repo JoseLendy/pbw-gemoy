@@ -107,6 +107,14 @@ def kb_status() -> dict:
         return dict(data)
 
 
+def _friendly_status_error(err) -> str:
+    """The status line never shows a raw backend/ima message or code."""
+    msg = str(err)
+    if "220004" in msg or "220021" in msg or "次数" in msg:
+        return "知识库今日调用额度已用完，当前使用本地缓存。"
+    return plain_error(RuntimeError(msg)).replace("生成失败：", "")
+
+
 def status_view() -> dict:
     """What the status HUD shows. Keys and Client ID never appear; 密钥 is only 已配置 / 未配置."""
     s = kb_status()
@@ -134,7 +142,7 @@ def status_view() -> dict:
         "configured": bool(s.get("configured") or os.getenv("LLM_API_KEY")),
         "dev_mode": bool(DEPS.is_dev_mode),
         "fake_fields": list(DEPS.fake_fields) if DEPS.is_dev_mode else [],
-        "error": str(err) if (err and not s.get("connected") and not checking) else "",
+        "error": _friendly_status_error(err) if (err and not s.get("connected") and not checking) else "",
         "today": demo_today(),
     }
 

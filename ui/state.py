@@ -107,6 +107,11 @@ def _card_panel(card, prepared: bool, staff: StaffContext | None = None,
             "html": '<div class="hw-card">' + "".join(parts) + "</div>"}
 
 
+def _card_panel_html(*args, **kwargs) -> str:
+    """The card panel as one HTML string (old name, kept for the tests)."""
+    return _card_panel(*args, **kwargs)["html"]
+
+
 def _chip_status(session: dict) -> str:
     store_id = session.get("store_id")
     tapped = session.get("chips", {}).get(store_id) or set()
