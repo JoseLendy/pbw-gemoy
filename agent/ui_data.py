@@ -386,12 +386,14 @@ def log_human_edit(card: RecommendationCard, platform: str, original_text: str, 
         log.warning("human edit log failed: %s", e)
 
 
-def export_zip(post: Post, store_id: str, text: Optional[str] = None, date: Optional[str] = None) -> str:
-    """「下载发布包」: write <store>-<date>-<platform>.zip to the download folder; returns its path."""
+def export_zip(post: Post, store_id: str, text: Optional[str] = None, date: Optional[str] = None,
+               fetch: Optional[Callable[[str], bytes]] = None) -> str:
+    """「下载发布包」: write <store>-<date>-<platform>.zip to the download folder; returns its path.
+    fetch overrides where image bytes come from (the store tab passes its in-process cache)."""
     from agent.export import publish_zip
     import tempfile
     from pathlib import Path
-    name, data = publish_zip(post, store_id, date or today(), getattr(DEPS, "fetch_image_bytes", None), text)
+    name, data = publish_zip(post, store_id, date or today(), fetch or getattr(DEPS, "fetch_image_bytes", None), text)
     folder = Path(tempfile.gettempdir()) / "hwpc_downloads"
     folder.mkdir(exist_ok=True)
     path = folder / name

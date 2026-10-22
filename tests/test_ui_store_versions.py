@@ -113,3 +113,36 @@ def test_mobile_view_shows_the_final_text_and_plain_images(session, monkeypatch,
     assert page.count("<img ") == len(r.post.images) and "/gradio_api/file=" in page
     store_tab.on_text_input(edited + "未检查", session)
     assert store_tab.mobile_view(session)[1] == ""              # an unchecked change is never offered
+
+
+def test_a_prepared_next_card_fallback_keeps_the_prepared_header():
+    from agent.recommend.store_data import cards_for
+    promo = next(c for c in cards_for("S10", "2026-10-23") if c.slot == "promo")
+    head = store_tab._card_panel_html(promo, True, prepared_slot="活动款", generated="生成于 10-23 08:12")
+    assert "今日已为你准备好 · 活动款 · 生成于" in head and "已预先生成" not in head
+    assert "已预先生成" in store_tab._card_panel_html(promo, True, generated="生成于 10-23 08:12")
+
+
+def test_zip_is_attached_once_images_are_cached_and_never_fetched_on_render(session, monkeypatch, tmp_path):
+    import io
+    import zipfile
+    from PIL import Image
+    from ui import components
+    monkeypatch.setattr(ui_data, "export_zip", lambda post, sid, text=None, date=None, fetch=None: (
+        tmp_path.joinpath("z.zip").write_bytes(__import__("agent.export", fromlist=["x"]).publish_zip(
+            post, sid, "2026-10-23", fetch, text)[1]) and str(tmp_path / "z.zip")))
+    key, r = _with_result(session)
+    for im in r.post.images:
+        components._IMG_CACHE.pop(im.media_id, None)
+    out = store_tab._render(session)
+    assert out[ZIP]["value"] is None and out[ZIP]["interactive"] is False      # nothing fetched on render
+    b = io.BytesIO()
+    Image.new("RGB", (10, 10), "red").save(b, "PNG")
+    import base64
+    for im in r.post.images:
+        components._IMG_CACHE[im.media_id] = "data:image/png;base64," + base64.b64encode(b.getvalue()).decode()
+    out = store_tab._render(session)
+    z = zipfile.ZipFile(out[ZIP]["value"])
+    assert z.read("文案.txt").decode("utf-8") == out[FINAL] and "1.jpg" in z.namelist()
+    for im in r.post.images:
+        components._IMG_CACHE.pop(im.media_id, None)

@@ -24,6 +24,7 @@ from ui.components import (
     LOCKED_LABEL, SLOT_LABELS, banner_html, can_act, card_locked_label, default_card_of, fallback_note,
     fresh_session, images_ready, last_real_run_html, last_real_run_notice_html, needs_review_html,
     other_cards, phone_html, placeholder_png, prefetch_images, prepared_post_html, prepared_pub_text,
+    cached_image_bytes,
     reason_badges, result_kind,
     role_notice, stop_html, store_choices, talk_card_html,
 )
@@ -76,7 +77,7 @@ def _card_panel_html(card, prepared: bool, staff: StaffContext | None = None,
         return '<div class="hw-card"><p>今日暂无推荐。</p></div>'
     if prepared and review:      # a prepared record that ended in NeedsReview is not a ready post
         head = "今日一条 · 需人工确认"
-    elif prepared and not card.is_default:
+    elif prepared and not card.is_default and not prepared_slot:     # a stored 换一条 card, not a fallback
         head = f"{SLOT_LABELS.get(card.slot, card.slot)} · 已预先生成"
     elif prepared:
         head = "今日已为你准备好" + (f" · {prepared_slot}" if prepared_slot else "")
@@ -244,10 +245,24 @@ def _extra_outputs(session: dict, card, key: str, publishable: bool, final) -> t
     progress = f'<div class="hw-banner note">{html.escape(line)}</div>' if line else ""
     status, can_export = _edit_state(session, key, publishable)
     final_text = wechat_text(final.post) if isinstance(final, RunResult) and publishable else ""
+    zip_path = _zip_for(card, final) if can_export and final_text else None
     return (progress, gr.update(value=session.get("platform") or PLATFORM_TABS[0]),
             gr.update(visible=publishable), status,
             gr.update(visible=publishable, interactive=can_export),
-            gr.update(visible=publishable, interactive=can_export), final_text)
+            gr.update(visible=publishable, interactive=bool(zip_path), value=zip_path), final_text)
+
+
+def _zip_for(card, final) -> str | None:
+    """The 发布包 attached to the button (one click downloads it; a DownloadButton fn would need a second
+    click). Built from the in-process image cache only, so a store switch never waits on image bytes; until
+    the images are cached the image timer attaches it (on_image_tick)."""
+    if not isinstance(final, RunResult) or not images_ready(final):
+        return None
+    try:
+        return ui_data.export_zip(final.post, card.store_id, wechat_text(final.post), fetch=cached_image_bytes)
+    except Exception as e:  # noqa: BLE001 - export must never break the page
+        ui_data.log.warning("export zip failed: %s", e)
+        return None
 
 
 def _render(session: dict, allow_fetch: bool = False) -> tuple:
@@ -407,15 +422,19 @@ def on_initial(session: dict):
 
 
 def on_image_tick(session: dict):
-    """Swap placeholders for prefetched prepared/recovery images without blocking a local event."""
+    """Swap placeholders for prefetched prepared/recovery images without blocking a local event, and attach
+    the 发布包 once its images are cached."""
     if not session.get("image_pending"):
-        return gr.update(), session
+        return gr.update(), gr.update(), session
     card, cid = _current_card(session)
-    live = _display_result(session.get("results", {}).get(cid)) if card is not None else None
+    live = _final(session, cid, _display_result(session.get("results", {}).get(cid))) if card is not None else None
     if not isinstance(live, RunResult) or not images_ready(live):
-        return gr.update(), session
+        return gr.update(), gr.update(), session
     session["image_pending"] = False
-    return phone_html(live, None, allow_fetch=False), session
+    ok = _can_publish(session, card) and _edit_state(session, cid, True)[1]
+    zip_path = _zip_for(card, live) if ok else None
+    return (phone_html(live, None, allow_fetch=False),
+            gr.update(value=zip_path, interactive=bool(zip_path)) if ok else gr.update(), session)
 
 
 def on_tab_select(session: dict):
@@ -570,6 +589,9 @@ def _shown_text(session: dict, key: str) -> str:
 def on_text_input(text: str, session: dict):
     """Typing in the text box: copy / export / 已发布 stay off until the change is checked."""
     card, key = _current_card(session)
+    prev = session.get("drafts", {}).get(key)
+    if card is None or text == prev or (prev is None and (text or "").strip() == _shown_text(session, key).strip()):
+        return gr.update(), gr.update(), gr.update(), session     # a render set the box: not a user change
     if card is not None:
         session.setdefault("drafts", {})[key] = text
         session.setdefault("dirty", {})[key] = (text or "").strip() != _shown_text(session, key).strip()
@@ -750,16 +772,17 @@ def build_store_tab(demo: gr.Blocks) -> dict:
         b.click(lambda s, c=chip_id: on_chip(c, s), [session], full_outs, **_LOCAL)
     platform_rb.change(on_platform, [platform_rb, session], full_outs, **_LOCAL)
     role_rb.change(on_role, [role_rb, session], full_outs, **_LOCAL)
-    pub.input(on_text_input, [pub, session], [edit_status, b_copy, b_zip, session], **_LOCAL)
+    # .change (not .input: Gradio 6 did not deliver .input from this box in the browser); on_text_input ignores
+    # the changes a render makes, so only a real edit turns copy / export off.
+    pub.change(on_text_input, [pub, session], [edit_status, b_copy, b_zip, session], **_LOCAL)
     b_check.click(on_check_save, [pub, session], full_outs, **_LOCAL)        # code checks only: < 2 s
     b_revert.click(on_revert, [session], full_outs, **_LOCAL)
-    b_zip.click(on_export_zip, [session], [b_zip], **GEN_QUEUE)
     b_copy.click(None, [final_text], None,
                  js="(t) => { navigator.clipboard && navigator.clipboard.writeText(t); return []; }")
 
     demo.load(on_initial, [session], full_outs, **_LOCAL)
     image_timer = gr.Timer(1.5)
-    image_timer.tick(on_image_tick, [session], [phone, session], **_LOCAL)
+    image_timer.tick(on_image_tick, [session], [phone, b_zip, session], **_LOCAL)
     return {"session": session, "outputs": full_outs, "on_refresh": on_tab_select, "final_text": final_text}
 
 

@@ -161,6 +161,12 @@ _IMG_INFLIGHT: set[str] = set()
 _IMG_LOCK = threading.Lock()
 
 
+def cached_image_bytes(media_id: str) -> Optional[bytes]:
+    """Bytes of an image already in the in-process cache, else None (never fetches)."""
+    uri = _IMG_CACHE.get(media_id)
+    return base64.b64decode(uri.split(",", 1)[1]) if uri else None
+
+
 def images_ready(r: RunResult) -> bool:
     """True when every post image is already in the in-process cache (or there are none)."""
     return all(im.media_id in _IMG_CACHE for im in (getattr(getattr(r, "post", None), "images", None) or []))
