@@ -78,3 +78,66 @@ def test_leak_aborts_without_writing(runs, tmp_path, monkeypatch):
     with pytest.raises(ex.LeakError):
         ex.build(DAY, runs, tmp_path / "s", allow_dev=True)
     assert not (tmp_path / "s").exists()
+
+
+# ------------------------------------------------------------------ real 2026-10-23 export: two renderer leaks
+_QUOTE = "这是一段知识库原文引用，长度足够长"
+
+
+def test_samples_carry_no_image_file_names_or_kb_paths(runs, tmp_path):
+    """Decision 2026-10-21: samples/ keeps store, reasons, the post text and check results, but no image file
+    names, no KB article paths and no verbatim quotes; the source is a generic label."""
+    written = dict(ex.build(DAY, runs, tmp_path / "s", allow_dev=True))
+    rec = json.loads((runs / DAY / "prepared" / "S01.json").read_text(encoding="utf-8"))
+    res = rec["result"]
+    titles = {it["image"].get("title") for it in (res.get("plan") or {}).get("items", []) if it["image"].get("title")}
+    paths = {f.get("source_path") for f in res["ledger"]["facts"] if f.get("source_path")}
+    for name, text in written.items():
+        assert not any(t in text for t in titles), name
+        assert not any(p in text for p in paths), name
+    s01 = written["S01-potential-moments.md"]
+    assert "来源：知识库产品参数" in s01 and "| F1 |" in s01
+
+
+def test_scan_refuses_image_names_and_kb_paths():
+    res = {"plan": {"items": [{"image": {"media_id": "m1", "title": "demobook_外观_01.jpg"}}]},
+           "ledger": {"facts": [{"id": "F1", "quote": "", "source_path": "P1-产品参数库/DemoBook/产品事实.md"}]}}
+    assert ex.scan("配图 demobook_外观_01.jpg", "", [res["ledger"]], set(), ex._kb_names([res]))
+    assert ex.scan("来源 P1-产品参数库/DemoBook/产品事实.md", "", [res["ledger"]], set(), ex._kb_names([res]))
+
+
+def test_needs_review_reason_names_the_fact_instead_of_quoting_it():
+    """Real S01 NeedsReview: the 8A reason embeds the fact value ('应同时标注 [F5]（<value>）')."""
+    ledger = {"facts": [{"id": "F5", "value": _QUOTE, "quote": _QUOTE}]}
+    reason = f"数值「1.38 kg」不属于所标编号 F14，应同时标注 [F5]（{_QUOTE}）"
+    out = ex._redact(reason, ledger)
+    assert _QUOTE not in out and "F5" in out and "1.38 kg" in out
+
+
+def test_review_record_can_be_chosen_by_file_name(runs, tmp_path):
+    recs = [{"_path": tmp_path / "a.json", "result": {"failing": []}},
+            {"_path": tmp_path / "b.json", "result": {"failing": []}}]
+    assert ex.select(recs)["review"]["_path"].name == "b.json"                 # default: latest, unchanged
+    assert ex.select(recs, review="a.json")["review"]["_path"].name == "a.json"
+
+
+def test_a_next_card_sample_shows_the_published_card_not_the_morning_one(runs):
+    """Real 2026-10-23 S04: the morning card failed, the next card (another model, another slot) was published,
+    but the sample header named the morning card's model and reasons."""
+    rec = json.loads((runs / DAY / "prepared" / "S01.json").read_text(encoding="utf-8"))
+    rec["_path"] = runs / DAY / "prepared" / "S01.json"
+    nxt = next(c for c in cards_for("S01", DAY) if c.card_id != rec["card_id"])
+    rec["result"]["task"]["card_id"], rec["result"]["task"]["model_id"] = nxt.card_id, "demobook-14-se"
+    rec["result"]["fallback"] = "next_card"
+    name, text = ex.render_post_sample(rec)
+    assert "`demobook-14-se`" in text and f"-{nxt.slot}-" in name
+    reasons = [r.text for r in nxt.reasons if r.text]
+    assert reasons and reasons[0] in text
+
+
+def test_redact_removes_a_whole_quote_whose_value_is_inside_it():
+    """Review: the value was replaced first, leaving the rest of the quote; the scan then no longer matched it."""
+    quote = "演示标签：演示取值说明一二三四五，用于测试。"
+    ledger = {"facts": [{"id": "F5", "value": "演示取值说明一二三四五", "quote": quote}]}
+    out = ex._redact(f"原因：应同时标注 [F5]（{quote}）", ledger)
+    assert "演示标签" not in out and "用于测试" not in out and "F5" in out

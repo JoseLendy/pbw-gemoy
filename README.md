@@ -31,6 +31,8 @@ python app.py                               # http://0.0.0.0:7860
 
 获取镜像：向队友拷贝知识库镜像压缩包，解压到 `kb_snapshot/kb_v7/`（或用 `KB_LOCAL_DIR` 指向解压目录）。镜像只供本机使用，不得提交、上传或转发。镜像缺失时应用不会崩溃：状态栏显示原因并进入开发模式，命令行脚本打印原因后退出。
 
+> ⚠️ 旧分支里 `kb_snapshot/` 曾被 git 跟踪。从旧分支 pull 到「取消跟踪」之后的提交时，git 会**从磁盘删除**这些文件。pull 前先备份 `kb_snapshot/`；若已被删，可用 `git restore --source=1f6f8f6 --worktree -- kb_snapshot` 从历史恢复到工作区（仍不被跟踪）。
+
 ## 项目结构
 
 ```
@@ -54,7 +56,7 @@ tests/                  # 单元测试（全部跑在 fakes 上）+ RUN_E2E=1 �
 
 - 知识库只读；仅调用 `search_knowledge_base`、`get_knowledge_list`、`search_knowledge`、`get_media_info` 四个接口。
 - 密钥与 Client ID 只存在于环境变量；界面只显示「已配置」，日志与错误信息会过滤。
-- 仓库不包含任何知识库原文、引用、价格或图片文件；测试使用合成数据（DemoBook）。
+- 仓库不包含任何知识库原文、引用、价格、文章路径或图片文件；测试使用合成数据（DemoBook）。唯一例外是 `samples/` 里由真实运行导出的发布文案（见下方「输出样例」），其中同样不含原文引用、文章路径、图片或图片文件名。
 - 公开演示有限流、按会话配额与全局每小时上限；不提供知识库原文浏览或批量导出。
 - 不输出「最 / 第一 / 唯一 / 顶级 / 全网 / 首选」等绝对化用语；不虚构价格、销量、奖项、评测、政策。
 
@@ -64,6 +66,14 @@ tests/                  # 单元测试（全部跑在 fakes 上）+ RUN_E2E=1 �
 
 ```bash
 python scripts/gen_fake_data.py            # 重新生成 data/demo/generated/（seed=42 时与仓库内文件一致）
+```
+
+## 输出样例（Samples）
+
+[`samples/README.md`](samples/README.md) 列出 2026-10-23 演示日的真实输出：5 家门店的今日一条（校园 / 写字楼 / 社区 / 商圈，同类型门店不雷同、同型号换角度）、新品锁定、「加上立减500」价格拦截、以及一条转人工确认（NeedsReview）。样例由 `scripts/export_samples.py` 从真实运行记录自动导出、未经手工编辑；只含店员可直接发布的文案、推荐理由（模拟数据已标注）与核验结果（事实编号 → 字段 → 文中取值，来源统一标为「知识库产品参数」）。导出前会扫描并拒绝密钥、知识库原文引用、媒体 ID、图片文件名与文章路径。
+
+```bash
+python scripts/export_samples.py --today 2026-10-23 [--review <NeedsReview 运行记录文件名>]
 ```
 
 ---

@@ -76,6 +76,11 @@ def reconcile(task: Task, analysis: ScenarioAnalysis, ledger: Ledger, model: Mod
     # ---- LLM: choose and order
     lo, hi = _limits(task.platform)
     facts_for_llm = [f for c in kept_cats for f in by_cat[c]]
+    # 8E batch: selling points other stores already use today are not offered, if enough others remain.
+    avoid = set(getattr(task, "avoid_facts", None) or [])
+    if avoid and len([f for f in facts_for_llm if f.id not in avoid]) >= lo:
+        facts_for_llm = [f for f in facts_for_llm if f.id not in avoid]
+        by_cat = defaultdict(list, {c: [f for f in fs if f.id not in avoid] for c, fs in by_cat.items()})
     user = (
         f"平台：{PLATFORM_LABELS.get(task.platform or '', task.platform)}；卖点数量：{lo if lo == hi else f'{lo} 到 {hi}'} 个\n"
         f"任务变体：{task.variant or '未指定'}\n"
@@ -132,7 +137,8 @@ def reconcile(task: Task, analysis: ScenarioAnalysis, ledger: Ledger, model: Mod
             seen.add(f.attribute)
             pending.append(f"待确认：{f.attribute} 知识库资料存在已知分歧，本文未使用。")
 
-    talk = [t for t in (clean_talk_line(x) for x in (data.get("talk_card") or [])) if t][:3]
+    from agent.checks.names import names_in       # 导购话术 never carries a personal name (dropped in code)
+    talk = [t for t in (clean_talk_line(x) for x in (data.get("talk_card") or [])) if t and not names_in(t)][:3]
     return Strategy(
         analysis=analysis,
         angle=str(data.get("angle") or "").strip() or analysis.content_goal,

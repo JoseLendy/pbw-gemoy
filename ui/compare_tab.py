@@ -107,6 +107,51 @@ def _similarity_html(pairs: list, names: dict[str, str]) -> str:
             + "".join(rows) + "</tbody></table>")
 
 
+def _batch_from_stored(rec: dict):
+    """The 三店对比 set prepare_demo stored: (cards, BatchResult) rebuilt for the same renderer."""
+    from agent.pipeline import BatchResult, SimilarityPair
+    from agent.schemas import RecommendationCard
+    cards = [RecommendationCard.from_dict(c) for c in rec.get("cards") or []]
+    results = {}
+    for sid, payload in (rec.get("results") or {}).items():
+        status = (rec.get("status") or {}).get(sid)
+        r = ui_data.run_result_from_payload({"status": status, "result": payload})
+        results[sid] = r if r is not None else RuntimeError("该门店的预生成结果未通过核验。")
+    pairs = [SimilarityPair(**p) for p in rec.get("similarity") or []]
+    return cards, BatchResult(results=results, similarity=pairs, regenerated=list(rec.get("regenerated") or []),
+                              wall_seconds=float(rec.get("wall_seconds") or 0))
+
+
+def on_show_stored(model_id: str, platform: str):
+    """Instant: the precomputed set for this product + platform, labelled with its generation time."""
+    rec = ui_data.stored_compare(model_id, platform) if model_id else None
+    if not rec:
+        return EMPTY_COMPARE, ""
+    cards, batch = _batch_from_stored(rec)
+    from ui.store_tab import _generated_at
+    return _compare_body(cards, batch, f"已预先生成 · {_generated_at(rec)} · 点「生成四店对比」可重新生成")
+
+
+def _compare_body(cards, batch, prefix: str = ""):
+    names = {c.store_id: c.store_name for c in cards}
+    cols = []
+    for card in cards:
+        result = batch.results.get(card.store_id)
+        if result is None:
+            result = RuntimeError("该门店没有返回结果。")
+        cols.append(_result_panel(card.store_id, card, result, card.store_id in batch.regenerated))
+    body = ('<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">'
+            + "".join(cols) + "</div>" + _similarity_html(batch.similarity, names))
+    ok = sum(1 for x in batch.results.values() if isinstance(x, RunResult))
+    failed = len(batch.results) - ok
+    summary = ((prefix + " · ") if prefix else "") + (
+        f"{ok}/{len(batch.results)} 店完成"
+        + (f"（{failed} 店失败，见下方红色面板）" if failed else "")
+        + f" · 总耗时 {batch.wall_seconds:.1f}s · 8E 重写 "
+        f"{len(batch.regenerated)} 店（{_esc('、'.join(names.get(s, s) for s in batch.regenerated)) if batch.regenerated else '无'}）")
+    return body, summary
+
+
 def on_compare(model_id: str, platform: str):
     if not model_id:
         return "<p>请选择一个在售产品。</p>", ""
@@ -125,22 +170,7 @@ def on_compare(model_id: str, platform: str):
     except Exception as e:  # noqa: BLE001 - a UI handler must never crash the page
         return f"<div class='hw-banner err'>{_esc(ui_data.plain_error(e))}</div>", ""
 
-    names = {c.store_id: c.store_name for c in cards}
-    cols = []
-    for card in cards:
-        result = batch.results.get(card.store_id)
-        if result is None:
-            result = RuntimeError("该门店没有返回结果。")
-        cols.append(_result_panel(card.store_id, card, result, card.store_id in batch.regenerated))
-    body = ('<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">'
-            + "".join(cols) + "</div>" + _similarity_html(batch.similarity, names))
-    ok = sum(1 for x in batch.results.values() if isinstance(x, RunResult))
-    failed = len(batch.results) - ok
-    summary = (f"{ok}/{len(batch.results)} 店完成"
-               + (f"（{failed} 店失败，见下方红色面板）" if failed else "")
-               + f" · 总耗时 {batch.wall_seconds:.1f}s · 8E 重写 "
-               f"{len(batch.regenerated)} 店（{_esc('、'.join(names.get(s, s) for s in batch.regenerated)) if batch.regenerated else '无'}）")
-    return body, summary
+    return _compare_body(cards, batch)
 
 
 EMPTY_COMPARE = ('<div style="padding:24px;text-align:center;color:#888;border:1px dashed '
@@ -148,11 +178,11 @@ EMPTY_COMPARE = ('<div style="padding:24px;text-align:center;color:#888;border:1
                  '手机预览与跨店相似度。</div>')
 
 
-def on_tab_select(token: int):
+def on_tab_select(token: int, model_id: str = None, platform: str = "朋友圈"):
+    """Opening the tab shows the stored set at once (prepare_demo); reset keeps it."""
     now = ui_data.reset_token()
-    if token != now:
-        return EMPTY_COMPARE, "", now
-    return gr.update(), gr.update(), token
+    body, summary = on_show_stored(model_id, platform)
+    return body, summary, now
 
 
 def build_compare_tab() -> None:
@@ -172,5 +202,8 @@ def build_compare_tab() -> None:
         token = gr.State(ui_data.reset_token())
         run.click(on_compare, [product, platform], [out, msg],
                   concurrency_limit=GEN_LIMIT, concurrency_id="generation", show_progress="minimal")
-        tab.select(on_tab_select, [token], [out, msg, token],
+        tab.select(on_tab_select, [token, product, platform], [out, msg, token],
                    concurrency_limit=None, show_progress="hidden")
+        for w in (product, platform):
+            w.change(on_show_stored, [product, platform], [out, msg], concurrency_limit=None,
+                     show_progress="hidden")

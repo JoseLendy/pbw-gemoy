@@ -112,10 +112,11 @@ def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task
     platform = post.platform or getattr(task, "platform", None) or plan.platform
 
     def facts():
-        with stage("check.8A"):
-            report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=llm)
         from agent.checks.prices import valid_price_record
-        if valid_price_record(task) is not None:
+        rec = valid_price_record(task)
+        with stage("check.8A"):
+            report = check_facts(post, ledger, sibling_ledgers or {}, variant=variant, llm=llm, price_record=rec)
+        if rec is not None:
             # An active promotion record exists: 8B's exact price-traceability check owns money claims, and
             # 8A's generic "no price facts in the KB" rule would otherwise block the one allowed price.
             report = CheckReport([i for i in report.issues if i.code != "invented_price"])
@@ -144,7 +145,9 @@ def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task
     else:
         r_facts, r_comp, r_style = facts(), compliance(), style()
     with stage("check.8C"):
+        from agent.checks.conformance import check_product_name
         r_conf = check_conformance(post, platform, plan)
+        r_conf = CheckReport(r_conf.issues + check_product_name(post, task))
     return dedupe_style_hits(r_facts.merge(r_comp).merge(r_conf).merge(r_style))
 
 

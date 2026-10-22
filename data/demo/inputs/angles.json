@@ -16,6 +16,5 @@
     {"id": "manager", "label": "亲切店长",   "allowed_segments": ["student", "office", "family", "shopper"]},
     {"id": "techie",  "label": "懂技术的店员", "allowed_segments": ["student", "office", "family", "shopper"]},
     {"id": "senior",  "label": "学长学姐风",  "allowed_segments": ["student"]}
-  ],
-  "nicknames": ["小王", "小李", "阿杰", "小陈", "小林", "阿雅", "小周", "小许"]
+  ]
 }

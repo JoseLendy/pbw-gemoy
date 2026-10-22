@@ -1,5 +1,5 @@
 {
-  "_doc": "Weekly rotation standing in for HQ's posting requirement (real quota unknown - keep configurable). Monday=0.",
+  "_doc": "weekly_minimum: HQ's posting requirement per store and week (real quota unknown - keep configurable). rotation (Monday=0) is only the historical posting pattern gen_fake_data uses for publish_log; it no longer locks the platform. The app suggests the platform most behind its weekly minimum (agent/recommend/weekly.py).",
   "rotation": ["公众号", "小红书", "朋友圈", "小红书", "朋友圈", "小红书", "朋友圈"],
   "weekly_minimum": {"朋友圈": 3, "小红书": 3, "公众号": 1}
 }

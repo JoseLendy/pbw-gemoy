@@ -455,10 +455,48 @@ def _from_dict(d: dict) -> Ledger:
                   entities=d.get("entities", []), boundaries=d.get("boundaries", []))
 
 
+# ---------------------------------------------------------------------- OS-bound features
+# The KB's two feature-statement shapes: "<feature>(功能)仅限 Windows…支持" and "Linux…版：…不支持<feature>".
+# Lines that name no feature (starting with 以上/上述, or a 搭载 line) bind nothing.
+_WIN_ONLY_RE = re.compile(r"([^，,。；;：:\s][^，,。；;：:]{0,10}?)\s*(?:功能)?仅限\s*Windows\s*版本产品支持")
+_LINUX_LACKS_RE = re.compile(r"Linux[^。；;：:]*版本?[：:][^。；;]*?不支持([^，,。；;、\s和与及]{2,8})")
+_NOT_A_FEATURE = ("以上", "上述", "该", "此")
+_GENERIC = ("部分", "所有", "全部", "其他", "其它", "一些", "任何", "相关")
+
+
+def _os_bound_terms(boundaries: list[dict]) -> list[str]:
+    terms = []
+    for b in boundaries or []:
+        text = nfkc(b.get("text", ""))
+        terms += [m.group(1).strip() for m in _WIN_ONLY_RE.finditer(text)]
+        terms += [re.sub(r"(识别|功能)$", "", m.group(1)) for m in _LINUX_LACKS_RE.finditer(text)]
+    terms = [re.sub(r"功能$", "", t).strip() for t in terms]           # "功能仅限…" alone names no feature
+    return [t for t in dict.fromkeys(terms)
+            if len(t) >= 2 and not t.startswith(_NOT_A_FEATURE) and not t.startswith(_GENERIC)]
+
+
+def bind_os_variants(ledger: Ledger) -> Ledger:
+    """A fact naming a feature the model's own boundaries call Windows-only (or missing on Linux) is bound
+    to "Windows 版", so a post cannot state it for every version (8A os_variant_unstated). A fact that
+    already names Windows or Linux is left as written. Applied to fresh and cached ledgers alike."""
+    terms = _os_bound_terms(ledger.boundaries)
+    if not terms:
+        return ledger
+    changed = False
+    for f in ledger.facts:
+        v = nfkc(f.value or "").lower()
+        if f.variant == "all" and "windows" not in v and "linux" not in v and any(t.lower() in v for t in terms):
+            f.variant = "Windows 版"
+            changed = True
+    if changed:                  # conflict groups are keyed by variant: recompute on the bound variants
+        ledger.conflicts = find_conflicts(ledger.facts)
+    return ledger
+
+
 def build_ledger(bundle: ModelBundle, llm=None, use_cache: bool = True) -> Ledger:
     cp = _cache_path(bundle, llm)
     if use_cache and cp.exists():
-        return _from_dict(json.loads(cp.read_text("utf-8")))
+        return bind_os_variants(_from_dict(json.loads(cp.read_text("utf-8"))))
 
     mid = bundle.model.model_id
     fs, cs = bundle.facts_source, bundle.claims_source
@@ -483,8 +521,8 @@ def build_ledger(bundle: ModelBundle, llm=None, use_cache: bool = True) -> Ledge
     for i, f in enumerate(facts, start=1):
         f.id = f"F{i}"
 
-    ledger = Ledger(model_id=mid, facts=facts, conflicts=find_conflicts(facts), dropped=dropped,
-                    entities=list(dict.fromkeys(e for e in entities if e)), boundaries=boundaries)
+    ledger = bind_os_variants(Ledger(model_id=mid, facts=facts, conflicts=find_conflicts(facts), dropped=dropped,
+                                     entities=list(dict.fromkeys(e for e in entities if e)), boundaries=boundaries))
     if use_cache:
         cp.parent.mkdir(parents=True, exist_ok=True)
         cp.write_text(json.dumps(asdict(ledger), ensure_ascii=False, indent=1), "utf-8")

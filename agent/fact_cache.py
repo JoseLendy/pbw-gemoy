@@ -62,6 +62,8 @@ def get_facts(deps, model_id: str, day: str):
         if entry is None and _disk_on(deps) and _path(*key).exists():
             try:
                 entry = pickle.loads(_path(*key).read_bytes())
+                from agent.ledger import bind_os_variants      # idempotent; older cache files predate it
+                entry = (entry[0], bind_os_variants(entry[1]))
                 cache[key] = entry
             except Exception as e:  # noqa: BLE001 - a bad cache file is rebuilt, never fatal
                 log.warning("fact cache file for %s unreadable (%s); rebuilding", model_id, type(e).__name__)

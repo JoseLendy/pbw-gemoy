@@ -38,7 +38,7 @@ class StoreData:
     publish: list[dict]
     questions: list[dict]
     signals: dict = field(default_factory=dict)      # store_id -> segment weights (+ poi_source)
-    profiles: dict = field(default_factory=dict)     # store_id -> landmark / voice / nickname
+    profiles: dict = field(default_factory=dict)     # store_id -> landmark / voice
     inputs_dir: Path = INPUTS
     generated_dir: Path = GENERATED
 

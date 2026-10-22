@@ -93,3 +93,49 @@ def test_rewrite_prompt_lists_exactly_the_ids_it_may_cite():
     listed = {line.split(" | ")[0] for line in section.strip().splitlines()[1:]}
     assert listed == allowed and "F5" not in listed
     assert "整句删除" in system
+
+
+def test_writer_is_shown_the_model_wide_boundaries_the_8b_judge_enforces():
+    """Real 朋友圈 runs S11 2026-10-23: the 8B judge blocked a keyboard sentence citing the model-wide ("other")
+    boundary that keyboard backlight must be bound to a SKU. The judge sees "other" lines
+    (checks.compliance.relevant_boundaries) but the writer only got the chosen facts' categories, so it was
+    never told."""
+    from agent.checks.compliance import relevant_boundaries
+    from agent.writer import _context
+    ledger = fake_ledger()
+    ledger.boundaries = [
+        {"category": "other", "text": "演示边界：键盘背光必须绑定具体版本。", "source_title": "卖点与限制.md"},
+        {"category": "display", "text": "演示边界：屏幕亮度为典型值。", "source_title": "产品事实.md"},
+    ]
+    ctx = _context(fake_task(), fake_strategy(), ledger, fake_plan())   # chosen: portability, battery, collab
+    bounds = ctx.split("## 表达边界")[1].split("##")[0]
+    assert "键盘背光必须绑定具体版本" in bounds
+    assert "屏幕亮度为典型值" not in bounds           # an unrelated category is still left out
+    assert "演示边界：键盘背光必须绑定具体版本。" in relevant_boundaries(fake_post(), ledger)
+
+
+def test_writer_prompt_keeps_angle_as_direction_only():
+    """Real 朋友圈 run S04 potential 2026-10-23: the strategy angle claimed company data is not seen at boot; the
+    writer carried it into a privacy-screen effect no fact supports, and 8B rightly flagged it."""
+    from agent.llm import load_prompt
+    w = load_prompt("writer")
+    assert "切入点只给方向" in w and "事实清单没有写的效果或结论" in w
+
+
+# ------------------------------------------------------------------ conditioned facts (2026-10-23: 超级终端 versions, HDMI qualifier)
+def test_writer_prompt_requires_stating_a_facts_condition_or_choosing_another_point():
+    from agent.llm import load_prompt
+    rules = load_prompt("writer")
+    assert "条件" in rules and "换一个卖点" in rules and "变体" in rules
+    # real 2026-10-23 S06: a KB condition was copied with an absolute word and failed 8B banned_word
+    condition_rule = next(line for line in rules.splitlines() if "换一个卖点" in line)
+    assert "写条件时同样不用" in condition_rule and "写成“以官网为准”" in condition_rule
+
+
+def test_writer_fact_line_shows_the_variant_and_qualifier():
+    import copy
+    from agent.writer import _fact_line
+    f = copy.deepcopy(fake_ledger().facts[0])
+    f.variant, f.qualifier = "Windows 版", "以官网为准"
+    line = _fact_line(f)
+    assert "变体=Windows 版" in line and "限定=以官网为准" in line

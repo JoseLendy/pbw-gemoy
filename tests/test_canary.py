@@ -7,7 +7,7 @@ import scripts.check_canary as canary
 def test_fake_canary_catches_every_planted_draft_and_passes_the_clean_ones(capsys):
     assert canary.main(["--fake"]) == 0
     out = capsys.readouterr().out
-    assert "caught 9/9 planted · false positives 0/2 clean" in out
+    assert "planted errors caught 10/10" in out and "clean drafts passed 2/2" in out
     assert "LLM_API_KEY" not in out
 
 

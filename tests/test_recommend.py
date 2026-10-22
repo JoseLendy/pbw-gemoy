@@ -197,7 +197,8 @@ def test_card_to_task_fills_the_intake_fields(data):
     assert isinstance(t, Task)
     assert t.model_id == card.model_id and t.platform == "moments" and t.scenario == "campus_daily"
     assert t.audience and t.raw_text and t.source == "card" and t.card_id == card.card_id
-    assert (t.hook, t.voice, t.landmark, t.nickname) == (card.hook.id, "senior", "紫金港校区东门对面", card.nickname)
+    assert (t.hook, t.voice, t.landmark) == (card.hook.id, "senior", "紫金港校区东门对面")
+    assert not hasattr(t, "nickname") and not hasattr(card, "nickname")       # posts carry no personal name
     assert t.angle == card.angle and t.calendar_theme == "购物节前做功课"
     assert t.promo is None and t.question is None and t.staff is None
     # the manual-flow defaults are untouched
@@ -213,14 +214,14 @@ def test_card_to_task_carries_promo_and_question(data):
     assert t.question["count"] >= 1 and t.hook == "customer" and t.angle == q.question.text
 
 
-def test_staff_context_overrides_voice_and_nickname(data):
+def test_staff_context_overrides_only_the_voice(data):
     card = default_card("S01", TODAY, data)
-    staff = StaffContext(staff_id="u1", display_name="小张", role="staff", voice="techie", nickname="小张")
+    staff = StaffContext(staff_id="u1", display_name="小张", role="staff", voice="techie")
     t = card_to_task(card, staff)
-    assert (t.voice, t.nickname) == ("techie", "小张") and t.staff["staff_id"] == "u1"
+    assert t.voice == "techie" and t.staff["staff_id"] == "u1"
     # no override → card values kept
     t2 = card_to_task(card, StaffContext(staff_id="u2", display_name="店长", role="manager"))
-    assert (t2.voice, t2.nickname) == ("senior", card.nickname)
+    assert t2.voice == "senior"
 
 
 def test_invalid_staff_voice_raises(data):
@@ -322,8 +323,8 @@ def test_run_from_card_end_to_end_on_fakes(data):
 def test_run_from_card_with_staff_override(data):
     deps = Deps.fake()
     card = _demo_card(default_card("S01", TODAY, data))
-    r = run_from_card(card, deps, staff=StaffContext("u1", "小张", voice="manager", nickname="小张"))
-    assert isinstance(r, RunResult) and r.task.voice == "manager" and r.task.nickname == "小张"
+    r = run_from_card(card, deps, staff=StaffContext("u1", "小张", voice="manager"))
+    assert isinstance(r, RunResult) and r.task.voice == "manager"
     with pytest.raises(ValueError):
         run_from_card(card, deps, staff=StaffContext("u1", "x", voice="no_such_voice"))
 

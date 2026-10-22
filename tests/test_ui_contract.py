@@ -45,7 +45,7 @@ FIELDS = {
     "agent.pipeline.PreparedDay": ["date", "batch", "paths", "locked", "errors"],
     "agent.schemas.RecommendationCard": ["card_id", "store_id", "store_name", "date", "slot", "slot_label", "model_id",
                                          "display_name", "platform", "segment_label", "angle", "hook", "voice",
-                                         "landmark", "nickname", "reasons", "locked", "locked_reason", "promo",
+                                         "landmark", "reasons", "locked", "locked_reason", "promo",
                                          "question", "is_default"],
     "agent.schemas.CardReason": ["text", "source", "is_demo"],
 }

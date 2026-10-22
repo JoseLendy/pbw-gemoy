@@ -10,7 +10,7 @@ and data/demo/generated/ and never calls ima, the LLM or the network.
     scoring.py    fit + every threshold (single source of truth)
     explain.py    "为什么推这条" reason lines (templates, never the LLM)
     slots.py      the four daily slots + default card + hook/angle/voice assignment
-    profiles.py   store voice profile (auto landmark / voice / nickname + store overrides)
+    profiles.py   store voice profile (auto landmark / voice + store overrides)
     store_data.py loads everything and computes cards live: cards_for(store_id, date)
     to_task.py    RecommendationCard (+ optional StaffContext) → Task for the existing pipeline
 """

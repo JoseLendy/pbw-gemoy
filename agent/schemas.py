@@ -82,13 +82,15 @@ class Task:
     hook: Optional[str] = None              # hook id from angles.json
     voice: Optional[str] = None             # voice id from angles.json (staff override already applied)
     landmark: Optional[str] = None
-    nickname: Optional[str] = None
     angle: Optional[str] = None
     calendar_theme: Optional[str] = None
     promo: Optional[dict] = None            # CardPromo.to_dict(): the ONLY allowed price source
     question: Optional[dict] = None         # CardQuestion.to_dict(): the only allowed customer-question source
     staff: Optional[dict] = None            # StaffContext.to_dict() if a person was given
     card_date: Optional[str] = None         # ISO date of the card: an active-campaign check needs it
+    # -- 8E batch variety (generate_batch only): what other stores already use today. Empty otherwise.
+    avoid_facts: list[str] = field(default_factory=list)     # fact ids: reconcile picks another point
+    avoid_phrases: list[str] = field(default_factory=list)   # wording: the writer says it differently
     to_dict = _d
 
 
@@ -340,7 +342,7 @@ class NeedsReview:
 
 # ---------------------------------------------------------------- recommender (PROACTIVE_AGENT_PLAN §10.7)
 # Field names match data/demo/templates/recommendation_card.example.json exactly. A card is per STORE;
-# a StaffContext only overrides voice / nickname for one person's version of the post (plan §2.1 demo
+# a StaffContext only overrides the voice for one person's version of the post (plan §2.1 demo
 # mode: no login, no auth, no session).
 @dataclass
 class CardReason:
@@ -398,7 +400,6 @@ class RecommendationCard:
     hook: Optional[CardHook] = None
     voice: Optional[CardVoice] = None
     landmark: str = ""
-    nickname: str = ""
     reasons: list[CardReason] = field(default_factory=list)
     locked: bool = False
     locked_reason: Optional[str] = None    # "fact_card_draft" → show 待总部确认, don't generate
@@ -411,7 +412,7 @@ class RecommendationCard:
 
     @classmethod
     def from_dict(cls, d: dict) -> "RecommendationCard":
-        d = dict(d)
+        d = {k: v for k, v in dict(d).items() if k in cls.__dataclass_fields__}   # old records: e.g. nickname
         d["reasons"] = [r if isinstance(r, CardReason) else CardReason(**r) for r in d.get("reasons") or []]
         for key, typ in (("hook", CardHook), ("voice", CardVoice), ("promo", CardPromo), ("question", CardQuestion)):
             v = d.get(key)
@@ -449,10 +450,10 @@ class BaselineResult:
 
 @dataclass
 class StaffContext:
-    """Who is posting (demo mode, no auth). Only voice / nickname may differ from the store card."""
+    """Who is posting (demo mode, no auth). Only the voice may differ from the store card; a post never
+    carries a personal name (no sign-off), so it works for whoever posts it."""
     staff_id: str
     display_name: str
     role: Literal["staff", "manager"] = "staff"
     voice: Optional[str] = None     # voice id override; must be allowed for the card's segment
-    nickname: Optional[str] = None  # sign-off override
     to_dict = _d

@@ -165,4 +165,7 @@ html, body, gradio-app, .gradio-container {
 .hw-talk { box-shadow: 0 2px 8px rgba(15, 23, 42, .05); }
 .hw-banner { box-shadow: 0 1px 4px rgba(15, 23, 42, .05); }
 .hw-banner.note, .hw-banner.warn { border-width: 1px; }
+
+/* store tab: the copy source for 「复制文案」 is in the DOM but never shown */
+.hw-hidden { display: none !important; }
 """

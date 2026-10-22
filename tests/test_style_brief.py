@@ -75,17 +75,16 @@ def test_card_prompt_contains_the_brief_and_manual_does_not():
     assert "门店推荐卡要求" not in _ctx(fake_task(platform=task.platform))
 
 
-def test_staff_voice_and_nickname_override_the_card():
+def test_staff_voice_overrides_the_card_and_no_name_reaches_the_brief():
     from agent.schemas import StaffContext
 
     card = _card("S01")
     base = card_to_task(card)
-    staff = StaffContext(staff_id="u1", display_name="小李", voice="techie", nickname="小张")
+    staff = StaffContext(staff_id="u1", display_name="小李", voice="techie")
     over = card_to_task(card, staff)
-    assert over.voice == "techie" and over.nickname == "小张"
-    assert base.voice == "senior"
+    assert over.voice == "techie" and base.voice == "senior"
     block = brief(over)
-    assert "懂技术的店员" in block and "小李" in block
+    assert "懂技术的店员" in block and "小李" not in block
 
 
 # ------------------------------------------------------------------ customer hook
@@ -109,14 +108,14 @@ def test_customer_hook_without_a_logged_question_refuses_and_bans_inventing():
     assert "不得虚构顾客提问" in block
 
 
-# ------------------------------------------------------------------ nickname / platform
-def test_nickname_sign_off_only_on_moments():
-    card = _card("S01")
-    task = card_to_task(card)
-    task.platform = "moments"
-    assert "署名" in brief(task) and task.nickname in brief(task)
-    task.platform = "xiaohongshu"
-    assert "署名" in brief(task) and f"「{task.nickname}」署名" not in brief(task)
+# ------------------------------------------------------------------ no sign-off on any platform
+def test_no_sign_off_on_any_platform():
+    task = card_to_task(_card("S01"))
+    for platform in ("moments", "xiaohongshu", "wechat_article"):
+        task.platform = platform
+        b = brief(task)
+        assert "不出现任何人名" in b and "私信我" in b
+        assert not any(n in b for n in ("小王", "小李", "阿杰", "小陈", "小林", "阿雅", "小周", "小许"))
 
 
 # ------------------------------------------------------------------ calendar / sales / price
@@ -224,7 +223,7 @@ def test_brief_requires_the_landmark_once_and_exact_qualifiers():
     from pathlib import Path
     writer_md = (Path(__file__).resolve().parents[1] / "prompts" / "writer.md").read_text(encoding="utf-8")
     assert f"正文里要自然带一次门店位置：{task.landmark}" in block
-    assert "限定词照抄原文" in writer_md and "邀请语、署名和行动引导里不放任何产品说法" in writer_md
+    assert "限定词照抄原文" in writer_md and "邀请语和行动引导里不放任何产品说法" in writer_md and "不写任何人名" in writer_md
 
 
 def test_brief_phrases_usage_as_the_readers_scenario_not_the_writers_experience():

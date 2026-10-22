@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Optional
@@ -26,7 +27,8 @@ REHEARSAL_DIR = RUNS_DIR / "_rehearsal"
 PREPARED = "prepared"
 
 __all__ = ["RUNS_DIR", "REHEARSAL_DIR", "log_run", "log_batch", "latest_run",
-           "log_prepared", "prepared_post", "clear_prepared"]
+           "log_prepared", "prepared_post", "clear_prepared", "log_human_edit", "log_version", "stored_version", "log_stored",
+           "stored"]
 
 
 def _payload(result: Any) -> Any:
@@ -96,6 +98,22 @@ def log_batch(cards, batch, runs_dir: Path | None = None) -> Path:
     return path
 
 
+def log_human_edit(card, platform: str, original_text: str, edited_text: str, checks: list | None = None,
+                   runs_dir: Path | None = None) -> Path:
+    """A staff member edited the publishable text by hand and it passed 「检查并保存」: keep both texts."""
+    out_dir = Path(runs_dir) if runs_dir else RUNS_DIR
+    now = dt.datetime.now(dt.timezone.utc)
+    folder = out_dir / str(getattr(card, "date", None) or now.date().isoformat())
+    folder.mkdir(parents=True, exist_ok=True)
+    payload = {"kind": "human_edit", "card_id": card.card_id, "store_id": card.store_id,
+               "store_name": card.store_name, "model": card.model_id, "platform": platform,
+               "timestamp": now.isoformat(timespec="seconds"), "edited_by_human": True,
+               "original_text": original_text, "edited_text": edited_text, "checks": checks or []}
+    path = folder / f"{now.strftime('%Y%m%dT%H%M%S%fZ')}-{card.store_id}-{card.slot}-human_edit.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
 def latest_run(card_id: str, runs_dir: Path | None = None) -> Optional[dict]:
     """Newest logged record for a card id, or None. Reads JSON; never touches the network."""
     root = Path(runs_dir) if runs_dir else RUNS_DIR
@@ -120,11 +138,7 @@ def _prepared_dir(day, runs_dir: Path | None) -> Path:
     return (Path(runs_dir) if runs_dir else RUNS_DIR) / str(day) / PREPARED
 
 
-def log_prepared(card, result, *, seconds: float | None = None, similarity: list | None = None,
-                 regenerated: bool = False, dev_mode: bool = False, runs_dir: Path | None = None) -> Path:
-    """Write (overwrite) the prepared post for the card's store and date."""
-    folder = _prepared_dir(card.date, runs_dir)
-    folder.mkdir(parents=True, exist_ok=True)
+def _prepared_payload(card, result, seconds, similarity, regenerated, dev_mode) -> dict:
     report = getattr(result, "report", None)
     payload = {
         "kind": "prepared",
@@ -146,9 +160,69 @@ def log_prepared(card, result, *, seconds: float | None = None, similarity: list
         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "result": _payload(result) if not isinstance(result, Exception) else {"error": repr(result)},
     }
+    return payload
+
+
+def log_prepared(card, result, *, seconds: float | None = None, similarity: list | None = None,
+                 regenerated: bool = False, dev_mode: bool = False, runs_dir: Path | None = None) -> Path:
+    """Write (overwrite) the prepared post for the card's store and date (the 朋友圈 version of the default
+    card; every other version goes through log_version)."""
+    folder = _prepared_dir(card.date, runs_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    payload = _prepared_payload(card, result, seconds, similarity, regenerated, dev_mode)
     path = folder / f"{card.store_id}.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
     return path
+
+
+# ---------------------------------------------------------------- stored versions + demo sets (precompute)
+# runs/<date>/prepared/versions/<card_id>__<platform>.json   one card on one platform (any slot)
+# runs/<date>/prepared/compare/<model_id>__<platform>.json   三店对比 set (results + similarity pairs)
+# runs/<date>/prepared/baseline/<card_id>.json              对照组 pair (baseline + ours)
+# Written by prepare_today / prepare_demo; read by the UI before it generates anything. Never deleted by
+# reset_demo_state; clear_prepared(date) removes them with the rest of the date's prepared posts.
+def _platform_key(platform: str) -> str:
+    from agent.recommend.to_task import platform_key
+    return platform_key(platform)
+
+
+def _stored_path(day, kind: str, key: str, runs_dir: Path | None) -> Path:
+    return _prepared_dir(day, runs_dir) / kind / f"{re.sub(r'[^0-9A-Za-z_.-]+', '_', key)}.json"
+
+
+def log_stored(day, kind: str, key: str, payload: dict, runs_dir: Path | None = None) -> Path:
+    path = _stored_path(day, kind, key, runs_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {**payload, "kind": kind if kind != "versions" else "version",
+               "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def stored(day, kind: str, key: str, runs_dir: Path | None = None) -> Optional[dict]:
+    path = _stored_path(day, kind, key, runs_dir)
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    except (OSError, ValueError):
+        return None
+
+
+def log_version(card, result, *, seconds: float | None = None, similarity: list | None = None,
+                regenerated: bool = False, dev_mode: bool = False, runs_dir: Path | None = None) -> Path:
+    """One card on one platform (card.platform), stored like a prepared post."""
+    payload = _prepared_payload(card, result, seconds, similarity, regenerated, dev_mode)
+    payload["platform"] = card.platform
+    return log_stored(card.date, "versions", f"{card.card_id}__{_platform_key(card.platform)}", payload, runs_dir)
+
+
+def stored_version(card, platform: str | None = None, runs_dir: Path | None = None) -> Optional[dict]:
+    """The stored version of this card on `platform` (default: card.platform), or None. A record made for
+    another model under the same card id (e.g. the card changed after HQ verified a release) is ignored."""
+    platform = platform or card.platform
+    data = stored(card.date, "versions", f"{card.card_id}__{_platform_key(platform)}", runs_dir)
+    if data is None or data.get("model") != card.model_id or data.get("card_id") != card.card_id:
+        return None
+    return data
 
 
 def prepared_post(store_id: str, date, card_id: str | None = None, model_id: str | None = None,
@@ -183,6 +257,6 @@ def clear_prepared(date, runs_dir: Path | None = None) -> int:
     folder = _prepared_dir(date, runs_dir)
     if not folder.exists():
         return 0
-    n = len(list(folder.glob("*.json")))
+    n = len(list(folder.rglob("*.json")))
     shutil.rmtree(folder)
     return n

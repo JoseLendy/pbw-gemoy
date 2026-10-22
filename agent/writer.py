@@ -33,7 +33,8 @@ def _platform_rules(platform: str) -> str:
 
 
 def _fact_line(f) -> str:
-    return f"{f.id} | {f.attribute} | {f.value} | 变体={f.variant} | 来源={f.source_title}"
+    qual = f" | 限定={f.qualifier}" if getattr(f, "qualifier", "") else ""
+    return f"{f.id} | {f.attribute} | {f.value} | 变体={f.variant}{qual} | 来源={f.source_title}"
 
 
 def _usable(ledger: Ledger, strategy: Strategy) -> tuple[list, list]:
@@ -46,8 +47,12 @@ def _usable(ledger: Ledger, strategy: Strategy) -> tuple[list, list]:
 
 
 def _boundaries(ledger: Ledger, chosen: list) -> list[str]:
+    """Boundary lines for the chosen facts, plus the uncategorised and "other" (model-wide) lines: the same
+    selection the 8B judge enforces (checks.compliance.relevant_boundaries), so the writer is never held to a
+    model-wide line (e.g. a "bind to the sold SKU" rule) it was not shown."""
     cats = {f.category for f in chosen}
-    return [b["text"] for b in ledger.boundaries if b.get("category") in cats or not b.get("category")]
+    return [b["text"] for b in ledger.boundaries
+            if b.get("category") in cats or not b.get("category") or b.get("category") == "other"]
 
 
 def _plan_lines(plan: ImagePlan) -> str:
@@ -65,12 +70,33 @@ def brief_block(task: Task) -> str:
         return ""
 
 
+def product_names(task: Task) -> list[str]:
+    """[full display name, unambiguous short forms...] for the task's model (8C product_unnamed accepts these)."""
+    try:
+        from agent.checks.conformance import accepted_product_names
+        names = accepted_product_names(task.model_id, task.product_query if task.source == "card" else None)
+    except Exception:  # noqa: BLE001 - P3 module missing: fall back to what the task carries
+        names = []
+    return names or [n for n in (task.product_query,) if n]
+
+
+def _name_line(task: Task) -> str:
+    names = product_names(task)
+    if not names:
+        return ""
+    short = "、".join(f"「{n}」" for n in names[1:4])
+    return (f"产品名称：「{names[0]}」。文案里至少完整写出一次这个名称"
+            + (f"（或无歧义的官方简称：{short}）" if short else "")
+            + "；不能只用“这台”“这款”指代，也不要写成会对应多个型号的简称（如只写系列名加尺寸）。\n")
+
+
 def _context(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan) -> str:
     chosen, others = _usable(ledger, strategy)
     lo, hi = PLATFORM_IMAGE_RANGE.get(task.platform or "", (0, 0))
     parts = [
         f"## 任务\n型号={task.model_id}；人群={strategy.analysis.audience}；场景={task.scenario}；"
         f"平台={PLATFORM_LABELS.get(task.platform or '', task.platform)}；变体={task.variant or '未指定'}\n"
+        + _name_line(task) +
         f"额外要求（若涉及价格、补贴、销量、奖项、评价、测试结果、政策承诺，一律不写）：{task.extra_requirements or '无'}",
     ]
     # Proactive flow only: the card's hook / voice / landmark / angle / promo become explicit instructions.
@@ -228,5 +254,9 @@ def rewrite(post: Post, issues: list[CheckIssue], task: Task, strategy: Strategy
                tags=f.get("tags", post.tags) or post.tags, selling_points=list(post.selling_points),
                images=f.get("images", post.images))
     used = _used_ids(new)
-    new.selling_points = [i for i in dict.fromkeys(post.selling_points + used) if i in allowed and ledger.get(i)]
+    # An id whose tag this rewrite removed is no longer a selling point (otherwise it lingers, e.g. as a
+    # second 朋友圈 point no sentence cites). Ids declared without ever being tagged are kept as before.
+    removed = set(_used_ids(post)) - set(used)
+    new.selling_points = [i for i in dict.fromkeys(post.selling_points + used)
+                          if i in allowed and ledger.get(i) and i not in removed]
     return new

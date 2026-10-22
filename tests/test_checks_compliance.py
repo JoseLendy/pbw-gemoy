@@ -225,13 +225,12 @@ def _8b_prompt(task):
 
 
 def test_8b_judge_is_told_the_cards_store_context():
-    """Real 朋友圈 eval S09: the brief told the writer to name the store's landmark and sign as the staff
-    member; the 8B judge, never shown that context, called '我店在良渚文化村附近…' an invented personal
+    """Real 朋友圈 eval S09: the brief told the writer to name the store's landmark; the 8B judge, never shown that context, called '我店在良渚文化村附近…' an invented personal
     experience. The judge must see the store data the card supplied."""
     task = _card_task()
-    assert task.landmark and task.nickname
+    assert task.landmark
     system, user = _8b_prompt(task)
-    assert "<store>" in user and task.landmark in user.split("<store>")[1] and task.nickname in user
+    assert "<store>" in user and task.landmark in user.split("<store>")[1] and "署名" not in user
     assert "不算编造" in system and "顾客" in system          # still: no invented customer experience
 
 
@@ -256,3 +255,177 @@ def test_8b_judge_is_told_the_cards_logged_customer_question():
 def test_no_logged_question_means_none_is_shown_to_the_judge():
     _, user = _8b_prompt(_card_task())            # S09 promo card: no logged question
     assert "顾客问题" not in user.split("<store>")[1].split("</store>")[0]
+
+
+# ------------------------------------------------------------------ canary: price record shown to the judges (false-positive proof)
+def _judge_prompts(task, sentence):
+    """The 8A and 8B judge prompts run_all builds for one post (fake ledger, spy LLM)."""
+    from agent.checks import run_all
+    from tests.fakes import fake_plan
+    seen = {}
+
+    class Spy:
+        def chat_json(self, system, user, stage="", **kw):
+            seen[stage] = (system, user)
+            return {"issues": []}
+    p = fake_post("moments")
+    p.body = [sentence]
+    run_all(p, fake_ledger(), SIB, task, fake_plan(), llm=Spy())
+    return seen
+
+
+def _s02_promo_task():
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    return card_to_task(next(c for c in cards_for("S02", "2026-10-23") if c.slot == "promo"))
+
+
+def test_8a_and_8b_judges_are_shown_the_active_price_record():
+    """Real canary clean draft 3: '演示活动价 4999 元 [演示活动]，活动期内有效，以门店实际为准。' matches the active
+    HQ record exactly (8B's code-level price check passes it), yet the 8A judge called it uncited_claim and the
+    8B judge false_promise: neither prompt contained the record."""
+    from agent.checks.prices import valid_price_record
+    task = _s02_promo_task()
+    rec = valid_price_record(task)
+    assert rec is not None
+    seen = _judge_prompts(task, f"{rec['label']} {rec['value']} 元 [演示活动]，{rec['conditions']}。")
+    for stage in ("8A", "8B"):
+        promo = seen[stage][1].split("<promo>")[1].split("</promo>")[0]
+        assert rec["value"] in promo and rec["conditions"] in promo and rec["label"] in promo
+
+
+def test_no_price_record_means_no_promo_block_for_either_judge():
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    task = card_to_task(next(c for c in cards_for("S01", "2026-10-23") if c.slot == "potential"))
+    seen = _judge_prompts(task, "演示活动价 4999 元。")
+    assert all("<promo>" not in seen[s][1] for s in ("8A", "8B"))
+    seen = _judge_prompts(fake_task("moments"), "演示活动价 4999 元。")
+    assert all("<promo>" not in seen[s][1] for s in ("8A", "8B"))
+
+
+def test_a_wrong_price_on_a_promo_card_is_still_blocked_in_code():
+    """Showing the record to the judges must not loosen the code-level price rule."""
+    from agent.checks.prices import check_prices
+    p = fake_post("moments")
+    p.body = ["演示活动价 3999 元，活动期内有效，以门店实际为准。"]
+    assert "price_mismatch" in {i.code for i in check_prices(p, _s02_promo_task())}
+
+
+# ------------------------------------------------------------------ 2026-10-23: card brief shown to the 8B judge (false-positive proof)
+def _scene_card_task():
+    """A card whose writer brief asks for a scene opening in the store manager's voice."""
+    from agent.recommend.store_data import cards_for
+    from agent.recommend.to_task import card_to_task
+    for store in ("S04", "S06", "S01", "S02", "S03", "S05", "S07", "S08", "S09", "S10", "S11", "S12"):
+        for c in cards_for(store, "2026-10-23"):
+            t = card_to_task(c)
+            if t.hook == "scene" and t.voice == "manager":
+                return t
+    raise AssertionError("no scene/manager card on 2026-10-23")
+
+
+def test_8b_judge_is_told_the_cards_opening_and_voice():
+    """Real 朋友圈 run S04 promo 2026-10-23: the brief told the writer to open with a concrete scene (time, place,
+    what the reader is doing) written as the READER's scene, and to say when a parameter matters. The draft did
+    exactly that (a second-person meeting/travel scene, then where the battery figure matters); the 8B judge,
+    never shown the brief, called it an invented personal experience."""
+    from agent.style.profile import HOOK_OPENING, VOICE_TONE
+    task = _scene_card_task()
+    system, user = _8b_prompt(task)
+    brief = user.split("<brief>")[1].split("</brief>")[0]
+    assert HOOK_OPENING["scene"] in brief and VOICE_TONE["manager"] in brief
+    assert "<brief>" in system and "不算编造经历" in system
+
+
+def test_brief_note_keeps_invented_experience_and_promises_in_scope():
+    """Guard: the note only covers reader-side scenes; author / staff / other-customer experience and outcomes
+    or service promises not in the facts stay problems, and every original category is still asked for."""
+    system, _ = _8b_prompt(_scene_card_task())
+    for must in ("虚假承诺", "无依据的比较", "误导性价格", "贬低其他品牌", "编造个人使用经历", "表达边界",
+                 "作者、店员或其他顾客的亲身经历", "体验结果", "服务承诺", "仍然是问题"):
+        assert must in system, must
+
+
+def test_manual_flow_8b_prompt_has_no_brief_block():
+    system, user = _8b_prompt(fake_task("moments"))
+    assert "<brief>" not in user and "<brief>" not in system
+
+
+def test_judge_flag_on_a_card_run_is_still_an_error():
+    """Guard: a first-person invented experience the judge flags on a card run still blocks (no filtering)."""
+    task = _scene_card_task()
+    p = fake_post("moments")
+    p.body = ["我自己背着它跑了一周会议室，电量一整天都够用 [F6]。"]
+    llm = FakeLLM({"8B": {"issues": [{"field": "body[0]", "quote": p.body[0], "code": "false_promise",
+                                      "message": "编造店员亲身使用经历，并承诺续航结果"}]}})
+    r = check_compliance(p, fake_ledger(), task, llm=llm)
+    assert "false_promise" in codes(r, "error")
+
+
+# ------------------------------------------------------------------ 2026-10-23: '客户资料' is not a customer quote
+def test_customer_data_noun_is_not_a_customer_quote():
+    """Real 朋友圈 run S04 potential 2026-10-23: a sentence saying the reader's work files and 客户资料 are on the
+    laptop was blocked as invented_customer_quote because 客户 … 都在 matched."""
+    task = _card_task()                     # card run, no logged question
+    assert not task.question
+    p = fake_post("moments")
+    p.body = ["工作文件、客户资料都在电脑里，开机这一步值得先看。"]
+    assert "invented_customer_quote" not in codes(check_compliance(p, fake_ledger(), task))
+
+
+@pytest.mark.parametrize("text", ["很多客户都在问续航", "客户说这台很轻", "顾客反馈键盘好用", "客户资料之外，客户都在问重量",
+                                  "客户信息里大家都在问续航", "客户名单上的老客都说这台轻", "顾客数据显示都推荐这台"])
+def test_real_customer_references_are_still_blocked(text):
+    task = _card_task()
+    p = fake_post("moments")
+    p.body = [text]
+    assert "invented_customer_quote" in codes(check_compliance(p, fake_ledger(), task), "error"), text
+
+
+# ------------------------------------------------------------------ a qualifier the KB says must not be dropped
+def _ledger_with_keep_rule():
+    import copy
+    led = copy.deepcopy(fake_ledger())
+    led.boundaries = list(led.boundaries or []) + [
+        {"category": "ports", "text": "DemoPort 标注为 DemoPort 9 XYZ，不应省略 XYZ 限定。", "source_title": "卖点与限制.md"}]
+    return led
+
+
+def test_hdmi_without_the_required_qualifier_fails_in_code():
+    """Real 2026-10-23 S10 (after the writer rule): a port was named without the qualifier the KB says must never be
+    dropped; the LLM judge let it through, so the KB's explicit rule is checked in code."""
+    p = fake_post("moments")
+    p.body = ["接口保留了 DemoPort 和两个 USB-A [F1]。"]
+    issues = check_compliance(p, _ledger_with_keep_rule(), fake_task("moments")).issues
+    assert any(i.code == "qualifier_omitted" and i.severity == "error" for i in issues)
+
+
+def test_hdmi_with_its_qualifier_or_not_mentioned_passes():
+    for body in ("接口有 DemoPort 9 XYZ [F1]。", "接口有两个 USB-A [F1]。"):
+        p = fake_post("moments")
+        p.body = [body]
+        assert not [i for i in check_compliance(p, _ledger_with_keep_rule(), fake_task("moments")).issues
+                    if i.code == "qualifier_omitted"]
+
+
+def test_keep_qualifier_rule_ignores_kb_captions_and_tags():
+    """Review: a KB image caption is copied verbatim and a tag is not a claim; neither can be rewritten."""
+    p = fake_post("moments")
+    p.body = ["接口有两个 USB-A [F1]。"]
+    p.tags = ["DemoPort"]
+    if p.images:
+        p.images[0].caption = "DemoPort 接口特写"
+    assert not [i for i in check_compliance(p, _ledger_with_keep_rule(), fake_task("moments")).issues
+                if i.code == "qualifier_omitted"]
+
+
+@pytest.mark.parametrize("rule", ["左侧 DemoPort 9 标注为 DemoPort 9 XYZ，不应省略 XYZ 限定。",
+                                  "演示屏幕亮度标注为 500 尼特典型值，不应省略典型值限定。"])
+def test_keep_qualifier_rule_never_fires_on_a_misparsed_term(rule):
+    import copy
+    led = copy.deepcopy(fake_ledger())
+    led.boundaries = [{"category": "ports", "text": rule, "source_title": "卖点与限制.md"}]
+    p = fake_post("moments")
+    p.body = ["版本 9 和 2.1 都有，屏幕亮度也不错 [F1]。"]
+    assert not [i for i in check_compliance(p, led, fake_task("moments")).issues if i.code == "qualifier_omitted"]

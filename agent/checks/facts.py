@@ -10,6 +10,7 @@ Issue codes (stage "8A"):
   unknown_fact_id      [F#] tag or selling_points id not in the target ledger                       error
   untagged_claim       sentence with a number / unit / spec count / ledger entity but no [F#]       error
   tag_mismatch         a number in a tagged sentence belongs to another fact than the one tagged    error
+  os_variant_unstated  a cited fact bound to Windows / Linux, stated without naming that system      error
   excluded_fact        [F#] points at a fact the conflict gate excluded                             error
   variant_mismatch     number belongs to another SKU variant than the one requested                 error
   variant_unspecified  no variant requested, number belongs to one specific variant                 warn
@@ -88,11 +89,36 @@ def mask_whitelisted(clean_text: str) -> str:
 
 
 # ------------------------------------------------------------------ fact value sets
+# "1.38/1.36 kg": the unit parser reads only the number in front of the unit; the one before "/" shares it.
+# Only a like-for-like pair: the first number stands alone (not "PD 3.0/", "Wi-Fi 6/", "Gen 2/"), both have the
+# same decimals, and they are within 1.5x of each other (not a fraction like "1/2 英寸").
+_SLASH_PAIR_RE = re.compile(r"(?<![A-Za-z0-9.\-])(?<![A-Za-z0-9.\-]\s)(\d+(?:\.\d+)?)\s*/\s*(\d+(?:\.\d+)?)"
+                            r"(\s*[A-Za-z%]+|\s*[^\x00-\x7f\s\d/，。；、]{1,2})")
+
+
+def _decimals(n: str) -> int:
+    return len(n.split(".")[1]) if "." in n else 0
+
+
+def _slash_pair_values(text: str) -> list[tuple[float, str]]:
+    out: list[tuple[float, str]] = []
+    for m in _SLASH_PAIR_RE.finditer(units.nfkc(text or "")):
+        a, b, unit = m.group(1), m.group(2), m.group(3)
+        fa, fb = float(a), float(b)
+        if _decimals(a) != _decimals(b) or not fa or not fb or max(fa, fb) / min(fa, fb) > 1.5:
+            continue
+        if units.find_all(b + unit):                 # only when the second number really carries a unit
+            out += [(v, u) for _, v, u in units.find_all(a + unit)]
+    return out
+
+
 def fact_values(fact: Fact) -> list[tuple[float, str]]:
-    """(norm_value, norm_unit) pairs a fact can support; multi-valued facts (16 GB / 32 GB) yield several."""
+    """(norm_value, norm_unit) pairs a fact can support; multi-valued facts (16 GB / 32 GB, 1.38/1.36 kg)
+    yield several."""
     if fact.norm_value is not None and fact.norm_unit:
         return [(fact.norm_value, fact.norm_unit)]
-    return [(v, u) for _, v, u in units.find_all(fact.value or "")]
+    vals = [(v, u) for _, v, u in units.find_all(fact.value or "")]
+    return vals + [p for p in _slash_pair_values(fact.value) if p not in vals]
 
 
 def _variant_ok(fact: Fact, variant: str | None) -> bool:
@@ -270,8 +296,32 @@ def _sounds_factual(sentence: str, ledger: Ledger) -> bool:
     return any(_norm(e) and _norm(e) in n for e in ledger.entities)
 
 
-def _sentence_pieces(text: str) -> list[str]:
-    return [m.group(0) for m in _SENT_PIECE_RE.finditer(units.nfkc(text or "")) if m.group(0).strip()]
+_KEEP = "\x00"     # stands in for a "；" that is part of a quoted fact value, so no splitter cuts there
+
+
+def _protect_quoted_semicolons(text: str, ledger: Ledger) -> str:
+    """A fact value that itself contains "；" (a KB 可用结论 of the form "适合…；…是前提"), quoted
+    verbatim and followed by its OWN [F#] tag, is one tagged claim: its inner "；" become _KEEP. Nothing else
+    changes: text before the quote, or a quote tagged with another fact, still splits at "；" as before."""
+    for f in ledger.facts:
+        for value in dict.fromkeys((f.value or "", units.nfkc(f.value or ""))):
+            value = value.strip().rstrip("。！？!?；;")
+            if not re.search(r"[；;]", value):
+                continue
+            rx = re.compile(re.escape(value) + r"(?=(?:\s*\[F\d+\])*\s*\[" + re.escape(f.id) + r"\])")
+            text = rx.sub(lambda m: re.sub(r"[；;]", _KEEP, m.group(0)), text)
+    return text
+
+
+def _restore(s: str) -> str:
+    return s.replace(_KEEP, "；")
+
+
+def _sentence_pieces(text: str, ledger: Ledger | None = None) -> list[str]:
+    t = units.nfkc(text or "")
+    if ledger is not None:
+        t = _protect_quoted_semicolons(t, ledger)
+    return [_restore(m.group(0)) for m in _SENT_PIECE_RE.finditer(t) if m.group(0).strip()]
 
 
 def _check_tags(post: Post, ledger: Ledger, variant: str | None) -> list[CheckIssue]:
@@ -280,7 +330,7 @@ def _check_tags(post: Post, ledger: Ledger, variant: str | None) -> list[CheckIs
     for field, raw in _fields(post):
         if field.startswith("images["):      # captions come from the KB verbatim; the plan check owns them
             continue
-        for piece in _sentence_pieces(raw):
+        for piece in _sentence_pieces(raw, ledger):
             tags = FACT_TAG_RE.findall(piece)
             clean = FACT_TAG_RE.sub("", piece).strip()
             if not clean:
@@ -296,6 +346,16 @@ def _check_tags(post: Post, ledger: Ledger, variant: str | None) -> list[CheckIs
                                      f"这句像产品参数或功能说法，但没有标注事实编号：「{clean}」。"
                                      f"在句末加上对应的 [F#]，或删掉清单里没有的说法", field, clean))
                 continue
+            # (d) a fact bound to one system (Windows / Linux) stated without naming it: it would read as true
+            #     for every version (ledger.bind_os_variants; real S04 fingerprint post, 2026-10-23)
+            for fid in tags:
+                f = ledger.get(fid)
+                system = next((s for s in ("Windows", "Linux") if f and s.lower() in _norm(f.variant)), None)
+                if system and system.lower() not in _norm(clean) and system.lower() not in _norm(variant or ""):
+                    issues.append(_issue("os_variant_unstated",
+                                         f"事实 [{fid}]（{f.value}）只适用于 {f.variant}，这句没有写明「{system} 版」，"
+                                         f"会被读成所有版本都有：在句中写明「{system} 版」，或换一个卖点",
+                                         field, clean, fid))
             # (b) tagged, but a number in the sentence does not belong to any tagged fact
             if tags:
                 facts = [ledger.get(f) for f in tags if ledger.get(f)]
@@ -340,20 +400,22 @@ def _check_invented(post: Post, ledger: Ledger) -> list[CheckIssue]:
 
 
 # ------------------------------------------------------------------ LLM layer
-def _llm_layer(post: Post, ledger: Ledger, llm) -> list[CheckIssue]:
+def _llm_layer(post: Post, ledger: Ledger, llm, price_record: dict | None = None) -> list[CheckIssue]:
     cited, uncited = [], []
     for field, raw in _fields(post):
         if field.startswith("images["):      # KB captions verbatim; the plan check owns them (as in _check_tags)
             continue
-        clean, pairs = strip_fact_tags(raw)
+        clean, pairs = strip_fact_tags(_protect_quoted_semicolons(raw, ledger))
         # strip_fact_tags keeps the sentence's final 。！？; the split below drops it. Compare without it, or
         # every tagged sentence is also sent as "uncited" and comes back as a false uncited_claim.
         tagged = {s.strip("。！？!?；;\n ").strip() for s, _ in pairs}
         for s, fid in pairs:
             f = ledger.get(fid)
-            cited.append({"field": field, "sentence": s, "fact_id": fid, "fact": f.value if f else ""})
+            cited.append({"field": field, "sentence": _restore(s), "fact_id": fid, "fact": f.value if f else ""})
         for s in _SENT_SPLIT_RE.split(clean):
-            s = s.strip()
+            if s.strip() in tagged:
+                continue
+            s = _restore(s).strip()
             if s and s not in tagged:
                 uncited.append({"field": field, "sentence": s})
     system = ("你是营销文案的事实审核员。只根据给出的事实清单判断。"
@@ -365,6 +427,10 @@ def _llm_layer(post: Post, ledger: Ledger, llm) -> list[CheckIssue]:
             "\n</facts>\n<cited>\n" +
             "\n".join(f"[{c['field']}] {c['sentence']} -> {c['fact_id']} ({c['fact']})" for c in cited) +
             "\n</cited>\n<uncited>\n" + "\n".join(f"[{u['field']}] {u['sentence']}" for u in uncited) + "\n</uncited>")
+    if price_record:      # card with an active HQ record: 8B's code check owns the price (prices.py)
+        from agent.checks.prices import PROMO_JUDGE_NOTE, promo_block
+        system += PROMO_JUDGE_NOTE
+        user += promo_block(price_record)
     try:
         out = llm.chat_json(system, user, stage="8A", fast=True)
     except Exception as e:  # noqa: BLE001
@@ -485,7 +551,8 @@ def auto_cite(post: Post, issues: list[CheckIssue], ledger: Ledger) -> tuple[Pos
 
 # ------------------------------------------------------------------ entry point
 def check_facts(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger],
-                variant: str | None = None, llm=None) -> CheckReport:
+                variant: str | None = None, llm=None, price_record: dict | None = None) -> CheckReport:
+    """price_record: the task's valid_price_record; only the LLM judge sees it (run_all passes it)."""
     siblings = {k: v for k, v in (sibling_ledgers or {}).items() if k != ledger.model_id}
     issues: list[CheckIssue] = []
     issues += _check_numbers(post, ledger, siblings, variant)
@@ -494,5 +561,5 @@ def check_facts(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger],
     issues += _check_tags(post, ledger, variant)
     issues += _check_invented(post, ledger)
     if llm is not None:
-        issues += _llm_layer(post, ledger, llm)
+        issues += _llm_layer(post, ledger, llm, price_record)
     return CheckReport(issues)

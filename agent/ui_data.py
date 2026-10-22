@@ -168,6 +168,8 @@ def reset() -> None:
     reset_token() tells another tab/session that the backend state changed."""
     global _RESET_TOKEN
     reset_demo_state()
+    from agent.recommend.weekly import clear_marks       # today's 已发布 marks are demo state; prepared posts are not
+    clear_marks(today())
     _RESET_TOKEN += 1
 
 
@@ -305,6 +307,100 @@ def question_stats(limit: int = 8) -> list[dict]:
     return sorted(out, key=lambda x: (-x["count"], x["chip_id"]))[:limit]
 
 
+def weekly_progress(store_id: str, date: Optional[str] = None) -> dict:
+    """{"progress": {platform: {done, minimum}}, "suggestion": platform, "line": 「本周：…」} for one store."""
+    from agent.recommend.weekly import progress_line, suggest_platform, weekly_progress as _wp
+    prog = _wp(store_id, date or today())
+    sug = suggest_platform(prog)
+    return {"progress": prog, "suggestion": sug, "line": progress_line(prog, sug)}
+
+
+def weekly_progress_all(date: Optional[str] = None) -> list[dict]:
+    """总部端 本周计划: every store's weekly progress against the minimums; `behind` lists platforms short."""
+    from agent.recommend.weekly import behind
+    out = []
+    for st in load_store_data().stores:
+        w = weekly_progress(st["store_id"], date)
+        gap = behind(w["progress"])
+        out.append({"store_id": st["store_id"], "store_name": st["store_name"], **w,
+                    "behind": [p for p, n in gap.items() if n > 0]})
+    return out
+
+
+def mark_published(store_id: str, platform: str, card_id: str = "", date: Optional[str] = None) -> None:
+    from agent.recommend.weekly import mark_published as _mark
+    _mark(store_id, date or today(), platform, card_id)
+
+
+def stored_version(card: RecommendationCard, platform: Optional[str] = None) -> Optional[dict]:
+    """A precomputed version of this card on `platform` (prepare_today / prepare_demo), or None."""
+    try:
+        from agent.runs import stored_version as _sv
+        return _sv(card, platform)
+    except Exception as e:  # noqa: BLE001 - a missing/half-built record must never break the UI
+        log.warning("stored_version failed: %s", e)
+        return None
+
+
+def stored_compare(model_id: str, platform: str = "朋友圈", date: Optional[str] = None) -> Optional[dict]:
+    from agent.recommend.to_task import platform_key
+    from agent.runs import stored
+    try:
+        return stored(date or today(), "compare", f"{model_id}__{platform_key(platform)}")
+    except Exception as e:  # noqa: BLE001
+        log.warning("stored_compare failed: %s", e)
+        return None
+
+
+def stored_baseline(card_id: str, date: Optional[str] = None) -> Optional[dict]:
+    from agent.runs import stored
+    try:
+        return stored(date or today(), "baseline", card_id)
+    except Exception as e:  # noqa: BLE001
+        log.warning("stored_baseline failed: %s", e)
+        return None
+
+
+def baseline_from_payload(payload: Optional[dict]):
+    """Rehydrate a stored BaselineResult (its 8D hits included), or None."""
+    from agent.schemas import BaselineResult
+    try:
+        d = dict((payload or {})["baseline"])
+        d["hits"] = [CheckIssue(**h) for h in d.get("hits") or []]
+        return BaselineResult(**d)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_edit(text: str, result: RunResult):
+    """「检查并保存」: deterministic checks only (agent.edit_check), no LLM call."""
+    from agent.edit_check import check_edit as _check
+    return _check(text, result)
+
+
+def log_human_edit(card: RecommendationCard, platform: str, original_text: str, edited_text: str) -> None:
+    from agent.runs import log_human_edit as _log
+    try:
+        _log(card, platform, original_text, edited_text)
+    except Exception as e:  # noqa: BLE001 - logging never blocks the save
+        log.warning("human edit log failed: %s", e)
+
+
+def export_zip(post: Post, store_id: str, text: Optional[str] = None, date: Optional[str] = None,
+               fetch: Optional[Callable[[str], bytes]] = None) -> str:
+    """「下载发布包」: write <store>-<date>-<platform>.zip to the download folder; returns its path.
+    fetch overrides where image bytes come from (the store tab passes its in-process cache)."""
+    from agent.export import publish_zip
+    import tempfile
+    from pathlib import Path
+    name, data = publish_zip(post, store_id, date or today(), fetch or getattr(DEPS, "fetch_image_bytes", None), text)
+    folder = Path(tempfile.gettempdir()) / "hwpc_downloads"
+    folder.mkdir(exist_ok=True)
+    path = folder / name
+    path.write_bytes(data)
+    return str(path)
+
+
 def weekly_plan(date: Optional[str] = None) -> dict:
     """platform_quota.json's weekly rotation, anchored to the demo date."""
     data = load_store_data()
@@ -409,5 +505,7 @@ __all__ = [
     "edit", "compare", "verify_new_product", "reset", "reset_token", "last_real_run",
     "run_result_from_payload", "hook_label", "model_display_name", "similarity_threshold",
     "publish_stats", "question_stats", "weekly_plan", "recommendation_distribution",
-    "new_release_drafts", "compare_products", "plain_error",
+    "new_release_drafts", "compare_products", "plain_error", "weekly_progress", "weekly_progress_all",
+    "mark_published", "stored_version", "stored_compare", "stored_baseline", "baseline_from_payload",
+    "check_edit", "log_human_edit", "export_zip",
 ]

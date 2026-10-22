@@ -30,7 +30,7 @@ def with_body(*paragraphs, platform="xiaohongshu", cta=None):
 
 def card_task(platform="moments", **kw):
     base = dict(source="card", card_id="S01-x", store_id="S01", slot="potential", segment="student",
-                hook="scene", voice="senior", landmark="紫金港校区东门对面", nickname="阿杰",
+                hook="scene", voice="senior", landmark="紫金港校区东门对面",
                 angle="宿舍/图书馆场景", question=None)
     base.update(kw)
     return dataclasses.replace(fake_task(platform), **base)

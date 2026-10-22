@@ -16,7 +16,12 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _clean():
+def _clean(tmp_path, monkeypatch):
+    # Hermetic: never read this machine's real runs/ (after a real prepare_today, S01 has a prepared post
+    # for 2026-10-23 and these "no result yet" tests would see it).
+    import agent.runs as runs
+    monkeypatch.setattr(runs, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runs, "REHEARSAL_DIR", tmp_path / "runs" / "_rehearsal")
     ui_data.reset()
     yield
     ui_data.reset()
@@ -31,6 +36,9 @@ def _session(store_id="S01"):
     s = store_tab.fresh_session()
     store_tab._load_store(s, store_id)
     return s
+
+
+PUBLISH_LABEL = -8      # the 已发布 button: the last output before the 7 store-tab extras (progress … final text)
 
 
 def test_publish_is_ignored_before_a_result_and_for_needs_review():
@@ -53,7 +61,7 @@ def test_publish_is_ignored_before_a_result_and_for_needs_review():
     assert out[15]["visible"] is True and out[16]["visible"] is True and out[17]["visible"] is True
     store_tab.on_publish(s)
     assert s["published"][cid] is True
-    assert store_tab._render(s)[-1]["value"].startswith("已发布")
+    assert store_tab._render(s)[PUBLISH_LABEL]["value"].startswith("已发布")
 
 
 def test_next_card_uses_the_delivered_card_header():
@@ -82,10 +90,10 @@ def test_failed_regeneration_is_visible_with_an_existing_result():
 
 def test_role_rule_marks_non_moments_as_manager_only():
     cards = ui_data.get_cards("S01", "2026-10-19")
-    card = next(c for c in cards if c.platform != "朋友圈")
+    card = cards[0]
     s = store_tab.fresh_session()
-    s.update({"store_id": "S01", "cards": cards, "active_card_id": card.card_id,
-              "results": {}, "published": {}, "chips": {}})
+    s.update({"store_id": "S01", "cards": cards, "active_card_id": card.card_id, "platform": "小红书",
+              "results": {}, "published": {}, "chips": {}})        # the card's 小红书 version
     out = store_tab._render(s)
     assert "由店长发布" in out[0]
     assert out[1]["visible"] is False
