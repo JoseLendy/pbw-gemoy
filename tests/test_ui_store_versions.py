@@ -95,25 +95,6 @@ def test_published_is_recorded_per_platform(session):
     assert session["_marks"][-1][:2] == ("S03", "朋友圈")
 
 
-def test_mobile_view_shows_the_final_text_and_plain_images(session, monkeypatch):
-    import io
-    from PIL import Image
-
-    def png(_mid):
-        b = io.BytesIO()
-        Image.new("RGB", (20, 20), "red").save(b, "PNG")
-        return b.getvalue()
-    monkeypatch.setattr(ui_data.DEPS, "fetch_image_bytes", png, raising=False)
-    key, r = _with_result(session)
-    edited = state.render_publishable(r.post).replace("掂一掂。", "掂一掂。周末店里人少一些。")
-    state.on_check_save(edited, session)
-    m = state.mobile_view(session)
-    assert m["ok"] and m["text"] == wechat_text(session["edited"][key]["post"]) and "周末店里人少一些" in m["text"]
-    assert len(m["images"]) == len(r.post.images) and m["images"][0]["src"].startswith("data:image/")
-    state.on_text_input(edited + "未检查", session)
-    assert state.mobile_view(session)["ok"] is False             # an unchecked change is never offered
-
-
 def test_a_prepared_next_card_fallback_keeps_the_prepared_header():
     from agent.recommend.store_data import cards_for
     promo = next(c for c in cards_for("S10", "2026-10-23") if c.slot == "promo")

@@ -2,7 +2,6 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { loadMeta, meta, refreshStatus, status } from './api.js'
 import StoreView from './views/StoreView.vue'
-import MobileView from './views/MobileView.vue'
 import CompareView from './views/CompareView.vue'
 import HqView from './views/HqView.vue'
 import BaselineView from './views/BaselineView.vue'
@@ -10,7 +9,6 @@ import ManualView from './views/ManualView.vue'
 
 const TABS = [
   { key: 'store', label: '门店端·今日推荐' },
-  { key: 'mobile', label: '手机发布' },
   { key: 'compare', label: '三店对比' },
   { key: 'hq', label: '总部端' },
   { key: 'baseline', label: '对照组' },
@@ -56,7 +54,6 @@ onBeforeUnmount(() => clearInterval(statusTimer))
 
     <main class="hw-main">
       <StoreView :key="storeKey" :active="tab === 'store'" v-show="tab === 'store'" />
-      <MobileView :active="tab === 'mobile'" v-show="tab === 'mobile'" />
       <CompareView :active="tab === 'compare'" v-show="tab === 'compare'" />
       <HqView :active="tab === 'hq'" v-show="tab === 'hq'" @reset="onReset" />
       <BaselineView :active="tab === 'baseline'" v-show="tab === 'baseline'" />

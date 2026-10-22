@@ -10,9 +10,12 @@ import html
 
 from agent import ui_data
 
-_WARN_BG = "#fff4e5"
-_CELL = "padding:5px 9px;border-bottom:1px solid #eee"
-_HEAD = "padding:6px 9px;text-align:left;background:#f5f5f5;border-bottom:1px solid #ddd"
+# Frosted-glass inline styles: the panels are translucent dark glass with white text, so the tables keep
+# light text on a translucent/transparent background (no white boxes) and the warn highlight is amber.
+_WARN_BG = "rgba(245,158,11,0.16)"
+_CELL = "padding:5px 9px;border-bottom:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.92)"
+_HEAD = "padding:6px 9px;text-align:left;background:rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.72)"
+_MUTED = "rgba(255,255,255,0.62)"
 
 
 def _esc(value) -> str:
@@ -29,20 +32,20 @@ def posting_html() -> str:
     rows = []
     for s in data["stats"]:
         pct = s["rate"] * 100
-        bar = (f'<div style="height:8px;width:100%;background:#eee;border-radius:4px">'
-               f'<div style="height:8px;width:{pct:.1f}%;background:{"#c62828" if s["low"] else "#2e7d32"};'
+        bar = (f'<div style="height:8px;width:100%;background:rgba(255,255,255,0.14);border-radius:4px">'
+               f'<div style="height:8px;width:{pct:.1f}%;background:{"#F87171" if s["low"] else "#4ADE80"};'
                f'border-radius:4px"></div></div>')
-        flag = (' <span style="font-size:11px;color:#b26a00;background:#ffe9b8;border-radius:8px;'
+        flag = (' <span style="font-size:11px;color:#FCD34D;background:rgba(245,158,11,0.20);border-radius:8px;'
                 'padding:1px 6px">偏低</span>' if s["low"] else "")
-        rows.append(f'<tr style="background:{_WARN_BG if s["low"] else "#fff"}">'
+        rows.append(f'<tr style="background:{_WARN_BG if s["low"] else "transparent"}">'
                     f'<td style="{_CELL}">{_esc(s["store_name"])}</td>'
                     f'<td style="{_CELL}">{s["posted"]}/{s["days"]}</td>'
                     f'<td style="{_CELL};width:45%">{bar}</td>'
                     f'<td style="{_CELL};text-align:right">{pct:.1f}%{flag}</td></tr>')
     window = data["window"]
-    return (f'<div style="font-size:13px;color:#666;margin-bottom:6px">最近 {data["days"]} 个记录日'
+    return (f'<div style="font-size:13px;color:{_MUTED};margin-bottom:6px">最近 {data["days"]} 个记录日'
             f'（{_esc(window[0])} 至 {_esc(window[1])}，截至最新记录）· 发帖天数 / 应发天数</div>'
-            '<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
+            '<table style="width:100%;border-collapse:collapse;font-size:14px;background:transparent">'
             f'<thead><tr><th style="{_HEAD}">门店</th><th style="{_HEAD}">已发</th>'
             f'<th style="{_HEAD}">完成度</th><th style="{_HEAD};text-align:right">发帖率</th></tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table>')
@@ -55,27 +58,27 @@ def release_html() -> str:
     blocks = []
     for d in drafts:
         status = "已确认发布" if d["verified"] else "待总部确认"
-        color = "#2e7d32" if d["verified"] else "#b26a00"
+        color = "#4ADE80" if d["verified"] else "#FBBF24"
         refs = "".join(
             f'<tr><td style="{_CELL}">{_esc(r["ref_id"])}</td><td style="{_CELL}">{_esc(r["fields"])}</td>'
-            f'<td style="{_CELL}">{_esc(r["source_title"])}<div style="font-size:11px;color:#888">'
+            f'<td style="{_CELL}">{_esc(r["source_title"])}<div style="font-size:11px;color:rgba(255,255,255,0.55)">'
             f'{_esc(r["source_path"])}</div></td></tr>' for r in d["refs"])
         note = ("已解锁门店生成（演示状态）；具体数值仍需按知识库事实卡核验。"
                 if d["verified"] else
                 "演示审核清单：以下只是字段与来源参考，不是已核验的事实卡数值。")
-        note_style = ("color:#1b5e20;background:#eef7ee" if d["verified"]
-                      else "color:#8a4b00;background:#fff8e1")
+        note_style = ("color:#BBF7D0;background:rgba(34,197,94,0.14)" if d["verified"]
+                      else "color:#FDE68A;background:rgba(245,158,11,0.14)")
         blocks.append(
-            f'<div style="border:1px solid #e0e0e0;border-radius:8px;padding:12px;background:#fff">'
+            f'<div style="border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:12px;background:rgba(255,255,255,0.05)">'
             f'<div style="display:flex;justify-content:space-between;align-items:center">'
-            f'<b style="font-size:15px">{_esc(d["display_name"])}</b>'
-            f'<span style="font-size:12px;color:{color};background:#f5f5f5;border-radius:10px;padding:2px 8px">'
+            f'<b style="font-size:15px;color:#fff">{_esc(d["display_name"])}</b>'
+            f'<span style="font-size:12px;color:{color};background:rgba(255,255,255,0.10);border-radius:10px;padding:2px 8px">'
             f'{_esc(status)}</span></div>'
-            f'<div style="font-size:12px;color:#666;margin:4px 0 8px">演示上市日期：{_esc(d["launch_date"])}'
+            f'<div style="font-size:12px;color:{_MUTED};margin:4px 0 8px">演示上市日期：{_esc(d["launch_date"])}'
             f' · 总部确认一次，全部门店解锁</div>'
             f'<div style="font-size:12px;{note_style};border-radius:6px;padding:6px 8px;margin-bottom:8px">'
             f'{_esc(note)}</div>'
-            '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+            '<table style="width:100%;border-collapse:collapse;font-size:12px;background:transparent">'
             f'<thead><tr><th style="{_HEAD}">参考</th><th style="{_HEAD}">字段组</th>'
             f'<th style="{_HEAD}">来源</th></tr></thead><tbody>{refs}</tbody></table></div>')
     return "".join(blocks)
@@ -91,7 +94,7 @@ def questions_html() -> str:
         f'<td style="{_CELL};text-align:right">{q["count"]}</td>'
         f'<td style="{_CELL};text-align:right">{q["stores"]} 店</td></tr>'
         for i, q in enumerate(ui_data.question_stats(8)))
-    return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
+    return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:transparent">'
             f'<thead><tr><th style="{_HEAD}">#</th><th style="{_HEAD}">顾客问题</th>'
             f'<th style="{_HEAD};text-align:right">次数</th><th style="{_HEAD};text-align:right">覆盖门店</th>'
             f'</tr></thead><tbody>{rows}</tbody></table>')
@@ -109,14 +112,14 @@ def plan_html() -> str:
         for p in platforms:
             v = r["progress"][p]
             short = p in r["behind"]
-            style = f'{_CELL};text-align:center' + (";background:#fff3e0;color:#e65100;font-weight:700" if short else "")
+            style = f'{_CELL};text-align:center' + (";background:rgba(245,158,11,0.20);color:#FCD34D;font-weight:700" if short else "")
             cells.append(f'<td style="{style}">{v["done"]}/{v["minimum"]}</td>')
         rows.append(f'<tr><td style="{_CELL}">{_esc(r["store_name"])}</td>{"".join(cells)}'
                     f'<td style="{_CELL}">{_esc(r["suggestion"])}</td></tr>')
     n_behind = sum(1 for r in rows_data if r["behind"])
-    return (f'<div style="font-size:12px;color:#666;margin-bottom:6px">本周（周一至今）发布进度 · '
+    return (f'<div style="font-size:12px;color:{_MUTED};margin-bottom:6px">本周（周一至今）发布进度 · '
             f'{n_behind} 家门店有平台未达标（橙色）</div>'
-            '<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
+            '<table style="width:100%;border-collapse:collapse;font-size:14px;background:transparent">'
             f'<thead><tr><th style="{_HEAD}">门店</th>{head}<th style="{_HEAD}">今天建议发</th></tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table>')
 
@@ -128,7 +131,7 @@ def distribution_html() -> str:
         f'<td style="{_CELL}">{_esc(x["slot_label"])} · {_esc(x["platform"])}</td>'
         f'<td style="{_CELL}">{_esc(x["segment_label"])} · {_esc(x["angle"])}</td></tr>'
         for x in ui_data.recommendation_distribution())
-    return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
+    return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:transparent">'
             f'<thead><tr><th style="{_HEAD}">门店</th><th style="{_HEAD}">今日一条</th>'
             f'<th style="{_HEAD}">槽位 · 平台</th><th style="{_HEAD}">客群 · 角度</th></tr></thead>'
             f'<tbody>{rows}</tbody></table>')

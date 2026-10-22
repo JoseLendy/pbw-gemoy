@@ -8,7 +8,6 @@ Every backend call goes through agent.ui_data.
 """
 from __future__ import annotations
 
-import base64
 import dataclasses
 import datetime as dt
 import html
@@ -19,7 +18,7 @@ import time
 from pathlib import Path
 
 from agent import ui_data
-from agent.export import image_files, wechat_text
+from agent.export import wechat_text
 from agent.formatter import render_download, render_publishable, render_report
 from agent.schemas import RunResult, StaffContext
 from ui.components import (
@@ -112,9 +111,13 @@ def _card_panel_html(*args, **kwargs) -> str:
     return _card_panel(*args, **kwargs)["html"]
 
 
-def _chip_status(session: dict) -> str:
+def _tapped(session: dict) -> set:
     store_id = session.get("store_id")
-    tapped = session.get("chips", {}).get(store_id) or set()
+    return session.get("chips", {}).get(store_id) or set()
+
+
+def _chip_status(session: dict) -> str:
+    tapped = _tapped(session)
     if not tapped:
         return "今天还没有记录顾客提问。"
     names = [POOL[cid]["text"] for cid in tapped if cid in POOL]
@@ -257,6 +260,7 @@ def _base_view(session: dict, slots: list, show_other: bool) -> dict:
         "recovery": {"visible": False, "message": ""}, "talk_html": "", "status_html": "",
         "banner_html": "", "phone_html": "", "report_md": "", "editable": False, "publishable": False,
         "downloadable": False, "pub_text": "", "chip_status": _chip_status(session),
+        "tapped_chips": sorted(_tapped(session)),
         "store_id": session.get("store_id"), "image_ok": False, "publish_label": "标记为已发布",
         "published": False, "progress_html": "", "platform": session.get("platform") or PLATFORM_TABS[0],
         "edit_status_html": "", "can_copy": False, "can_export": False, "final_text": "",
@@ -666,23 +670,3 @@ def save_image(session: dict) -> tuple[str, bytes] | None:
     ext = "png" if data[:4] == b"\x89PNG" else ("svg" if data[:4] == b"<svg" else "jpg")
     return f"img_{re.sub(r'[^\w-]+', '_', cid)}_{int(time.time())}.{ext}", data
 
-
-# ---------------------------------------------------------------- 手机发布 (phone view of the current post)
-def mobile_view(session: dict) -> dict:
-    """{"ok", "head", "text", "images": [{"src", "alt"}], "note"} for the 手机发布 tab: the final text (edited
-    if edited) and each image as a data URI, so staff on a phone can long-press → 保存图片."""
-    session = session or {}
-    card, key = _current_card(session) if session.get("cards") else (None, "")
-    live = _final(session, key, _display_result(session.get("results", {}).get(key))) if card else None
-    if card is None or not isinstance(live, RunResult) or not _can_publish(session, card) \
-            or not _edit_state(session, key, True)[1]:
-        return {"ok": False, "head": "", "text": "", "images": [],
-                "note": "先在「门店端·今日推荐」打开一条可发布的内容（修改需先通过「检查并保存」），再回到这里。"}
-    text = wechat_text(live.post)
-    imgs = []
-    fetch = cached_image_bytes if images_ready(live) else getattr(ui_data.DEPS, "fetch_image_bytes", None)
-    for name, data in image_files(live.post, fetch):
-        mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
-        imgs.append({"src": f"data:{mime};base64," + base64.b64encode(data).decode(), "alt": f"配图{name[:-4]}"})
-    return {"ok": True, "head": f"{card.store_name} · {card.platform} · {card.display_name or ''}",
-            "text": text, "images": imgs, "note": "长按图片 → 保存图片（按顺序发布）"}

@@ -501,13 +501,6 @@ def api_store_save_image(session_id: str = ""):
     return _file(out[0], out[1], mime)
 
 
-@app.post("/api/mobile/view")
-def api_mobile_view(req: Sid) -> dict:
-    s = _store_session(req.session_id)
-    with s["lock"]:
-        return state.mobile_view(s)
-
-
 # ---------------------------------------------------------------- 三店对比
 @app.post("/api/compare/stored")
 def api_compare_stored(req: CompareReq) -> dict:
