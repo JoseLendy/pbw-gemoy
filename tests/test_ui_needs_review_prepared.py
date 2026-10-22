@@ -3,7 +3,7 @@ S06/S07 showed the red 需人工确认 panel under a 「今日已为你准备好
 from __future__ import annotations
 
 from agent.recommend.store_data import cards_for, reload
-from ui import store_tab
+from ui import state as store_tab
 from ui.components import prepared_post_html
 
 DAY = "2026-10-23"

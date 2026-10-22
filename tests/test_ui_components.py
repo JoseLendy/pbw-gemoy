@@ -216,7 +216,7 @@ def test_last_real_run_html_shows_the_timestamp_and_strips_fact_tags():
 
 # ---------------------------------------------------------------- never leak model_id / "MODEL_"
 def test_card_panel_html_never_leaks_model_id():
-    from ui.store_tab import _card_panel_html
+    from ui.state import _card_panel_html
     card = _demo_card()
     out = _card_panel_html(card, prepared=False)
     assert card.model_id not in out

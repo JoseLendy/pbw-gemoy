@@ -8,7 +8,7 @@ import pytest
 from agent import ui_data
 from agent.pipeline import BatchResult, Deps, SimilarityPair, run_from_card
 from agent.schemas import BASELINE_LABEL, BaselineResult, CheckIssue
-from ui import baseline_tab, compare_tab, hq_tab
+from ui import baseline_view as baseline_tab, compare_view as compare_tab, hq_view as hq_tab
 
 MODEL = "matebook-14-harmonyos"
 STORES = ["S01", "S04", "S08", "S02"]
@@ -78,7 +78,8 @@ def test_new_release_verify_unlocks_stores_and_reset_reverts():
     assert "待总部确认" in before and draft["display_name"] in before
     assert "产品事实.md" in before or "卖点与限制.md" in before
 
-    _, _, msg, reset_msg, distribution = hq_tab.on_verify()
+    out = hq_tab.on_verify()
+    msg, reset_msg, distribution = out["verify_msg"], out["reset_msg"], out["distribution"]
     assert "已确认发布" in msg and reset_msg == ""
     assert "已确认发布" in hq_tab.release_html()
     assert draft["model_id"] not in hq_tab.release_html()   # never show an internal model id
@@ -90,7 +91,7 @@ def test_new_release_verify_unlocks_stores_and_reset_reverts():
 
 
 def test_store_tab_clears_its_session_after_hq_reset():
-    from ui import store_tab
+    from ui import state as store_tab
 
     session = store_tab.fresh_session()
     store_tab._load_store(session, "S01")
@@ -122,7 +123,7 @@ def test_compare_renders_four_phones_and_similarity(monkeypatch):
     by_store = {c.store_id: c for c in cards}
     monkeypatch.setattr(compare_tab, "COMPARE_STORES", [(sid, sid) for sid in STORES])
     monkeypatch.setattr(compare_tab.ui_data, "product_card", lambda sid, mid: by_store[sid])
-    monkeypatch.setattr(compare_tab.ui_data, "compare", lambda cards: batch)
+    monkeypatch.setattr(compare_tab.ui_data, "compare", lambda cards, on_progress=None: batch)
     monkeypatch.setattr(compare_tab.ui_data, "DEPS", Deps.fake())
 
     body, summary = compare_tab.on_compare(MODEL, "小红书")
