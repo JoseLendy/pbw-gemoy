@@ -99,22 +99,27 @@ def questions_html() -> str:
 
 
 def plan_html() -> str:
-    plan = ui_data.weekly_plan()
-    chips = []
-    for d in plan["days"]:
-        today = d["is_today"]
-        chips.append(
-            f'<div style="flex:1;min-width:74px;text-align:center;border-radius:8px;padding:8px 4px;'
-            f'background:{"#fff3e0" if today else "#fff"};border:1px solid '
-            f'{"#ff8f00" if today else "#e0e0e0"}">'
-            f'<div style="font-size:12px;color:#666">{_esc(d["label"])}</div>'
-            f'<div style="font-size:12px;color:#999">{_esc(d["date"][5:])}</div>'
-            f'<div style="font-weight:700;margin-top:4px;color:{"#e65100" if today else "#333"}">'
-            f'{_esc(d["platform"])}</div></div>')
-    minimum = " · ".join(f"{k} ≥ {v}" for k, v in plan["minimum"].items())
-    return (f'<div style="font-size:12px;color:#666;margin-bottom:6px">本周最低要求：{_esc(minimum)}'
-            f' · 今日：{_esc(plan["today"])}</div>'
-            f'<div style="display:flex;gap:6px;flex-wrap:nowrap">{"".join(chips)}</div>')
+    """本周计划: each store's weekly progress against the minimums (a suggestion, not a fixed rotation).
+    A platform still short of its minimum is highlighted."""
+    rows_data = ui_data.weekly_progress_all()
+    platforms = list(rows_data[0]["progress"]) if rows_data else []
+    head = "".join(f'<th style="{_HEAD};text-align:center">{_esc(p)}</th>' for p in platforms)
+    rows = []
+    for r in rows_data:
+        cells = []
+        for p in platforms:
+            v = r["progress"][p]
+            short = p in r["behind"]
+            style = f'{_CELL};text-align:center' + (";background:#fff3e0;color:#e65100;font-weight:700" if short else "")
+            cells.append(f'<td style="{style}">{v["done"]}/{v["minimum"]}</td>')
+        rows.append(f'<tr><td style="{_CELL}">{_esc(r["store_name"])}</td>{"".join(cells)}'
+                    f'<td style="{_CELL}">{_esc(r["suggestion"])}</td></tr>')
+    n_behind = sum(1 for r in rows_data if r["behind"])
+    return (f'<div style="font-size:12px;color:#666;margin-bottom:6px">本周（周一至今）发布进度 · '
+            f'{n_behind} 家门店有平台未达标（橙色）</div>'
+            '<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff">'
+            f'<thead><tr><th style="{_HEAD}">门店</th>{head}<th style="{_HEAD}">今天建议发</th></tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table>')
 
 
 def distribution_html() -> str:
@@ -151,7 +156,7 @@ def on_reset():
 
 
 def build_hq_tab() -> None:
-    with gr.Tab("总部端"):
+    with gr.Tab("总部端") as tab:
         gr.Markdown("### 总部视图\n发布情况、新品审核、顾客问题、本周计划与推荐分布。")
         with gr.Row():
             with gr.Column(scale=1):
@@ -174,6 +179,9 @@ def build_hq_tab() -> None:
         reset_msg = gr.HTML()
         verify.click(on_verify, None, [release, verify, verify_msg, reset_msg, distribution],
                      concurrency_limit=None, show_progress="hidden")
+        # 已发布 marks made in the store tab update the weekly progress the moment HQ is opened.
+        tab.select(lambda: (posting_html(), plan_html()), None, [posting, plan],
+                   concurrency_limit=None, show_progress="hidden")
         reset.click(on_reset, None,
                     [posting, release, verify, reset_msg, verify_msg, questions, plan, distribution],
                     concurrency_limit=None, show_progress="hidden")

@@ -85,6 +85,20 @@ def ours_html(result, note: str | None = None) -> str:
     return stop_html(getattr(result, "message", "") or "本次生成未通过。")
 
 
+def on_show_stored(store_id: str):
+    """Instant: the stored 对照组 pair (prepare_demo) - baseline + our prepared post - with its time."""
+    card = ui_data.default_card(store_id) if store_id else None
+    rec = ui_data.stored_baseline(card.card_id) if card is not None and not card.locked else None
+    base = ui_data.baseline_from_payload(rec)
+    ours = ui_data.run_result_from_payload(ui_data.prepared_post(store_id)) if base is not None else None
+    if base is None or ours is None:
+        return EMPTY_LEFT, EMPTY_RIGHT, ""
+    from ui.store_tab import _generated_at
+    meta = (f"同一张卡：**{card.display_name}** · {card.platform} · {card.segment_label} · {card.angle}"
+            f" · 已预先生成（{_generated_at(rec)}）· 点「生成对照」可重新生成")
+    return baseline_html(base), ours_html(ours, fallback_note(ours)), meta
+
+
 def on_baseline(store_id: str):
     if not store_id:
         yield EMPTY_LEFT, EMPTY_RIGHT, "请选择门店。"
@@ -125,11 +139,9 @@ EMPTY_RIGHT = ('<div style="min-height:300px;display:flex;align-items:center;jus
                'border:1px dashed #d0d0d0;border-radius:10px;color:#888">点击「生成对照」查看我们经过核验的结果</div>')
 
 
-def on_tab_select(token: int):
+def on_tab_select(token: int, store_id: str = None):
     now = ui_data.reset_token()
-    if token != now:
-        return EMPTY_LEFT, EMPTY_RIGHT, "", now
-    return gr.update(), gr.update(), gr.update(), token
+    return (*on_show_stored(store_id or STORES[0]["store_id"]), now)
 
 
 def build_baseline_tab() -> None:
@@ -150,5 +162,6 @@ def build_baseline_tab() -> None:
         token = gr.State(ui_data.reset_token())
         run.click(on_baseline, [store], [left, right, msg],
                   concurrency_limit=GEN_LIMIT, concurrency_id="generation", show_progress="minimal")
-        tab.select(on_tab_select, [token], [left, right, msg, token],
+        tab.select(on_tab_select, [token, store], [left, right, msg, token],
                    concurrency_limit=None, show_progress="hidden")
+        store.change(on_show_stored, [store], [left, right, msg], concurrency_limit=None, show_progress="hidden")

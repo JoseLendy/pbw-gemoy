@@ -354,6 +354,12 @@ def build() -> gr.Blocks:
         with gr.Tabs():
             with gr.Tab("门店端·今日推荐") as store_tab_ui:
                 store_handles = store_tab.build_store_tab(demo)
+            with gr.Tab("手机发布") as mobile_tab:
+                gr.Markdown("在手机上打开本页：先复制文案，再长按每张图片 → 保存图片。")
+                mobile_copy = gr.Button("复制文案", variant="primary", elem_id="mobile-copy")
+                mobile_html = gr.HTML(elem_id="mobile-post")
+                mobile_text = gr.Textbox(elem_classes=["hw-hidden"], show_label=False, container=False,
+                                         interactive=False, elem_id="mobile-text")
             compare_tab.build_compare_tab()
             hq_tab.build_hq_tab()
             baseline_tab.build_baseline_tab()
@@ -408,6 +414,10 @@ def build() -> gr.Blocks:
                     [progress, phone, talk, banner, report, pub, clar_box, r1, r2, r3, session,
                      all_out, manual_reset],
                     concurrency_limit=None, show_progress="hidden")
+        mobile_tab.select(store_tab.mobile_view, [store_handles["session"]], [mobile_html, mobile_text],
+                          concurrency_limit=None, show_progress="hidden")
+        mobile_copy.click(None, [mobile_text], None,
+                          js="(t) => { navigator.clipboard && navigator.clipboard.writeText(t); return []; }")
         # Returning from 总部端 introduces newly verified/unlocked cards (and a reset clears the session).
         store_tab_ui.select(store_handles["on_refresh"], [store_handles["session"]],
                             store_handles["outputs"], concurrency_limit=None, show_progress="hidden")
