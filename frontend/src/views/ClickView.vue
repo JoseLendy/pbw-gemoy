@@ -200,22 +200,22 @@ async function restart() {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page page-with-head" :class="{ 'page-with-tools': stage === 'input' }">
+    <header class="page-head">
+      <h1>点击输入</h1>
+      <p>点选或直接说一句，生成经知识库核验、可直接发布的平台软文。</p>
+    </header>
+
+    <div v-if="stage === 'input'" class="seg seg-lg page-tools" role="radiogroup" aria-label="输入方式">
+      <button class="seg-item" role="radio" :aria-checked="inputMode === 'pick'" :class="{ on: inputMode === 'pick' }" @click="inputMode = 'pick'">
+        <MousePointerClick :size="16" aria-hidden="true" />点选
+      </button>
+      <button class="seg-item" role="radio" :aria-checked="inputMode === 'type'" :class="{ on: inputMode === 'type' }" @click="inputMode = 'type'">
+        <MessageSquareText :size="16" aria-hidden="true" />直接输入
+      </button>
+    </div>
+
     <div class="page-main">
-      <header class="page-head">
-        <h1>点击输入</h1>
-        <p>点选或直接说一句，生成经知识库核验、可直接发布的平台软文。</p>
-      </header>
-
-      <div v-if="stage === 'input'" class="seg seg-lg" role="radiogroup" aria-label="输入方式">
-        <button class="seg-item" role="radio" :aria-checked="inputMode === 'pick'" :class="{ on: inputMode === 'pick' }" @click="inputMode = 'pick'">
-          <MousePointerClick :size="16" aria-hidden="true" />点选
-        </button>
-        <button class="seg-item" role="radio" :aria-checked="inputMode === 'type'" :class="{ on: inputMode === 'type' }" @click="inputMode = 'type'">
-          <MessageSquareText :size="16" aria-hidden="true" />直接输入
-        </button>
-      </div>
-
       <Transition name="swap" mode="out-in">
         <!-- ============ 点选 ============ -->
         <div v-if="stage === 'input' && inputMode === 'pick'" key="pick" class="stack">
@@ -359,7 +359,7 @@ async function restart() {
                 <label class="field-label" for="click-copy">正文</label>
                 <textarea id="click-copy" class="textarea" :value="copyBox" readonly rows="10" spellcheck="false"></textarea>
               </div>
-              <div class="row wrap">
+              <div class="action-grid">
                 <button class="btn btn-dark" @click="copy"><component :is="copied ? Check : Copy" :size="16" aria-hidden="true" />{{ copied ? '已复制' : '复制正文' }}</button>
                 <button class="btn btn-light" @click="download"><FileDown :size="16" aria-hidden="true" />下载 .md</button>
               </div>

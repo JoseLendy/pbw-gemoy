@@ -10,8 +10,8 @@ const props = defineProps({ active: Boolean })
 const emit = defineEmits(['go'])
 
 const ROLES = [
-  { key: '店员', hint: '日常发朋友圈，公众号与小红书由店长发布' },
-  { key: '店长', hint: '可发布全部平台，负责门店账号' },
+  { key: '店员', hint: '日常推荐与发布，全部平台都能生成' },
+  { key: '店长', hint: '负责门店账号，全部平台都能生成' },
 ]
 const kind = ref(account.kind || 'store')
 const storeId = ref(account.store_id || '')
@@ -50,18 +50,18 @@ async function unlock() {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page page-with-head page-with-tools">
+    <header class="page-head">
+      <h1>登录</h1>
+      <p>选择演示账号，无需密码。</p>
+    </header>
+
+    <div class="seg seg-lg page-tools" role="radiogroup" aria-label="账号类型">
+      <button class="seg-item" role="radio" :aria-checked="kind === 'store'" :class="{ on: kind === 'store' }" @click="kind = 'store'"><Store :size="16" aria-hidden="true" />门店账号</button>
+      <button class="seg-item" role="radio" :aria-checked="kind === 'hq'" :class="{ on: kind === 'hq' }" @click="kind = 'hq'"><Building2 :size="16" aria-hidden="true" />总部账号</button>
+    </div>
+
     <div class="page-main">
-      <header class="page-head">
-        <h1>登录</h1>
-        <p>选择演示账号，无需密码。</p>
-      </header>
-
-      <div class="seg seg-lg" role="radiogroup" aria-label="账号类型">
-        <button class="seg-item" role="radio" :aria-checked="kind === 'store'" :class="{ on: kind === 'store' }" @click="kind = 'store'"><Store :size="16" aria-hidden="true" />门店账号</button>
-        <button class="seg-item" role="radio" :aria-checked="kind === 'hq'" :class="{ on: kind === 'hq' }" @click="kind = 'hq'"><Building2 :size="16" aria-hidden="true" />总部账号</button>
-      </div>
-
       <template v-if="kind === 'store'">
         <section class="card" aria-labelledby="login-store">
           <div class="card-head"><h2 id="login-store">选择门店</h2><span class="muted small">{{ meta.stores.length }} 家门店</span></div>

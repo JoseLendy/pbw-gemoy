@@ -45,13 +45,18 @@ def test_opens_on_moments_with_the_weekly_progress_line(session):
     assert "本周：朋友圈" in out["progress_html"] and "今天建议发：" in out["progress_html"]
 
 
-def test_other_platforms_are_manager_only_for_staff(session):
+def test_every_role_can_generate_every_platform(session):
+    assert list(state.PLATFORM_TABS) == ["朋友圈", "小红书", "公众号", "海报", "抖音"]
     out = state.on_platform("小红书", session)
-    assert out["panel"]["notice"] == "由店长发布" and out["action"]["visible"] is False
-    out = state.on_role("店长", session)
     assert not out["panel"]["notice"] and out["action"]["visible"] is True
     out = state.on_platform("公众号", session)
     assert out["action"]["label"] == "生成公众号文章"
+    out = state.on_platform("海报", session)
+    assert out["platform"] == "海报" and out["action"]["visible"] is True
+    out = state.on_platform("抖音", session)
+    assert out["platform"] == "抖音" and out["action"]["visible"] is True
+    out = state.on_role("店长", session)
+    assert not out["panel"]["notice"] and out["action"]["visible"] is True
 
 
 def test_a_stored_version_is_shown_with_its_generation_time(session, monkeypatch):

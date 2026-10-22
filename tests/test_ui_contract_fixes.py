@@ -86,15 +86,15 @@ def test_failed_regeneration_is_visible_with_an_existing_result():
     assert "hw-phone" in (out["phone_html"] or "")
 
 
-def test_role_rule_marks_non_moments_as_manager_only():
+def test_every_platform_is_actionable_for_the_demo_staff_role():
     cards = ui_data.get_cards("S01", "2026-10-19")
     card = cards[0]
     s = state.fresh_session()
     s.update({"store_id": "S01", "cards": cards, "active_card_id": card.card_id, "platform": "小红书",
               "results": {}, "published": {}, "chips": {}})        # the card's 小红书 version
     out = state.render(s)
-    assert out["panel"]["notice"] == "由店长发布"
-    assert out["action"]["visible"] is False
+    assert out["panel"]["notice"] is None
+    assert out["action"]["visible"] is True
 
 
 def test_prepared_run_result_fills_the_phone_and_report_without_fetching_images():

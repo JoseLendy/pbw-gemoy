@@ -134,13 +134,13 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
 </script>
 
 <template>
-  <div class="page">
-    <div class="page-main">
-      <header class="page-head">
-        <h1>你好，{{ storeName || '门店' }}</h1>
-        <p>{{ meta.today }} · {{ v.role || '店员' }} · 今天为你准备了一条推荐</p>
-      </header>
+  <div class="page page-with-head">
+    <header class="page-head">
+      <h1>你好，{{ storeName || '门店' }}</h1>
+      <p>{{ meta.today }} · {{ v.role || '店员' }} · 今天为你准备了一条推荐</p>
+    </header>
 
+    <div class="page-main">
       <!-- today's recommendation: a product tile in the vmall manner -->
       <section class="rec" :style="{ background: tint.tile }" aria-labelledby="rec-title">
         <div class="rec-copy">
@@ -219,7 +219,7 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
                 </div>
               </div>
 
-              <div v-if="v.publishable || v.downloadable" class="row wrap">
+              <div v-if="v.publishable || v.downloadable" class="action-grid">
                 <button v-if="v.publishable" class="btn btn-dark" :disabled="!v.can_copy" @click="copy">
                   <component :is="copied ? Check : Copy" :size="16" aria-hidden="true" />{{ copied ? '已复制' : '复制文案' }}
                 </button>

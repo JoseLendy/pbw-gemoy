@@ -80,6 +80,15 @@ textarea, input { caret-color: var(--red); }
 .page { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; align-items: start; max-width: 1400px; }
 .page-wide-aside { grid-template-columns: minmax(0, 1fr) 400px; }
 .page-full { grid-template-columns: minmax(0, 1fr); }
+/* The page header spans both columns, so the right rail starts level with the first panel on the left. */
+.page-with-head { grid-template-areas: "head head" "main aside"; row-gap: 20px; }
+.page-with-head > .page-head { grid-area: head; }
+.page-with-head > .page-main { grid-area: main; }
+.page-with-head > .page-aside { grid-area: aside; }
+/* A mode switch above the content gets its own full-width row, so the rail still starts level
+   with the first card in the main column rather than with the switch. */
+.page-with-head.page-with-tools { grid-template-areas: "head head" "tools tools" "main aside"; }
+.page-with-head > .page-tools { grid-area: tools; display: flex; flex-wrap: wrap; gap: 10px; justify-self: start; }
 .page-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .page-aside { position: sticky; top: 32px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .page-head h1 { display: flex; align-items: center; gap: 10px; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }

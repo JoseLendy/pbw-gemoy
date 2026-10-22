@@ -20,12 +20,13 @@ onMounted(() => { if (props.active) load() })
 </script>
 
 <template>
-  <div class="page page-wide-aside">
+  <div class="page page-wide-aside page-with-head">
+    <header class="page-head">
+      <h1>总部端</h1>
+      <p>各门店发布情况、本周计划与今日推荐分布。</p>
+    </header>
+
     <div class="page-main">
-      <header class="page-head">
-        <h1>总部端</h1>
-        <p>各门店发布情况、本周计划与今日推荐分布。</p>
-      </header>
       <template v-if="d">
         <section class="card">
           <div class="card-head"><h2>发布情况</h2></div>

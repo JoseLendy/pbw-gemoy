@@ -19,6 +19,10 @@
 /* ---------- generated post (home + click) ---------- */
 .result-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 32px; align-items: start; }
 .result-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/* Result actions sit in a steady two-column grid: zooming the phone resizes them evenly
+   instead of re-wrapping them into a ragged row. */
+.action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.action-grid .btn { padding: 0 12px; }
 .quick { display: flex; flex-direction: column; gap: 8px; }
 .editor { display: flex; flex-direction: column; gap: 8px; }
 .all-platforms { margin-top: 20px; }
@@ -98,10 +102,15 @@
 .hw-verified-card pre { font-family: inherit; }
 
 /* ---------- phone stage ---------- */
-.hw-stage { display: flex; align-items: flex-start; gap: 12px; }
+.hw-stage { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .hw-phone-stage { flex: none; }
 .hw-phone-wrap { position: relative; }
-.stage-tools { display: flex; flex-direction: column; gap: 10px; }
+/* Zoom controls live above the phone, pinned to the phone's normal width: resizing the phone no longer
+   moves them, and each half of the pill is half a phone wide. */
+.stage-tools { display: flex; align-items: center; gap: 8px; width: 360px; max-width: 100%; }
+.zoom-pill { display: flex; flex: 1 1 auto; min-width: 0; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); overflow: hidden; }
+.zoom-pill .round { flex: 1 1 50%; width: auto; height: 38px; border: 0; border-radius: 0; background: transparent; }
+.zoom-pill .round + .round { border-left: 1px solid var(--line-2); }
 .round { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-size: 14px; font-weight: 700; transition: border-color .15s ease; }
 .round:hover:not(:disabled) { border-color: var(--ink); }
 .round:disabled { opacity: .4; }
@@ -184,6 +193,8 @@
 /* ---------- responsive ---------- */
 @media (max-width: 1280px) {
   .page, .page-wide-aside { grid-template-columns: minmax(0, 1fr); }
+  .page-with-head { grid-template-areas: "head" "main" "aside"; }
+  .page-with-head.page-with-tools { grid-template-areas: "head" "tools" "main" "aside"; }
   .page-aside { position: static; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
   .result-grid { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .result-side { width: 100%; }
@@ -217,9 +228,9 @@
   .opt-grid-product { grid-template-columns: minmax(0, 1fr); }
   .role-grid { grid-template-columns: minmax(0, 1fr); }
   .card { padding: 18px 16px; }
-  .hw-stage { flex-direction: column; align-items: center; }
-  .stage-tools { flex-direction: row; }
-  .plat-menu { left: 50%; top: auto; bottom: calc(100% + 8px); transform: translateX(-50%); }
+  .hw-stage { align-items: stretch; }
+  .stage-tools { width: 100%; }
+  .plat-menu { left: auto; right: 0; top: calc(100% + 8px); bottom: auto; transform: none; }
   .hw-phone, .hw-phone-empty { width: 100%; }
   .toolbar > .btn { margin-left: 0; width: 100%; }
   .select { min-width: 0; width: 100%; }

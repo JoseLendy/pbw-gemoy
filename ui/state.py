@@ -32,11 +32,12 @@ from ui.components import (
 STORES = ui_data.list_stores()
 POOL = ui_data.question_pool()
 DOWNLOAD_DIR = Path(tempfile.gettempdir()) / "hwpc_downloads"
-# No login screen in the demo; this is the default person using the store tab. It makes the role rule
-# real: 小红书/公众号 are manager-only.
+# No login screen in the demo; this is the default person using the store tab. Both roles can generate
+# every platform (ui.components.can_act); the role only changes the copy around who is signed in.
 DEMO_STAFF = StaffContext(staff_id="demo-staff", display_name="门店店员", role="staff")
 DEMO_MANAGER = StaffContext(staff_id="demo-manager", display_name="店长", role="manager")
-PLATFORM_TABS = ("朋友圈", "小红书", "公众号")     # every card has a version per platform; 朋友圈 first
+# Every platform the pipeline writes; 朋友圈 first because it is today's default card version.
+PLATFORM_TABS = ("朋友圈", "小红书", "公众号", "海报", "抖音")
 QUICK_EDITS = ("短一点", "换卖点", "换个角度", "加上立减500")
 EMPTY_PHONE = '<div class="hw-phone-empty">生成后将在这里显示手机预览</div>'
 
@@ -620,9 +621,14 @@ def on_revert(session: dict) -> dict:
 
 
 def on_chip(chip_id: str, session: dict) -> dict:
+    """Tap a customer question; tap the same one again to take it back (the UI shows chips as toggles)."""
     store_id = session.get("store_id")
     if chip_id in POOL:
-        session.setdefault("chips", {}).setdefault(store_id, set()).add(chip_id)
+        tapped = session.setdefault("chips", {}).setdefault(store_id, set())
+        if chip_id in tapped:
+            tapped.discard(chip_id)
+        else:
+            tapped.add(chip_id)
     return render(session)
 
 

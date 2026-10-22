@@ -9,6 +9,18 @@ function zoomBy(f) { zoom.value = Math.round(Math.min(1.4, Math.max(0.7, zoom.va
 
 <template>
   <div class="hw-stage" :style="{ '--zoom': zoom * scale }">
+    <!-- The zoom pill sits above the phone at the phone's normal width, so resizing never moves it. -->
+    <div v-if="tools" class="stage-tools">
+      <div class="zoom-pill" role="group" aria-label="预览大小">
+        <button class="round" title="缩小" aria-label="缩小预览" :disabled="zoom <= 0.7" @click="zoomBy(0.9)">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" /></svg>
+        </button>
+        <button class="round" title="放大" aria-label="放大预览" :disabled="zoom >= 1.4" @click="zoomBy(1.1)">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" /></svg>
+        </button>
+      </div>
+      <slot name="tools"></slot>
+    </div>
     <div class="hw-phone-stage">
       <div class="hw-phone-wrap" :style="{ zoom: zoom * scale }">
         <div v-if="html" class="hw-phone-host" v-html="html"></div>
@@ -28,15 +40,6 @@ function zoomBy(f) { zoom.value = Math.round(Math.min(1.4, Math.max(0.7, zoom.va
           <div class="hw-thinking-title">{{ busyText }}<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
         </div>
       </div>
-    </div>
-    <div v-if="tools" class="stage-tools">
-      <button class="round" title="放大" aria-label="放大预览" :disabled="zoom >= 1.4" @click="zoomBy(1.1)">
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" /></svg>
-      </button>
-      <button class="round" title="缩小" aria-label="缩小预览" :disabled="zoom <= 0.7" @click="zoomBy(0.9)">
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" /></svg>
-      </button>
-      <slot name="tools"></slot>
     </div>
   </div>
 </template>

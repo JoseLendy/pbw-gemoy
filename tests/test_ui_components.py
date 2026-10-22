@@ -59,22 +59,18 @@ def test_reason_badges_preserves_order_and_is_demo_flag():
     assert C.reason_badges(card) == [("真实原因", False), ("模拟原因", True)]
 
 
-@pytest.mark.parametrize("platform,role,expected", [
-    ("朋友圈", "staff", True), ("朋友圈", None, True),
-    ("小红书", "staff", False), ("公众号", "staff", False),
-    ("小红书", "manager", True), ("公众号", None, True),
-])
-def test_can_act_follows_the_role_rule(platform, role, expected):
+@pytest.mark.parametrize("platform", ["朋友圈", "小红书", "公众号", "海报", "抖音"])
+@pytest.mark.parametrize("role", ["staff", "manager", None])
+def test_every_role_can_act_on_every_platform(platform, role):
     card = dataclasses.replace(_demo_card(), platform=platform)
     staff = StaffContext(staff_id="x", display_name="x", role=role) if role else None
-    assert C.can_act(card, staff) is expected
+    assert C.can_act(card, staff) is True
 
 
-def test_role_notice_only_appears_when_not_actionable():
-    card = dataclasses.replace(_demo_card(), platform="小红书")
+def test_no_platform_shows_a_role_notice():
     staff = StaffContext(staff_id="x", display_name="x", role="staff")
-    assert C.role_notice(card, staff) == "由店长发布"
-    assert C.role_notice(card, None) is None
+    for platform in ("朋友圈", "小红书", "公众号", "海报", "抖音"):
+        assert C.role_notice(dataclasses.replace(_demo_card(), platform=platform), staff) is None
 
 
 def test_card_locked_label():

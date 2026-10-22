@@ -27,7 +27,9 @@ from agent.schemas import (
 # ---------------------------------------------------------------- stores / slots / role rule (pure data)
 SLOT_ORDER = ("potential", "promo", "new_release", "customer_question")
 SLOT_LABELS = {"potential": "潜力款", "promo": "活动款", "new_release": "新品款", "customer_question": "顾客问答"}
-STAFF_ONLY_PLATFORMS = ("公众号", "小红书")   # plan §2.1: these are 由店长发布 for the staff role
+# Every role may generate every platform (product decision, 2026-10-22); the gate stays as the one
+# place a future role rule would go, so callers do not change.
+STAFF_ONLY_PLATFORMS: tuple[str, ...] = ()
 LOCKED_LABEL = "新品资料待总部确认"
 
 
@@ -52,13 +54,12 @@ def reason_badges(card: RecommendationCard) -> list[tuple[str, bool]]:
 
 
 def can_act(card: RecommendationCard, staff: Optional[StaffContext] = None) -> bool:
-    """plan §2.1: 朋友圈 cards are actionable by everyone; 公众号/小红书 are view-only for staff role."""
-    if card.platform not in STAFF_ONLY_PLATFORMS:
-        return True
-    return getattr(staff, "role", None) != "staff"
+    """Every role can generate every platform; staff is accepted so the signature stays binding."""
+    return card.platform not in STAFF_ONLY_PLATFORMS
 
 
 def role_notice(card: RecommendationCard, staff: Optional[StaffContext] = None) -> Optional[str]:
+    """The 「由店长发布」 line, only for a platform the caller's role may not act on (none today)."""
     return None if can_act(card, staff) else "由店长发布"
 
 

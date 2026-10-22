@@ -78,7 +78,7 @@ The UI's "today" comes from env DEMO_TODAY (default 2026-10-23), never the syste
 - On open: if prepared_post(store, date) returns a result, show it immediately under 「今日已为你准备好」 with a 「重新生成」 button (live generation). Else show the default card with a generate button.
 - The is_default card is first and large (「今日一条」); 「换一条」 reveals the other slots (潜力款 / 活动款 / 新品款 / 顾客问答).
 - Each card: slot label, product display_name (NEVER model_id), platform, and 「为什么推这条」 listing card.reasons in order; reasons with is_demo=true get a small 「模拟数据」 badge.
-- Role rule (§2.1): 朋友圈 cards actionable by everyone; 公众号/小红书 cards show 「由店长发布」 for staff role (view only).
+- Role rule (superseded 2026-10-22): every role (店员 / 店长) can generate and publish every platform; the platform pills list all five (朋友圈 / 小红书 / 公众号 / 海报 / 抖音).
 - Locked card → 「新品资料待总部确认」, no generate button.
 - Results: RunResult → existing phone preview + the 4 sections (headings verbatim; 四、核验结果 readable: fact IDs → values → source titles, check results) + 一键复制 / 保存图片 / 下载 + 「已发布 ✓」 (session state).
   EditBlocked → its message prominently, keep showing the previous result. NeedsReview → 「需人工确认」 with failing sentences highlighted and reasons; no copy button. fallback == "next_card" → small note 「今日主推暂不可用，已为你准备下一条」; "trimmed" → mentioned only in 四、核验结果.
@@ -98,8 +98,8 @@ The UI's "today" comes from env DEMO_TODAY (default 2026-10-23), never the syste
 - Prepared/recovery `RunResult` records are rehydrated into the phone + four-section view (images are
   placeholders on the first page-load render to avoid a network fetch; a later live render can fill
   them).
-- The default demo person is a `StaffContext(role="staff")`, so 公众号/小红书 cards show
-  「由店长发布」 and hide generation. The optional Stage 4 staff picker can replace it.
+- The default demo person is a `StaffContext(role="staff")`; every role may act on every platform
+  (`ui.components.can_act` is the single gate). The optional Stage 4 staff picker can replace it.
 - 「保存图片」saves the first image only (never a bulk zip), per CLAUDE.md rule 2 / WORKFLOW v4 rule 11.
 - 「加上立减500」 intentionally demonstrates the 8B price-traceability block (the brief's “show the
   price block” wording is superseded by `PROACTIVE_AGENT_PLAN.md` §4.3 and `FREEZE_CHECKLIST.md`).
