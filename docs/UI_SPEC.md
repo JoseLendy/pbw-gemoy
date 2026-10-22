@@ -3,8 +3,10 @@
 This reproduces the Phase 3 task brief as given to the assistant, word for word where possible, with
 a `**Status: DONE / PENDING**` marker added after each stage/section so a new session (or a teammate
 on another laptop) can see at a glance what is built and what is not. Where a status needed a note,
-the note follows the marker. See `docs/HANDOVER_UI.md` for what to do next, how to run and test, and
-known bugs - this file is the spec of record, not the runbook.
+the note follows the marker. This file is the spec of record, not the runbook.
+
+> **Historical record** (Phase 3, Gradio UI on `feat/proactive-ui`; every feature here was carried into the Vue UI, see `docs/superpowers/specs/2026-10-22-vue-ui-design.md`). The Gradio UI it refers to (`app.py`, tabs) was replaced by Vue + FastAPI (`server.py`, `frontend/`); the current product is described in `README.md` and `docs/项目说明.md`.
+> `docs/HANDOVER_UI.md` and the `ErrorReport*.md` files mentioned below are internal team notes and are not in the repo.
 
 Branch: `feat/proactive-ui`. Deadline given: **merged by Thu Oct 22, 14:00.**
 

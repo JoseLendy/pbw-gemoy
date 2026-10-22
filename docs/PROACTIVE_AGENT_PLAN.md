@@ -3,6 +3,8 @@
 > Team design doc for the 复赛 (semi-final → final) round.
 > Status: **v2.6, Phase 5 implementation**. Suggested repo location: `docs/PROACTIVE_AGENT_PLAN.md`.
 > Deadline: **video submission, Fri Oct 23, 17:00**.
+>
+> **Final state:** implemented as planned. The UI shipped as Vue + FastAPI instead of Gradio tabs (see §9); the current product is described in `README.md` and `docs/项目说明.md`.
 
 **Changelog**
 - **v2.6 (Wed Oct 21, Phase 5):** latency: per-product fact cache (§7 "verify once, generate many"), stores generated 4 at a time, 8A/8B/8D run in parallel within a check pass, per-stage timings in every run. Fallback for posts still failing after 2 rewrites: trim the failing sentences → the store's next card → 「需人工确认」 (`NeedsReview`); an unchecked post is never delivered (`docs/UI_BACKEND_CONTRACT.md`).
@@ -404,7 +406,9 @@ The last panel was roadmap in v1. Since fake data is allowed, it can be shown ch
 
 ---
 
-## 9. Demo views (Gradio tabs)
+## 9. Demo views
+
+> **As shipped:** the Vue app has 门店端 (today's card, = view 1), 生成 (= view 4, as a 点选 four-step picker or 直接输入), 总部端 (= view 3) and 登录 (store + role, or HQ account). 三店对比 shipped as **四店对比** and, with 对照组, sits behind the engineer passcode (`ENGINEER_PASSCODE`). The plan text below is kept as written.
 
 1. **门店端 · 今日推荐** — store selector (demo only), today's card(s), explanation, **the prepared post shown on open** (`prepared_post`), **重新生成** (live `run_from_card`), preview, copy, "已发布". The 新品款 card shows the “总部新品推送（演示流程）” label.
 2. **三店对比** — same product, same day, side by side as phone previews: S01 campus, S04 CBD, S08 residential, plus **S02, a second campus store**, to show same-type stores still differ. *The key video shot.*

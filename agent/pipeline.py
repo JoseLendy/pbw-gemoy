@@ -677,7 +677,8 @@ def _deliverable(post: Post) -> bool:
 
 
 def _next_card(card: RecommendationCard) -> Optional[RecommendationCard]:
-    """The store's next unlocked card after this one (潜力款 → 活动款 → 顾客问答 → 新品款 if verified)."""
+    """The store's next unlocked card after this one (潜力款 → 活动款 → 顾客问答 → 新品款 if verified), on the
+    same platform: a 小红书 / 公众号 version must not fall back to the next card's default 朋友圈."""
     from agent.recommend.store_data import cards_for
     if not card.date:
         return None
@@ -687,7 +688,8 @@ def _next_card(card: RecommendationCard) -> Optional[RecommendationCard]:
         return None
     rank = {slot: i for i, slot in enumerate(NEXT_CARD_ORDER)}
     later = [c for c in cards if not c.locked and c.slot != card.slot]
-    return min(later, key=lambda c: rank.get(c.slot, 99), default=None)
+    nxt = min(later, key=lambda c: rank.get(c.slot, 99), default=None)
+    return dataclasses.replace(nxt, platform=card.platform) if nxt is not None else None
 
 
 def _errors_n(r) -> int:

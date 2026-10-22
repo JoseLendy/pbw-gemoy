@@ -1,5 +1,7 @@
 # Freeze checklist — 复赛 video
 
+> **Note:** the UI view called 三店对比 below shipped as **四店对比** (engineer view, unlocked with `ENGINEER_PASSCODE` in 登录). Start the app with `python server.py` (see `README.md`).
+
 Deadline: **Fri Oct 23, 17:00**. Record Friday morning; submit by ~15:00 with a 2-hour buffer.
 This is the Phase 4 freeze gate. Tick every item before recording.
 
@@ -39,10 +41,6 @@ This is the Phase 4 freeze gate. Tick every item before recording.
 - [ ] Real runs write `runs/<date>/<timestamp>-<store>-<slot>.json`; `latest_run(card_id)` works.
 - [ ] `runs/` is gitignored; no run log or KB text is committed.
 - [ ] `phase4.md` is not committed to the wrong branch.
-
-## Video scenes
-
-Dry-run each scene once and list the exact store/card/input:
 
 ## Video scenes
 
