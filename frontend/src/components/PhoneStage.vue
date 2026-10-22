@@ -16,17 +16,24 @@ function zoomBy(f) { zoom.value = Math.round(Math.min(1.4, Math.max(0.7, zoom.va
           <div class="notch"></div>
           <div class="screen hw-empty"><img class="hw-logo-img" src="/logo.png" alt="HUAWEI" /></div>
         </div>
-        <div v-if="busy" class="hw-loading-overlay">
-          <div class="hw-spinner"></div>
-          <div class="hw-thinking-title">{{ busyText }}</div>
+        <div v-if="busy" class="hw-loading-overlay" role="img" :aria-label="busyText">
+          <div class="skel" aria-hidden="true">
+            <span class="skel-img"></span>
+            <span class="skel-line w90"></span>
+            <span class="skel-line w70"></span>
+            <span class="skel-line w80"></span>
+            <span class="skel-row"><span class="skel-img sm"></span><span class="skel-img sm"></span><span class="skel-img sm"></span></span>
+            <span class="skel-line w60"></span>
+          </div>
+          <div class="hw-thinking-title">{{ busyText }}<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></div>
         </div>
       </div>
     </div>
-    <div v-if="tools" class="hw-tools">
-      <button class="hw-round" title="放大" aria-label="放大预览" :disabled="zoom >= 1.4" @click="zoomBy(1.1)">
+    <div v-if="tools" class="stage-tools">
+      <button class="round" title="放大" aria-label="放大预览" :disabled="zoom >= 1.4" @click="zoomBy(1.1)">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" /></svg>
       </button>
-      <button class="hw-round" title="缩小" aria-label="缩小预览" :disabled="zoom <= 0.7" @click="zoomBy(0.9)">
+      <button class="round" title="缩小" aria-label="缩小预览" :disabled="zoom <= 0.7" @click="zoomBy(0.9)">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" /></svg>
       </button>
       <slot name="tools"></slot>

@@ -17,7 +17,33 @@ function makeId() {
 
 export const sessionId = ref(makeId())
 export const meta = reactive({ today: '', stores: [], chips: [], platforms: [], compare_products: [],
-  compare_platforms: [], manual_platforms: [], manual_examples: [], quick_edits: [] })
+  compare_platforms: [], manual_platforms: [], manual_examples: [], manual_products: [], manual_scenarios: [],
+  quick_edits: [] })
+
+// ---- demo account (登录) and the engineer gate, both per browser tab like the session id
+function readJson(key, fallback) {
+  try { return JSON.parse(sessionStorage.getItem(key)) || fallback } catch { return fallback }
+}
+function writeJson(key, value) {
+  try { sessionStorage.setItem(key, JSON.stringify(value)) } catch { /* private mode: keep in memory */ }
+}
+/** kind: 'store' | 'hq'; store_id / store_name / role only for a store account. Empty until 登录. */
+export const account = reactive(readJson('hwpc-account', { kind: '', store_id: '', store_name: '', role: '店员' }))
+export function setAccount(next) {
+  Object.assign(account, next)
+  writeJson('hwpc-account', { ...account })
+}
+export const engineer = reactive({ unlocked: readJson('hwpc-engineer', false) === true })
+export async function unlockEngineer(code) {
+  const r = await postJson('/api/engineer/unlock', { code })
+  if (r.ok) { engineer.unlocked = true; writeJson('hwpc-engineer', true) }
+  return r
+}
+export function lockEngineer() { engineer.unlocked = false; writeJson('hwpc-engineer', false) }
+
+/** Server banners still carry emoji status marks; the UI draws its own tone, so drop them. */
+const EMOJI_MARKS = /(?:✅|❌|⚠️|⚠|ℹ️|ℹ|💬|🔒|⛔|⏱️|⏱|✏️|✏)️?\s?/g
+export function cleanHtml(html) { return (html || '').replace(EMOJI_MARKS, '') }
 export const status = reactive({ kb_name: '', kb_state: '', kb_ok: false, checking: true, index_label: '',
   index_status: '', model: '', model_fast: '', configured: false, dev_mode: false, fake_fields: [], error: '', today: '' })
 
