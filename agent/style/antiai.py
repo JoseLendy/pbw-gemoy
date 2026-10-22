@@ -18,6 +18,8 @@ Issue codes (stage "8D"):
   ai_parallel    more parallel sentences in a row than the limit                                 error
   ai_emoji       emoji over the platform limit                                                   error
   ai_no_detail   no concrete detail (landmark / specific scene / logged question) on a card post  error
+  ai_theme_copied  the card's calendar theme copied as a phrase (it is an idea, e.g. 「购物节前做功课」)  error
+  ai_cta_legal   the CTA reads like legal text (「以……为准」「按实际……确认」); conditions belong in the fact sentence  error
   ai_judge       the LLM judge still reads it as machine-written                                  error
   ai_check_skipped  the LLM judge failed; stage 1 still ran                                      warn
 """
@@ -182,6 +184,31 @@ def _detail_issues(post: Post, task, bl: dict) -> list[CheckIssue]:
                    "body")]
 
 
+_THEME_GAP = r"[^。！？!?\n]{0,4}"     # a filler word or two inside the copied theme (「购物节前先来做做功课」)
+_CTA_LEGAL_RE = re.compile(r"(?:以|按)[^，。！？!?\n]{0,10}(?:为准|确认)|请以|具体以|实际销售版本")
+
+
+def _theme_issues(post: Post, task) -> list[CheckIssue]:
+    """The calendar theme is a writing idea: its words copied as a phrase read the same in every store."""
+    theme = re.sub(r"\s+", "", getattr(task, "calendar_theme", None) or "") if task is not None else ""
+    if getattr(task, "source", "manual") != "card" or len(theme) < 4:
+        return []
+    pat = re.compile(_THEME_GAP.join(re.escape(ch) for ch in theme))
+    for field, clean in _fields(post):
+        m = pat.search(clean)
+        if m:
+            return [_issue("ai_theme_copied", f"照抄了时间背景「{theme}」：它只是写作思路，换成自己的话", field, m.group(0))]
+    return []
+
+
+def _cta_issues(post: Post) -> list[CheckIssue]:
+    m = _CTA_LEGAL_RE.search(_strip_tags(post.cta or ""))
+    if not m:
+        return []
+    return [_issue("ai_cta_legal", "行动引导读起来像免责条款：只写怎么来、来做什么；条件写在对应的事实句里",
+                   "cta", m.group(0))]
+
+
 # ------------------------------------------------------------------ stage 2: LLM judge (temp 0)
 def _judge(post: Post, llm) -> list[CheckIssue]:
     system = ("你是文案风格审核员。判断这段推广文案是否像机器套模板写出来的：空泛的形容词堆砌、"
@@ -213,6 +240,8 @@ def check_style(post: Post, task=None, llm=None) -> CheckReport:
     issues += _parallel_issues(post, bl)
     issues += _emoji_issues(post, bl)
     issues += _detail_issues(post, task, bl)
+    issues += _theme_issues(post, task)
+    issues += _cta_issues(post)
     if not issues and llm is not None:
         issues += _judge(post, llm)
     return CheckReport(issues)

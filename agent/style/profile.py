@@ -27,7 +27,8 @@ VOICE_TONE = {
 HOOK_OPENING = {
     "scene": "开头用一个具体场景切入（时间、地点、正在做的事），不要先列参数。",
     "question": "开头直接问读者一个问题（用“你”来问）；不要转述成“顾客常问”“很多人问”；全文反问句不超过 1 个。",
-    "myth": "开头用“你可能以为……”点出一个误解，再说明资料里的事实；不写“有人说/常听人说”；不贬低其他品牌，不做对比。",
+    "myth": "开头先点出一个常见的误解，再用资料里的事实说明；用你自己的话写，不要用「你可能以为」「很多人以为」"
+            "这类固定开头；不写“有人说/常听人说”；不贬低其他品牌，不做对比。",
     "checklist": "开头用清单式引入（例如“买之前先看这几点”），后面每条对应事实编号。",
 }
 CUSTOMER_HOOK = "customer"
@@ -87,7 +88,8 @@ def _detail_block(task) -> list[str]:
         out.append(f"正文里要自然带一次门店位置：{landmark}（这是只有本店写得出的细节）。只出现一次，不要写地址细节之外的信息。")
     nickname = getattr(task, "nickname", None)
     if nickname and (getattr(task, "platform", "") == "moments"):
-        out.append(f"结尾可以用「{nickname}」署名，只出现一次。")
+        out.append(f"结尾可以用「{nickname}」署名，只出现一次，单独成行放在最后；不要用逗号接在句子后面"
+                   f"（不写“……上手试试，{nickname}”）。")
     elif nickname:
         out.append("本平台不用署名：正文里不要出现昵称或店名落款。")
     return out
@@ -100,7 +102,8 @@ def _angle_block(task) -> list[str]:
         out.append(f"内容角度：{angle}。整篇围绕这个角度组织，不要写成参数清单。")
     theme = getattr(task, "calendar_theme", None)
     if theme:
-        out.append(f"时间背景：{theme}。只用来说明“什么时候适合看/买”，不得暗示折扣、优惠、降价、库存或促销价。")
+        out.append(f"时间背景（只是写作思路，不要照抄这几个字）：{theme}。用你自己的话点到时间即可，"
+                   "只用来说明“什么时候适合看/买”，不得暗示折扣、优惠、降价、库存或促销价。")
     return out
 
 
@@ -137,6 +140,23 @@ def _claim_block(task) -> list[str]:
     return lines
 
 
+# Stock wording that read as copy-paste across stores (2026-10-23 review). Also matched by 8E across the day.
+STOCK_PHRASES = ("你可能以为", "很多人以为", "先把这个数字记下来", "先做功课", "做做功课")
+
+
+def _variety_block(task) -> list[str]:
+    lines = ["不要用这些套话：" + "、".join(f"「{p}」" for p in STOCK_PHRASES) + "。",
+             "行动引导只说怎么来、来做什么（到店上手、私信），不写“以……为准”“按实际……确认”这类条件或免责说法；"
+             "条件只写在对应的事实句里。"]
+    facts = list(getattr(task, "avoid_facts", None) or [])
+    if facts:
+        lines.append("今天其他门店已经在讲这些卖点：" + "、".join(facts) + "。本文换一个卖点。")
+    phrases = list(getattr(task, "avoid_phrases", None) or [])
+    if phrases:
+        lines.append("今天其他门店已经用过这些说法，本文换一种说法，不要出现：" + "、".join(f"「{p}」" for p in phrases) + "。")
+    return lines
+
+
 def _release_block(task) -> list[str]:
     # The card's demo launch_date only schedules it; it is never given to the writer (Phase 5, Task 2).
     # Only the new-launch scenario pulls the writer toward 新品 wording; 8B blocks it on every card run.
@@ -159,8 +179,9 @@ def brief(task) -> str:
     lines += _angle_block(task)
     lines += _promo_block(task)
     lines += _claim_block(task)
+    lines += _variety_block(task)
     lines += _release_block(task)
     return "\n".join(f"- {line}" for line in lines if line)
 
 
-__all__ = ["brief", "voice_label", "hook_label", "VOICE_TONE", "HOOK_OPENING", "CUSTOMER_HOOK"]
+__all__ = ["brief", "voice_label", "hook_label", "VOICE_TONE", "HOOK_OPENING", "CUSTOMER_HOOK", "STOCK_PHRASES"]

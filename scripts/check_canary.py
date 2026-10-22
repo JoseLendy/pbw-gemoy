@@ -76,13 +76,16 @@ def main(argv=None) -> int:
     _, sib_ledger = get_facts(deps, sibling, day)
     siblings = {sibling: sib_ledger}
 
-    def task_for(store, slot):
+    from agent.checks.conformance import accepted_product_names
+    name = (accepted_product_names(target) or [deps.catalog.get(target).canonical_name])[0]
+
+    def task_for(store, slot):     # the card is re-pointed at the target model: its display name too
         card = next(c for c in cards_for(store, day) if c.slot == slot)
-        return card_to_task(dataclasses.replace(card, model_id=target))
+        return card_to_task(dataclasses.replace(card, model_id=target, display_name=name))
 
     plain = task_for("S01", default_card("S01", day).slot)              # no price record
     promo_card = next((c for c in cards_for("S02", day) if c.slot == "promo"), None)
-    promo = card_to_task(dataclasses.replace(promo_card, model_id=target)) if promo_card else None
+    promo = card_to_task(dataclasses.replace(promo_card, model_id=target, display_name=name)) if promo_card else None
     rec = valid_price_record(card_to_task(promo_card)) if promo_card else None
 
     images = bundle.images[:2]
@@ -92,12 +95,14 @@ def main(argv=None) -> int:
     b = _numeric(ledger, exclude={a.id} | {f.id for f in ledger.facts if f.attribute == a.attribute})
     cta = "有问题可以私信我。"          # no 周末 / opening-hours promise: the store data has none
 
-    def invite(task):                  # each card's own store landmark (S02's card must not name S01's)
-        return f"店在{task.landmark}附近，想上手可以过来看看。" if task.landmark else "想上手可以来店里看看。"
+    def invite(task, named=True):      # each card's own store landmark (S02's card must not name S01's)
+        what = f"{name}实机" if named else "实机"        # the product's name is not a product claim
+        return (f"店在{task.landmark}附近，想上手{what}可以过来看看。" if task.landmark
+                else f"想上手{what}可以来店里看看。")
 
-    def draft(*sentences, task=None):
+    def draft(*sentences, task=None, named=True):
         task = task or plain
-        return Post(platform="moments", title="", intro="", body=[" ".join(sentences), invite(task)],
+        return Post(platform="moments", title="", intro="", body=[" ".join(sentences), invite(task, named)],
                     cta=cta, tags=["门店推荐"],
                     selling_points=[a.id], images=copy.deepcopy(post_images)), task
 
@@ -142,6 +147,7 @@ def main(argv=None) -> int:
         (Case("赋能 + 不仅…更…", True), draft(clean_a, "它不仅仅是一台电脑，更是赋能学习的伙伴。")),
         (Case(f"{sibling} 的参数写在 {target} 下", True),
          draft(clean_a, f"这一项是 {sib.value} [{same_attr[sib.attribute]}]。") if sib else draft(clean_a)),
+        (Case("只写「这台」，全文没有产品名称", True), draft(clean_a, named=False)),
         (Case("干净稿 1 · 潜力款 · 可用结论原文", False), draft(scene, clean_a)),
         (Case("干净稿 2 · 潜力款 · 无边界的参数", False), draft(clean_b)),
     ]

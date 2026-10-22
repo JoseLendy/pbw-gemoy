@@ -89,6 +89,9 @@ class Task:
     question: Optional[dict] = None         # CardQuestion.to_dict(): the only allowed customer-question source
     staff: Optional[dict] = None            # StaffContext.to_dict() if a person was given
     card_date: Optional[str] = None         # ISO date of the card: an active-campaign check needs it
+    # -- 8E batch variety (generate_batch only): what other stores already use today. Empty otherwise.
+    avoid_facts: list[str] = field(default_factory=list)     # fact ids: reconcile picks another point
+    avoid_phrases: list[str] = field(default_factory=list)   # wording: the writer says it differently
     to_dict = _d
 
 

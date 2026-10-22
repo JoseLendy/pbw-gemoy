@@ -145,7 +145,9 @@ def run_all(post: Post, ledger: Ledger, sibling_ledgers: dict[str, Ledger], task
     else:
         r_facts, r_comp, r_style = facts(), compliance(), style()
     with stage("check.8C"):
+        from agent.checks.conformance import check_product_name
         r_conf = check_conformance(post, platform, plan)
+        r_conf = CheckReport(r_conf.issues + check_product_name(post, task))
     return dedupe_style_hits(r_facts.merge(r_comp).merge(r_conf).merge(r_style))
 
 

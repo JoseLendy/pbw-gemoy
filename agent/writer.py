@@ -3,6 +3,7 @@ Step 7: writer + targeted rewrite. The LLM writes; code validates every field ag
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 from typing import Iterable
@@ -70,12 +71,33 @@ def brief_block(task: Task) -> str:
         return ""
 
 
+def product_names(task: Task) -> list[str]:
+    """[full display name, unambiguous short forms...] for the task's model (8C product_unnamed accepts these)."""
+    try:
+        from agent.checks.conformance import accepted_product_names
+        names = accepted_product_names(task.model_id, task.product_query if task.source == "card" else None)
+    except Exception:  # noqa: BLE001 - P3 module missing: fall back to what the task carries
+        names = []
+    return names or [n for n in (task.product_query,) if n]
+
+
+def _name_line(task: Task) -> str:
+    names = product_names(task)
+    if not names:
+        return ""
+    short = "、".join(f"「{n}」" for n in names[1:4])
+    return (f"产品名称：「{names[0]}」。文案里至少完整写出一次这个名称"
+            + (f"（或无歧义的官方简称：{short}）" if short else "")
+            + "；不能只用“这台”“这款”指代，也不要写成会对应多个型号的简称（如只写系列名加尺寸）。\n")
+
+
 def _context(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan) -> str:
     chosen, others = _usable(ledger, strategy)
     lo, hi = PLATFORM_IMAGE_RANGE.get(task.platform or "", (0, 0))
     parts = [
         f"## 任务\n型号={task.model_id}；人群={strategy.analysis.audience}；场景={task.scenario}；"
         f"平台={PLATFORM_LABELS.get(task.platform or '', task.platform)}；变体={task.variant or '未指定'}\n"
+        + _name_line(task) +
         f"额外要求（若涉及价格、补贴、销量、奖项、评价、测试结果、政策承诺，一律不写）：{task.extra_requirements or '无'}",
     ]
     # Proactive flow only: the card's hook / voice / landmark / angle / promo become explicit instructions.
@@ -104,6 +126,23 @@ def _system(task: Task, stage_prompt: str) -> str:
 def has_absolute_word(post: Post) -> bool:
     """Cheap pre-check (P3's checks stay authoritative): any 最 or other absolute word in the visible text."""
     return bool(_ABSOLUTE_RE.search(post.all_text()))
+
+
+def unglue_signoff(post: Post, nickname: str | None) -> Post:
+    """The staff sign-off goes on its own last line, never glued on with a comma ("……可以上手试试，小王")."""
+    if not nickname:
+        return post
+    glued = re.compile(r"[，,、]\s*" + re.escape(nickname) + r"\s*[。！!～~]?\s*$")
+
+    def fix(text: str) -> str | None:
+        return glued.sub("。", text.rstrip()) + "\n" + nickname if glued.search(text or "") else None
+
+    new = copy.copy(post)
+    if (cta := fix(post.cta)) is not None:
+        new.cta = cta
+    elif post.body and (last := fix(post.body[-1])) is not None:
+        new.body = [*post.body[:-1], last]
+    return new
 
 
 def _strip_bad_tags(text: str, valid: set[str]) -> str:
@@ -181,6 +220,8 @@ def write_post(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan, 
                              field=n) for n in fields]
         post = rewrite(post, issues, task, strategy, ledger, plan, llm)
 
+    post = unglue_signoff(post, task.nickname)
+
     # tags are always filled
     if not post.tags:
         post.tags = [PLATFORM_LABELS.get(post.platform, post.platform)]
@@ -238,4 +279,4 @@ def rewrite(post: Post, issues: list[CheckIssue], task: Task, strategy: Strategy
     removed = set(_used_ids(post)) - set(used)
     new.selling_points = [i for i in dict.fromkeys(post.selling_points + used)
                           if i in allowed and ledger.get(i) and i not in removed]
-    return new
+    return unglue_signoff(new, task.nickname)

@@ -1,0 +1,22 @@
+# Images never planned into a post (agent/image_filter.py). Manual list, reviewed 2026-10-22.
+# Keyed by sha256(media_id): no raw media id (it embeds a KB id), no file name and no caption is committed.
+# To add one: python -c "from agent.image_filter import media_hash; print(media_hash('<media_id>'))"
+images:
+  - id_sha256: 83484cfbb30e6349f35e8edbd7e5e4782a1537af17b21fb9e51d4d630df4b533
+    reason: stylus-scene photo that shows no stylus
+  - id_sha256: 5790ee28ec75a37e5c9db45218586c0236d021a97726672847dd1a4be1edebbb
+    reason: mall promo with a printed cooling-power claim
+  - id_sha256: 8053fd215aa44f1521b19ebc4577679464fc85f2162f45d8767781ace5c4841e
+    reason: mall promo with a printed display spec and an eye-comfort claim
+  - id_sha256: 522112d3b9d8cb3c21b2bf64a21fd0e879ba67d33738fc5a4162212c7dbdffd0
+    reason: mall promo with printed subsidy terms
+  - id_sha256: 4f537d6aa82d59307eccfec17437e3d0a96586231ee540dcf77f18f8bec63fbb
+    reason: mall promo with a printed battery-life claim and no qualifier
+  - id_sha256: db39e8e7013a5c9a788f88af8f5ecfce4052eb63866d2a176aaae02231002a72
+    reason: processor badge graphic labelled as a body-detail photo
+  - id_sha256: 5271c7abd679c8edf36838011d7cfcb2135aab456d311c4b6a6ecaaa721fa680
+    reason: promo graphic with a printed screen-ratio figure and no qualifier
+  - id_sha256: 0e0bf54650b1bdf2634e555474af5afbdf5864fee154d0b92b9f883e8c6c3a97
+    reason: processor badge graphic with a printed processor tier
+  - id_sha256: c42574acaabc03dc9ba89f1b9fe4a167517145ed315f26b0faf50e89d11eba7c
+    reason: processor badge graphic labelled as a product exterior photo

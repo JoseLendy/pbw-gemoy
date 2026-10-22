@@ -5,7 +5,8 @@ Morning run (push model): prepare every store's default post for a date and stor
     python scripts/prepare_today.py --today 2026-10-23          # real deps (ima + LLM)
     python scripts/prepare_today.py --today 2026-10-23 --fake   # rehearsal on tests/fakes -> runs/_rehearsal/
 
-Prints per store: status, rewrites, seconds taken, 8E similarity flags. Refuses to run when any dependency
+Prints per store: status, rewrites, seconds taken, its closest post of the day (8E compares every pair, not
+only peers) and any 8E breach (similar / phrase / stock / selling_point) with whether the rerun replaced it. Refuses to run when any dependency
 would fall back to a fake, unless --fake is passed. Never prints keys, the Client ID or KB IDs.
 """
 from __future__ import annotations
@@ -63,14 +64,18 @@ def main(argv=None) -> int:
     day = prepare_today(args.today, deps, runs_dir=runs_dir, card_map=card_map)
     threshold = similarity_threshold()
     print(f"prepare_today {day.date} · {'rehearsal (fakes)' if args.fake else 'real deps'}")
-    print(f"{'store':6} {'status':22} {'rewrites':>8} {'seconds':>8}  similarity")
+    print(f"{'store':6} {'status':22} {'rewrites':>8} {'seconds':>8}  closest post today (before→after)  8E")
     for sid in sorted(day.batch.results):
         r = day.batch.results[sid]
-        flags = [f"{p.store_a}×{p.store_b} {p.before}→{p.after}" + (" ⚠️" if p.after > threshold else "")
-                 for p in day.batch.similarity if sid in (p.store_a, p.store_b) and p.before > threshold]
-        regen = " (8E regenerated)" if sid in day.batch.regenerated else ""
+        mine = [p for p in day.batch.similarity if sid in (p.store_a, p.store_b)]
+        top = max(mine, key=lambda p: p.after, default=None)
+        closest = (f"{top.store_b if top.store_a == sid else top.store_a} {top.before}→{top.after}"
+                   + (" ⚠️" if top.after > threshold else "")) if top else "-"
+        v = day.batch.variety.get(sid)
+        flag = (",".join(v["reasons"]) + (" → regenerated" if v.get("replaced") else " → kept (rerun did not pass)")
+                if v else "-")
         print(f"{sid:6} {_status(r):22} {getattr(r, 'loops', '-')!s:>8} {day.batch.seconds.get(sid, 0):>8.1f}  "
-              f"{'; '.join(flags) or '-'}{regen}")
+              f"{closest:32}  {flag}")
     for sid, why in sorted(day.locked.items()):
         print(f"{sid:6} {'SKIPPED':22} {'-':>8} {'-':>8}  {why}")
     if day.errors:

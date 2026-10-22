@@ -264,7 +264,9 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
 def _from_plan(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
                strategy: Strategy, deps: Deps, on_progress: Progress, timer: _Timer) -> RunResult:
     _say(on_progress, "plan", f"规划 {PLATFORM_LABELS.get(task.platform, task.platform)} 版式…")
-    plan = deps.plan_images(bundle, task.platform, strategy)
+    # The selling-point facts steer which images fit (agent.platform_plan: no unrelated filler images).
+    focus = [f"{f.category} {f.attribute} {f.value}" for sp in strategy.selling_points if (f := ledger.get(sp.fact_id))]
+    plan = deps.plan_images(bundle, task.platform, strategy, focus=focus)
     timer.lap("plan")
     _say(on_progress, "plan", f"匹配到 {len(plan.items)} 张图片" + ("（不足，已标记待确认）" if plan.shortage else ""))
     return _from_write(task, model, bundle, ledger, sibling_ledgers, strategy, plan, deps, on_progress, timer)
@@ -362,15 +364,16 @@ def _log_real(card, result, staff, deps, kind: str = "run_from_card") -> None:
 
 
 def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: StaffContext | None = None,
-                  on_progress: Progress = None, fallback: bool = True
+                  on_progress: Progress = None, fallback: bool = True, avoid: dict | None = None
                   ) -> RunResult | LockedResult | NeedsHuman | NeedsReview:
     """Proactive entry (PROACTIVE_AGENT_PLAN §3): the card replaces the user sentence, so intake and model
     disambiguation are skipped (the card carries an exact model_id). A locked card returns LockedResult
     before any LLM or ima call. Otherwise continues from retrieval / scenario exactly like run().
 
     A draft that still fails after 2 rewrites goes through the fallback policy (fallback=True): trim the
-    failing sentences → the store's next unlocked card → NeedsReview. An unchecked post is never returned."""
-    result = _run_card(card, deps, staff, on_progress)
+    failing sentences → the store's next unlocked card → NeedsReview. An unchecked post is never returned.
+    avoid ({"facts": [...], "phrases": [...]}) is set by 8E in generate_batch: what other stores use today."""
+    result = _run_card(card, deps, staff, on_progress, avoid)
     if fallback and isinstance(result, RunResult) and not result.report.passed:
         deps = deps or default_deps()
         result = apply_fallback(card, result, deps, staff, on_progress)
@@ -379,7 +382,8 @@ def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: Sta
     return result
 
 
-def _run_card(card: RecommendationCard, deps: Deps | None, staff: StaffContext | None, on_progress: Progress):
+def _run_card(card: RecommendationCard, deps: Deps | None, staff: StaffContext | None, on_progress: Progress,
+              avoid: dict | None = None):
     if card.locked:
         reason = card.locked_reason or "locked"
         msg = LOCKED_MESSAGES.get(reason, "该推荐暂不可生成，请等待总部确认")
@@ -394,6 +398,9 @@ def _run_card(card: RecommendationCard, deps: Deps | None, staff: StaffContext |
     with collect(timer.timings):
         _say(on_progress, "card", f"今日推荐：{card.slot_label} {card.display_name or card.model_id} → {card.platform}")
         task = card_to_task(card, staff)       # raises ValueError on a staff voice the segment does not allow
+        if avoid:
+            task.avoid_facts = list(avoid.get("facts") or [])
+            task.avoid_phrases = list(avoid.get("phrases") or [])
         timer.lap("intake")
         result = _from_retrieval(task, deps, on_progress, timer)
     _log_real(card, result, staff, deps)
@@ -418,6 +425,7 @@ class BatchResult:
     seconds: dict[str, float] = field(default_factory=dict)   # store_id -> wall-clock incl. 8E reruns
     regen_seconds: dict[str, float] = field(default_factory=dict)   # store_id -> part of that spent on 8E reruns
     wall_seconds: float = 0.0               # the whole batch (stores run concurrently)
+    variety: dict[str, dict] = field(default_factory=dict)   # store_id -> 8E breach: reasons, avoided, kept?
 
 
 def batch_max_workers() -> int:
@@ -435,22 +443,43 @@ def _batch_text(result) -> str:
     return render_publishable(result.post)
 
 
+def _variety_entry(card: RecommendationCard, result) -> Optional[dict]:
+    """What 8E compares for one store: the final text plus the wording it may repeat (fact values and
+    qualifiers, product names, store details): copying a fact's wording is required, never a style repeat."""
+    if not isinstance(result, RunResult):
+        return None
+    task = result.task
+    keep = [f.value for f in result.ledger.facts] + [f.qualifier for f in result.ledger.facts if f.qualifier]
+    keep += [task.product_query, task.landmark, task.store_name, task.nickname, card.display_name]
+    try:
+        from agent.writer import product_names
+        keep += product_names(task)
+    except Exception:  # noqa: BLE001
+        pass
+    return {"store_id": card.store_id, "segment": card.segment, "model_id": task.model_id,
+            "selling_points": list(result.post.selling_points), "text": _batch_text(result),
+            "keep": [k for k in keep if k], "customer": card.slot == "customer_question"}
+
+
 def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = None,
                    on_progress: Progress = None) -> BatchResult:
     """Run several recommendation cards and enforce 8E cross-store variety.
 
-    Same-peer stores whose publishable text exceeds SIMILARITY_THRESHOLD are regenerated once (the later
-    store id): first with the next hook unused by peers today; if still above the threshold, also with
-    the next unused angle. Model, platform and facts never change; customer-question cards keep the
-    reserved customer hook. Returns final results plus before/after similarity pairs for the UI / eval report.
+    8E compares every post with every other post of the day (agent.style.similarity.variety_breaches): too
+    similar, a phrase in more than 3 posts, a repeated stock opener / filler, or one product's selling point in
+    more than 2 stores (or twice in a peer group). The later store id is regenerated once: the next hook unused
+    by its peers, told what to avoid (selling points: reconcile drops them; wording: the writer brief lists it),
+    and, if still too similar, the next unused angle. The rerun replaces the post only if it passes all checks;
+    model and platform never change; customer-question cards are never regenerated. Returns final results,
+    before/after similarity pairs for every pair of the day, and the per-store breach record (`variety`).
 
     The first pass runs stores concurrently (BATCH_MAX_WORKERS, default 4); results keep the input order and
-    a store's exception becomes that store's result. 8E comparison and regeneration run after that pass,
-    sequentially, exactly as before. Same-model stores share one retrieval + ledger (agent.fact_cache).
+    a store's exception becomes that store's result. The 8E reruns also run concurrently, after that pass.
+    Same-model stores share one retrieval + ledger (agent.fact_cache).
     """
     from agent.formatter import render_publishable   # noqa: F401  (used by _batch_text)
     from agent.recommend.common import INPUTS, load_json
-    from agent.style.similarity import jaccard, similarity_threshold
+    from agent.style.similarity import jaccard, similarity_threshold, variety_breaches
 
     t_batch = time.perf_counter()
     deps = deps or default_deps()
@@ -462,9 +491,12 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
     seconds: dict[str, float] = defaultdict(float)
     regen_seconds: dict[str, float] = defaultdict(float)
 
-    def timed_run(card, regen: bool = False):
+    def timed_run(card, regen: bool = False, avoid: dict | None = None):
         t0 = time.perf_counter()
         try:
+            if regen:     # an 8E rerun stands on its own: no trim / next-card fallback
+                return run_from_card(card, deps, staff_map.get(card.store_id), on_progress, fallback=False,
+                                     avoid=avoid)
             return run_from_card(card, deps, staff_map.get(card.store_id), on_progress)
         finally:
             dt_ = time.perf_counter() - t0
@@ -490,93 +522,78 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
     for card, out in zip(items, outs):
         results[card.store_id] = out
 
-    groups: dict[str, list[str]] = defaultdict(list)
-    for card in items:
-        groups[card.segment].append(card.store_id)
-    for group in groups.values():
-        group.sort()
     initial = {sid: _batch_text(r) for sid, r in results.items()}
-    threshold = similarity_threshold()
     angles_cfg = load_json(INPUTS / "angles.json")
+    breaches = variety_breaches([e for card in items if (e := _variety_entry(card, results[card.store_id]))])
     regenerated: list[str] = []
+    variety: dict[str, dict] = {}
 
-    def peer_text(sid: str) -> str:
-        return _batch_text(results.get(sid))
-
-    changed = True
-    while changed:
-        changed = False
-        for seg, sids in groups.items():
-            for i, a in enumerate(sids):
-                for b in sids[i + 1:]:
-                    ta, tb = peer_text(a), peer_text(b)
-                    if not ta or not tb or jaccard(ta, tb) <= threshold:
-                        continue
-                    later = b                         # sids are sorted, so b is the later store
-                    if later in regenerated:
-                        continue
-                    card = by_store[later]
-                    if card.slot == "customer_question":   # customer hook is reserved for the logged question
-                        continue
-                    peer_cards = [by_store[s] for s in sids if s != later]
-                    used_hooks = {c.hook.id for c in peer_cards if c.hook}
-                    used_angles = {c.angle for c in peer_cards if c.angle}
-                    current_hook = card.hook.id if card.hook else None
-                    hooks = [h for h in angles_cfg["hooks"] if not h.get("requires_logged_question")]
-                    next_hook = next((h for h in hooks
-                                      if h["id"] not in used_hooks and h["id"] != current_hook), None)
-                    seg_angles = angles_cfg["segment_angles"][seg]
-                    next_angle = next((x for x in seg_angles
-                                       if x not in used_angles and x != card.angle), None)
-                    if next_hook is None and next_angle is None:
-                        continue
-                    def max_peer_sim(text: str) -> float:
-                        vals = [jaccard(text, peer_text(s)) for s in sids if s != later and peer_text(s)]
-                        return max(vals, default=0.0)
-
-                    new_card = copy.deepcopy(card)
-                    hook_changed = next_hook is not None
-                    if hook_changed:
-                        new_card.hook = CardHook(next_hook["id"], next_hook["label"])
-                    if not hook_changed and next_angle is not None:
-                        new_card.angle = next_angle
-                    try:
-                        new_result = timed_run(new_card, regen=True)
-                    except Exception:  # noqa: BLE001 - keep the original result if the rerun fails
-                        continue
-                    if not isinstance(new_result, RunResult):
-                        continue
-                    by_store[later] = new_card
-                    results[later] = new_result
-                    # Phase 4 wording: hook first; only if still above the threshold, also change angle.
-                    if hook_changed and next_angle is not None and max_peer_sim(_batch_text(new_result)) > threshold:
-                        angle_card = copy.deepcopy(new_card)
-                        angle_card.angle = next_angle
-                        try:
-                            angle_result = timed_run(angle_card, regen=True)
-                        except Exception:  # noqa: BLE001
-                            angle_result = None
-                        if isinstance(angle_result, RunResult):
-                            by_store[later] = angle_card
-                            results[later] = angle_result
-                    regenerated.append(later)
-                    changed = True
-                    break
-                if changed:
-                    break
-            if changed:
+    def rerun(sid: str, breach: dict):
+        """One 8E regeneration: the next unused hook (peer group), the avoid lists, and, if the post is still too
+        similar, the next unused angle too. Returns (card, result) or None; never falls back to another card."""
+        card = by_store[sid]
+        peers = [by_store[s] for s in by_store if s != sid and by_store[s].segment == card.segment]
+        used_hooks = {c.hook.id for c in peers if c.hook}
+        used_angles = {c.angle for c in peers if c.angle}
+        current_hook = card.hook.id if card.hook else None
+        hooks = [h for h in angles_cfg["hooks"] if not h.get("requires_logged_question")]
+        next_hook = next((h for h in hooks if h["id"] not in used_hooks and h["id"] != current_hook), None) \
+            or next((h for h in hooks if h["id"] != current_hook), None)
+        next_angle = next((x for x in angles_cfg["segment_angles"].get(card.segment, [])
+                           if x not in used_angles and x != card.angle), None)
+        avoid = {"facts": breach["avoid_facts"], "phrases": breach["avoid_phrases"]}
+        new_card = copy.deepcopy(card)
+        if next_hook is not None:
+            new_card.hook = CardHook(next_hook["id"], next_hook["label"])
+        elif next_angle is not None:
+            new_card.angle, next_angle = next_angle, None
+        best = None
+        for attempt in range(2):
+            try:
+                out = timed_run(new_card, regen=True, avoid=avoid)
+            except Exception as e:  # noqa: BLE001 - keep the original result if the rerun fails
+                log.warning("8E rerun failed for %s: %s", sid, e)
                 break
+            if isinstance(out, RunResult) and out.report.passed:
+                best = (new_card, out)
+            if attempt or "similar" not in breach["reasons"] or next_angle is None or best is None:
+                break
+            ref = initial.get(breach["similar_to"] or "", "")
+            if jaccard(_batch_text(best[1]), ref) <= similarity_threshold():
+                break
+            new_card = copy.deepcopy(new_card)          # still too similar: also the next unused angle
+            new_card.angle = next_angle
+        return best
+
+    targets = [sid for sid in sorted(breaches) if sid in by_store]
+    if targets:
+        _say(on_progress, "8E", f"跨门店去重：{len(targets)} 家门店需要换一种写法")
+    if workers == 1 or len(targets) <= 1:
+        reruns = [rerun(sid, breaches[sid]) for sid in targets]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            reruns = list(ex.map(lambda sid: rerun(sid, breaches[sid]), targets))
+    for sid, got in zip(targets, reruns):
+        variety[sid] = {**breaches[sid], "replaced": got is not None}
+        if got is None:                # a failing rerun never replaces a passing post
+            continue
+        by_store[sid], results[sid] = got
+        regenerated.append(sid)
 
     pairs: list[SimilarityPair] = []
-    for seg, sids in groups.items():
-        for i, a in enumerate(sids):
-            for b in sids[i + 1:]:
-                before, after = initial.get(a, ""), initial.get(b, "")
-                if not before and not after:
-                    continue
-                pairs.append(SimilarityPair(seg, a, b, round(jaccard(before, after), 3),
-                                            round(jaccard(peer_text(a), peer_text(b)), 3), b in regenerated))
-    batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated,
+    sids = sorted(results)
+    for i, a in enumerate(sids):
+        for b in sids[i + 1:]:
+            before_a, before_b = initial.get(a, ""), initial.get(b, "")
+            if not before_a and not before_b:
+                continue
+            seg_a, seg_b = by_store[a].segment, by_store[b].segment
+            pairs.append(SimilarityPair(seg_a if seg_a == seg_b else f"{seg_a}/{seg_b}", a, b,
+                                        round(jaccard(before_a, before_b), 3),
+                                        round(jaccard(_batch_text(results[a]), _batch_text(results[b])), 3),
+                                        b in regenerated or a in regenerated))
+    batch = BatchResult(results=results, similarity=pairs, regenerated=regenerated, variety=variety,
                         seconds={sid: round(v, 2) for sid, v in seconds.items()},
                         regen_seconds={sid: round(v, 2) for sid, v in regen_seconds.items()},
                         wall_seconds=round(time.perf_counter() - t_batch, 2))
