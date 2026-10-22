@@ -39,3 +39,5 @@ frontend/dist/
 # extracted precompute archive (copied to runs/)
 2026-10-23/
 ErrorReport*.md
+# internal team notes (handover docs) stay local
+docs/HANDOVER*.md
