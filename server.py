@@ -305,16 +305,24 @@ def _public_account(acct: dict | None) -> dict | None:
 
 
 def _reset_session(sid: str) -> dict:
-    """A fresh tab state without changing the session id or its lock (login / logout)."""
-    s = _session(sid)
-    with s["lock"]:
-        lock = s["lock"]
-        s.clear()
-        s.update(fresh_session())
-        s["id"] = _sid(sid)
-        s["lock"] = lock
-        s["manual"] = {"id": s["id"], "reset_seen": reset_token()}
-    return s
+    """A fresh session for login / logout. We swap in a brand-new dict (with a new lock) instead of
+    clearing the old one in place, so a logout is not blocked by an in-flight generation that holds the
+    old lock — the old worker keeps its orphaned copy and finishes harmlessly. The old account's hidden
+    platform prefetch is cancelled before the swap."""
+    sid = _sid(sid)
+    fresh = fresh_session()
+    fresh["id"] = sid
+    fresh["manual"] = {"id": sid, "reset_seen": reset_token()}
+    fresh["lock"] = threading.Lock()
+    fresh["_touched"] = time.time()
+    with _SESSIONS_LOCK:
+        old = _SESSIONS.get(sid)
+        if old is not None:
+            cancel = (old.get("manual") or {}).get("prefetch_cancel")
+            if cancel is not None:
+                cancel.set()
+        _SESSIONS[sid] = fresh
+    return fresh
 
 
 # ---------------------------------------------------------------- NDJSON streaming helper
@@ -1117,9 +1125,11 @@ def api_manual_download_image(session_id: str = "", idx: int = 0):
     _require(session_id)
     s = _session(session_id)
     r = _manual(s).get("result")
+    if r is None:
+        return JSONResponse({"error": "还没有生成内容，请先生成后再下载。"}, status_code=409)
     images = list(getattr(getattr(r, "post", None), "images", None) or [])
     if not images:
-        return JSONResponse({"error": "当前没有可下载的图片。"}, status_code=409)
+        return JSONResponse({"error": "这篇内容没有可下载的图片。"}, status_code=409)
     i = max(0, min(int(idx), len(images) - 1))
     im = images[i]
     data = cached_image_bytes(im.media_id)
@@ -1147,9 +1157,11 @@ def api_manual_download_images(session_id: str = ""):
     _require(session_id)
     s = _session(session_id)
     r = _manual(s).get("result")
+    if r is None:
+        return JSONResponse({"error": "还没有生成内容，请先生成后再下载。"}, status_code=409)
     images = list(getattr(getattr(r, "post", None), "images", None) or [])
     if not images:
-        return JSONResponse({"error": "当前没有可下载的图片。"}, status_code=409)
+        return JSONResponse({"error": "这篇内容没有可下载的图片。"}, status_code=409)
     fetch = getattr(DEPS, "fetch_image_bytes", None)
     buf = io.BytesIO()
     added = 0

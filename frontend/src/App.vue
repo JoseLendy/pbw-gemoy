@@ -52,6 +52,9 @@ function fromHash() {
 const tab = ref(fromHash())
 const homeKey = ref(0)
 let statusTimer = null
+// Remount the store / generate views when the account changes, so a new login never sees the previous
+// account's in-progress generation, draft or result.
+const acctKey = computed(() => account.username || 'guest')
 
 function go(key) { if (allowed(key)) tab.value = key }
 function onReset() { homeKey.value++ }   // 重置演示: the store view remounts and reloads on next open
@@ -138,8 +141,8 @@ onBeforeUnmount(() => clearInterval(statusTimer))
     </aside>
 
     <main id="main" class="main" tabindex="-1">
-      <HomeView :key="homeKey" :active="tab === 'home'" v-show="tab === 'home'" @go="go" />
-      <ClickView v-show="tab === 'click'" />
+      <HomeView :key="homeKey + ':' + acctKey" :active="tab === 'home'" v-show="tab === 'home'" @go="go" />
+      <ClickView :key="homeKey + ':' + acctKey" v-show="tab === 'click'" />
       <HqView v-if="allowed('hq')" :active="tab === 'hq'" v-show="tab === 'hq'" @reset="onReset" />
       <LoginView :active="tab === 'login'" v-show="tab === 'login'" @go="go" />
       <CompareView v-if="demoAllowed" :active="tab === 'compare'" v-show="tab === 'compare'" />

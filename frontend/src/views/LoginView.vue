@@ -1,9 +1,9 @@
 <script setup>
 // 登录: choose a shop, then sign in with a username + password backed by the server's account database.
-// The demo-account list signs in with one click (when the default demo password is in use). Once signed
-// in this page becomes the 账号信息 page (门店 / 账号 / 退出登录); the role decides which pages show:
-// staff → 门店端 + 生成; manager → those + 总部端 (and confirming new products for their own store);
-// developer → everything, including the demo-only 四店对比 / 对照组.
+// The demo-account list signs in with one click (when the default demo password is in use). A successful
+// login goes straight to 门店端; reopening the 登录 tab shows the 账号信息 page (门店 / 账号 / 退出登录).
+// The role decides which pages show: staff → 门店端 + 生成; manager → those + 总部端 (and confirming new
+// products for their own store); developer → everything, including the demo-only 四店对比 / 对照组.
 import { computed, onMounted, ref, watch } from 'vue'
 import { Check, KeyRound, LogOut, Search, Store } from 'lucide-vue-next'
 import { account, demoAccounts, loadMeta, login, logout, meta } from '../api.js'
@@ -67,6 +67,7 @@ async function submit() {
     if (r.ok) {
       password.value = ''
       msg.value = ''
+      emit('go', 'home')   // a successful login (manual or demo) lands on the recommendation page
     } else {
       msg.value = r.reason || '登录失败'
     }

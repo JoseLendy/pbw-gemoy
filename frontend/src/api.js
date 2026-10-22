@@ -41,11 +41,13 @@ export function clearAccount() { setAccount(null) }
 /** POST /api/auth/login; the server owns the session→account binding. A store account must sign in
  *  under the shop picked on the login screen; the developer account is company-wide. */
 export async function login(username, password, storeId = '') {
+  abortStreams()   // a new account must never inherit an old account's in-flight generation
   const r = await postJson('/api/auth/login', { username, password, store_id: storeId })
   if (r.ok && r.account) setAccount(r.account)
   return r
 }
 export async function logout() {
+  abortStreams()   // stop any running generation before the account is cleared
   try { await postJson('/api/auth/logout') } catch { /* the client still signs out */ }
   clearAccount()
 }
@@ -93,44 +95,83 @@ export async function getJson(url) {
   return resp.json()
 }
 
+/** Abort every in-flight NDJSON stream. login / logout call this so a new account never keeps receiving
+ *  (or keeps displaying) an earlier account's generation. */
+const ACTIVE_STREAMS = new Set()
+export function abortStreams() {
+  for (const ctrl of ACTIVE_STREAMS) { try { ctrl.abort() } catch { /* ignore */ } }
+  ACTIVE_STREAMS.clear()
+}
+
 /** POST and read an NDJSON stream; onEvent gets every parsed line. A plain JSON response (rate limit,
- *  validation) is delivered as one event. Resolves when the stream ends. */
+ *  validation) is delivered as one event. Resolves when the stream ends or is aborted. */
 export async function stream(url, body, onEvent) {
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ session_id: sessionId.value, ...body }),
-  })
-  if (!resp.ok) throw new Error('请求失败 ' + resp.status)
-  const ctype = resp.headers.get('content-type') || ''
-  if (!ctype.includes('ndjson') || !resp.body) {
-    onEvent(await resp.json())
-    return
-  }
-  const reader = resp.body.getReader()
-  const decoder = new TextDecoder()
-  let buf = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += decoder.decode(value, { stream: true })
-    let idx
-    while ((idx = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, idx).trim()
-      buf = buf.slice(idx + 1)
-      if (!line) continue
-      let evt
-      try { evt = JSON.parse(line) } catch { continue }
-      onEvent(evt)
+  const ctrl = new AbortController()
+  ACTIVE_STREAMS.add(ctrl)
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId.value, ...body }),
+      signal: ctrl.signal,
+    })
+    if (!resp.ok) throw new Error('请求失败 ' + resp.status)
+    const ctype = resp.headers.get('content-type') || ''
+    if (!ctype.includes('ndjson') || !resp.body) {
+      onEvent(await resp.json())
+      return
     }
-  }
-  if (buf.trim()) {
-    try { onEvent(JSON.parse(buf.trim())) } catch { /* partial tail */ }
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      let idx
+      while ((idx = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, idx).trim()
+        buf = buf.slice(idx + 1)
+        if (!line) continue
+        let evt
+        try { evt = JSON.parse(line) } catch { continue }
+        onEvent(evt)
+      }
+    }
+    if (buf.trim()) {
+      try { onEvent(JSON.parse(buf.trim())) } catch { /* partial tail */ }
+    }
+  } finally {
+    ACTIVE_STREAMS.delete(ctrl)
   }
 }
 
 export function downloadUrl(path) {
   return `${path}?session_id=${encodeURIComponent(sessionId.value)}&t=${Date.now()}`
+}
+
+/** Download a server file as a blob. This keeps an error response (e.g. 图片还没准备好) from navigating
+ *  the tab to a raw JSON page: it throws the server's message instead. */
+export async function downloadFile(url, fallbackName = 'download') {
+  const resp = await fetch(url)
+  if (!resp.ok) {
+    let msg = '下载失败'
+    try { msg = (await resp.json()).error || msg } catch { /* not a JSON error body */ }
+    throw new Error(msg)
+  }
+  const blob = await resp.blob()
+  const cd = resp.headers.get('content-disposition') || ''
+  let name = fallbackName
+  const m = /filename\*=UTF-8''([^;]+)/.exec(cd) || /filename="?([^";]+)"?/.exec(cd)
+  if (m) { try { name = decodeURIComponent(m[1]) } catch { name = m[1] } }
+  const objUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objUrl
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(objUrl), 1000)
 }
 
 export async function copyText(text) {

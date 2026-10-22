@@ -8,7 +8,7 @@ import {
   HeartHandshake, Image as ImageIcon, MessageSquareText, MousePointerClick, Palette, Pencil, RotateCcw,
   Shuffle, Sofa, Users,
 } from 'lucide-vue-next'
-import { cleanHtml, copyText, downloadUrl, meta, postJson, sessionId, stream } from '../api.js'
+import { cleanHtml, copyText, downloadFile, downloadUrl, meta, postJson, sessionId, stream } from '../api.js'
 import PhoneStage from '../components/PhoneStage.vue'
 import PlatformThumb from '../components/PlatformThumb.vue'
 import ProductArt from '../components/ProductArt.vue'
@@ -264,19 +264,15 @@ async function copy() {
   copied.value = true
   setTimeout(() => (copied.value = false), 1500)
 }
-function download() { const a = document.createElement('a'); a.href = downloadUrl('/api/manual/download-md'); a.click() }
+function download() { downloadFile(downloadUrl('/api/manual/download-md'), '软文.md').catch(failDownload) }
 // 下载图片 saves one image at a time (WORKFLOW v4 rule 11), so a post with several asks which one.
 function downloadImg(i) {
-  const a = document.createElement('a')
-  a.href = `/api/manual/download-image?idx=${i}&session_id=${encodeURIComponent(sessionId.value)}&t=${Date.now()}`
-  a.click()
+  const url = `/api/manual/download-image?idx=${i}&session_id=${encodeURIComponent(sessionId.value)}&t=${Date.now()}`
+  downloadFile(url, `图${i + 1}`).catch(failDownload)
 }
 // 下载所有图片: one zip of this post's images from the server (numbered 1, 2 … like 第 N 张).
-function downloadAllImg() {
-  const a = document.createElement('a')
-  a.href = downloadUrl('/api/manual/download-images')
-  a.click()
-}
+function downloadAllImg() { downloadFile(downloadUrl('/api/manual/download-images'), '图片.zip').catch(failDownload) }
+function failDownload(e) { stopHtml.value = `<div class="hw-stop">${e.message || '下载失败'}</div>` }
 function edit(i) { if (busy.value) return; inputMode.value = 'pick'; stage.value = 'input'; dir.value = 'back'; step.value = i }
 function backToInput() { if (!busy.value) stage.value = 'input' }
 async function restart() {
