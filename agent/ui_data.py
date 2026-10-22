@@ -138,7 +138,11 @@ def question_pool() -> dict:
 
 
 # ---------------------------------------------------------------- generate / edit / baseline / compare
-def generate(card: RecommendationCard, staff: Optional[StaffContext] = None, deps: Optional[Deps] = None):
+def generate(card: RecommendationCard, staff: Optional[StaffContext] = None, deps: Optional[Deps] = None,
+             on_progress=None):
+    """on_progress(stage, message) is forwarded to the pipeline so the UI can stream progress lines."""
+    if on_progress is not None:
+        return _run_from_card(card, deps or DEPS, staff, on_progress=on_progress)
     return _run_from_card(card, deps or DEPS, staff)
 
 
@@ -146,11 +150,15 @@ def baseline(card: RecommendationCard, deps: Optional[Deps] = None):
     return _generate_baseline(card, deps=deps or DEPS)
 
 
-def edit(result, instruction: str, deps: Optional[Deps] = None):
+def edit(result, instruction: str, deps: Optional[Deps] = None, on_progress=None):
+    if on_progress is not None:
+        return _pipeline_edit(result, instruction, deps or DEPS, on_progress=on_progress)
     return _pipeline_edit(result, instruction, deps or DEPS)
 
 
-def compare(cards, staff_map: Optional[dict] = None, deps: Optional[Deps] = None) -> BatchResult:
+def compare(cards, staff_map: Optional[dict] = None, deps: Optional[Deps] = None, on_progress=None) -> BatchResult:
+    if on_progress is not None:
+        return _generate_batch(cards, deps or DEPS, staff_map, on_progress=on_progress)
     return _generate_batch(cards, deps or DEPS, staff_map)
 
 
