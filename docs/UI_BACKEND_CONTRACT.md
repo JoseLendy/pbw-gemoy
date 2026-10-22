@@ -4,7 +4,7 @@ Status: **binding for the UI merge**. `tests/test_ui_contract.py` asserts every 
 this path with these parameters, and every result type has the fields listed. Renaming anything here
 without updating both the doc and the test fails the suite.
 
-The UI (`app.py`, `ui/`) only imports from the modules below. It never calls ima, the LLM or the checks
+The UI (`server.py`, `ui/`) only imports from the modules below. It never calls ima, the LLM or the checks
 directly.
 
 ## 1. Functions the UI calls
@@ -15,7 +15,7 @@ directly.
 |---|---|---|
 | `agent.recommend.store_data.cards_for` | `(store_id, today, data=None)` | `list[RecommendationCard]` for that store and date |
 | `agent.recommend.store_data.default_card` | `(store_id, today, data=None)` | the `is_default` card (今日一条) or `None` |
-| `agent.recommend.store_data.product_card` | `(store_id, model_id, today, data=None)` | 三店对比: the store's 活动款 card pointed at one product, or `None` if no active campaign has it |
+| `agent.recommend.store_data.product_card` | `(store_id, model_id, today, data=None)` | 四店对比: the store's 活动款 card pointed at one product, or `None` if no active campaign has it |
 | `agent.recommend.store_data.set_fact_card_status` | `(model_id, status)` | `None`; `status` ∈ `"draft"`, `"verified"` (总部端 确认发布). In memory only |
 | `agent.recommend.store_data.fact_card_overrides` | `()` | `dict[model_id, status]` set in this process |
 | `agent.recommend.store_data.reset_demo_state` | `()` | `None` (重置演示; see §3) |
@@ -25,11 +25,11 @@ directly.
 | Function | Signature | Returns |
 |---|---|---|
 | `agent.pipeline.run_from_card` | `(card, deps=None, staff=None, on_progress=None, fallback=True)` | `RunResult` · `LockedResult` · `NeedsHuman` · `NeedsReview` (重新生成 / 换一条 run this live) |
-| `agent.pipeline.generate_batch` | `(cards, deps=None, staff_map=None, on_progress=None)` | `BatchResult` (三店对比) |
+| `agent.pipeline.generate_batch` | `(cards, deps=None, staff_map=None, on_progress=None)` | `BatchResult` (四店对比) |
 | `agent.pipeline.generate_baseline` | `(card, deps=None, llm=None)` | `BaselineResult` · `LockedResult` (对照组) |
 | `agent.pipeline.edit` | `(prev, instruction, deps=None, on_progress=None)` | `RunResult` · `Clarification` · `NeedsHuman` · `EditBlocked` (quick edits) |
 | `agent.pipeline.prepare_today` | `(date, deps=None, runs_dir=None, on_progress=None, card_map=None)` | `PreparedDay` (the morning run; normally `scripts/prepare_today.py`, not the UI) |
-| `agent.pipeline.run` | `(text, form=None, deps=None, on_progress=None)` | `RunResult` · `Clarification` · `NeedsHuman` (手动输入, the original flow) |
+| `agent.pipeline.run` | `(text, form=None, deps=None, on_progress=None)` | `RunResult` · `Clarification` · `NeedsHuman` (生成 page, the original manual flow) |
 
 `on_progress(stage, message)` receives short Chinese progress lines; a failing callback never breaks a run.
 
@@ -60,7 +60,7 @@ directly.
 | `EditBlocked` | `instruction`, `message`, `rule`, `prev` | `message`, keep showing `prev` unchanged |
 | `BaselineResult` | `card_id`, `model_id`, `platform`, `prompt`, `text`, `display_text`, `hits`, `label`, `is_baseline` | always `display_text` (starts with 【对照组：未经约束的普通大模型输出】) and highlight `hits` (8D); never as our result |
 | `NeedsReview` | `card`, `draft`, `failing`, `message`, `attempts` | 「需人工确认」 panel: `draft.post` read-only with each `failing[i].sentence` highlighted and its `reason`; **no copy / publish button**; offer 重新生成 |
-| `BatchResult` | `results` (store → any type above or an `Exception`), `similarity` (`SimilarityPair`: `segment`, `store_a`, `store_b`, `before`, `after`, `regenerated`), `regenerated`, `seconds`, `regen_seconds`, `wall_seconds` | 三店对比: one phone preview per store; `similarity` as before → after; an `Exception` is that store's error line only |
+| `BatchResult` | `results` (store → any type above or an `Exception`), `similarity` (`SimilarityPair`: `segment`, `store_a`, `store_b`, `before`, `after`, `regenerated`), `regenerated`, `seconds`, `regen_seconds`, `wall_seconds` | 四店对比: one phone preview per store; `similarity` as before → after; an `Exception` is that store's error line only |
 | `PreparedDay` | `date`, `batch`, `paths`, `locked`, `errors` | not shown in the UI (CLI) |
 
 A delivered card post always passed every check: with `fallback=True`, `run_from_card` never returns a failing `RunResult`.
@@ -89,7 +89,7 @@ A delivered card post always passed every check: with `fallback=True`, `run_from
 |---|---|---|
 | HQ fact-card overrides (`set_fact_card_status`) | backend, in memory | **yes** |
 | store data cache (`load_store_data`) | backend, in memory | **yes** |
-| prepared posts + stored versions / 三店对比 / 对照组 (`runs/<date>/prepared/**`) | backend, on disk (real run logs) | no: `clear_prepared(date)` only |
+| prepared posts + stored versions / 四店对比 / 对照组 (`runs/<date>/prepared/**`) | backend, on disk (real run logs) | no: `clear_prepared(date)` only |
 | today's 已发布 marks (`runs/published/<date>.json`, weekly progress) | backend, on disk | no; `ui_data.reset()` (重置演示) clears them |
 | real run logs (`runs/<date>/*.json`) | backend, on disk | never |
 | per-product fact cache (`runs/cache/`, in memory) | backend | no: `clear_fact_cache()` only after a KB update |
@@ -97,7 +97,7 @@ A delivered card post always passed every check: with `fallback=True`, `run_from
 
 ## 4. Platform versions, precompute, edit and export (2026-10-22)
 
-- **One card, every platform.** Cards open on 朋友圈. `prepare_today` stores a 朋友圈 and a 小红书 version of each default card (same model, angle and fact card), plus 公众号 where the store's weekly 公众号 minimum is not met. `prepare_today --demo` (`prepare_demo`) also stores every other unlocked slot, the 三店对比 set and the S01 对照组 pair. Files: `runs/<date>/prepared/versions/<card_id>__<platform>.json`, `…/compare/<model>__<platform>.json`, `…/baseline/<card_id>.json`.
+- **One card, every platform.** Cards open on 朋友圈. `prepare_today` stores a 朋友圈 and a 小红书 version of each default card (same model, angle and fact card), plus 公众号 where the store's weekly 公众号 minimum is not met. `prepare_today --demo` (`prepare_demo`) also stores every other unlocked slot, the 四店对比 set and the S01 对照组 pair. Files: `runs/<date>/prepared/versions/<card_id>__<platform>.json`, `…/compare/<model>__<platform>.json`, `…/baseline/<card_id>.json`.
 - **Read first, generate second.** `ui_data.stored_version(card, platform)`, `stored_compare(model, platform)`, `stored_baseline(card_id)` (+ `baseline_from_payload`). The UI shows a stored result at once, labelled 「生成于 …」; live generation only on 重新生成 / 生成公众号文章 or when nothing is stored.
 - **Weekly progress (a suggestion, not a lock).** `ui_data.weekly_progress(store_id)` → `{progress, suggestion, line}`; `weekly_progress_all()` for 总部端 本周计划; `mark_published(store_id, platform, card_id)` records 已发布 per platform.
 - **Inline edit.** `ui_data.check_edit(text, result)` → `EditCheck(passed, post, failing, issues, seconds)`: deterministic checks only, no LLM. On pass the UI keeps `post` as 「已修改·已核验」 and calls `log_human_edit(card, platform, original, edited)`.

@@ -1,5 +1,7 @@
 # Huawei PC Marketing Agent — Workflow (v4)
 
+> **Status:** design of the preliminary-round pipeline. The pipeline (stages 1–9, the fact ledger and the check loop) is still how every post is made. The 复赛 added the push-based recommender in front of it and replaced the Gradio UI with Vue + FastAPI (`server.py`, `frontend/`); the current product is described in `README.md` and `docs/项目说明.md`.
+
 **Pitch:** a sales assistant for Huawei store staff. Describe a customer in one sentence and get a verified, ready-to-post article for the right platform, usually in about a minute. (Measure this and quote the real number in the demo.)
 
 **Core idea:** every product claim in an article must trace back to a **fact ledger** entry, and every ledger entry must trace back to a **verbatim quote** in an ima document. Code, not the LLM, enforces both links. If a fact isn't in the ledger it can't be in the post, and if a quote isn't in the source it can't be in the ledger.
@@ -286,7 +288,7 @@ The ledger is cached **per model** (keyed by source document and refresh time), 
 | Layer | Choice |
 |---|---|
 | Language | Python 3.10+ |
-| UI | Gradio + custom HTML/CSS |
+| UI | ~~Gradio + custom HTML/CSS~~ → Vue 3 + Vite (`frontend/`) served by FastAPI (`server.py`) |
 | Deployment | ModelScope Studio. Needs Python **and Node.js**; confirm in Phase 0 that Node runs there. If it doesn't, raise it with the team before writing any workaround. |
 | LLM | Qwen (DashScope) or DeepSeek, OpenAI-compatible client |
 | ima | `agent/ima_wrapper.py` → `node ima-skill/ima_api.cjs` via `subprocess` (handbook's standard script) |
@@ -297,7 +299,7 @@ The ledger is cached **per model** (keyed by source document and refresh time), 
 ## 6. Repo layout
 
 ```
-app.py                  # Gradio UI
+server.py               # FastAPI + Vue frontend (was app.py, Gradio)
 agent/
   ima_wrapper.py        # subprocess wrapper around ima-skill/ima_api.cjs (read-only endpoints)
   catalog.py            # product index, resolver, sibling groups

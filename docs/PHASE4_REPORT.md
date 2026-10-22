@@ -1,5 +1,7 @@
 # Phase 4 implementation report
 
+> **Historical record** (Phase 4, 2026-10-21; the blockers listed at the end were resolved in Phases 3 and 5). The Gradio UI it refers to (`app.py`, tabs) was replaced by Vue + FastAPI (`server.py`, `frontend/`); the current product is described in `README.md` and `docs/项目说明.md`.
+
 Branch: `feat/proactive-phase4` · base: `feat/proactive-recommender` · implementation commit: `418fb60` (follow-up audit fixes are in the next commit).
 Scope: `phase4.md` Tasks 1–6 and the final reporting gate. No `app.py` changes (Phase 3 owns the UI).
 
