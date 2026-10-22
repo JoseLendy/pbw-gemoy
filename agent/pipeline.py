@@ -12,6 +12,7 @@ most 2 rewrites; every edit path ends in the check loop; the ledger and bundle a
 from __future__ import annotations
 
 import copy
+import dataclasses
 import importlib
 import logging
 import os
@@ -462,7 +463,7 @@ def _variety_entry(card: RecommendationCard, result) -> Optional[dict]:
 
 
 def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = None,
-                   on_progress: Progress = None) -> BatchResult:
+                   on_progress: Progress = None, keep_angle: bool = False) -> BatchResult:
     """Run several recommendation cards and enforce 8E cross-store variety.
 
     8E compares every post with every other post of the day (agent.style.similarity.variety_breaches): too
@@ -475,7 +476,8 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
 
     The first pass runs stores concurrently (BATCH_MAX_WORKERS, default 4); results keep the input order and
     a store's exception becomes that store's result. The 8E reruns also run concurrently, after that pass.
-    Same-model stores share one retrieval + ledger (agent.fact_cache).
+    Same-model stores share one retrieval + ledger (agent.fact_cache). keep_angle=True (prepare_today: every
+    platform version of a card shares its angle) limits a rerun to the hook and the avoid lists.
     """
     from agent.formatter import render_publishable   # noqa: F401  (used by _batch_text)
     from agent.recommend.common import INPUTS, load_json
@@ -539,8 +541,8 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
         hooks = [h for h in angles_cfg["hooks"] if not h.get("requires_logged_question")]
         next_hook = next((h for h in hooks if h["id"] not in used_hooks and h["id"] != current_hook), None) \
             or next((h for h in hooks if h["id"] != current_hook), None)
-        next_angle = next((x for x in angles_cfg["segment_angles"].get(card.segment, [])
-                           if x not in used_angles and x != card.angle), None)
+        next_angle = None if keep_angle else next((x for x in angles_cfg["segment_angles"].get(card.segment, [])
+                                                   if x not in used_angles and x != card.angle), None)
         avoid = {"facts": breach["avoid_facts"], "phrases": breach["avoid_phrases"]}
         new_card = copy.deepcopy(card)
         if next_hook is not None:
@@ -733,19 +735,47 @@ def apply_fallback(card: RecommendationCard, result: RunResult, deps: Deps, staf
 @dataclass
 class PreparedDay:
     date: str
-    batch: BatchResult
-    paths: dict[str, Any]                   # store_id -> prepared record path
+    batch: BatchResult                      # the 朋友圈 batch (every staff member posts there)
+    paths: dict[str, Any]                   # store_id -> prepared record path (朋友圈 default card)
     locked: dict[str, str]                  # store_id -> why nothing was generated (locked / no card)
     errors: dict[str, str] = field(default_factory=dict)   # store_id -> crash; nothing stored, old post kept
+    batches: dict[str, BatchResult] = field(default_factory=dict)       # platform label -> its batch
+    versions: dict[str, dict] = field(default_factory=dict)             # platform label -> {store_id: path}
+    wechat_skipped: list[str] = field(default_factory=list)            # weekly 公众号 already done
+
+
+STAFF_PLATFORMS = ("朋友圈", "小红书")
+WECHAT = "公众号"
+
+
+def _store_versions(cards: list, batch: BatchResult, deps: Deps, runs_dir, errors: dict) -> dict[str, Any]:
+    from agent.runs import log_version
+    by_store = {c.store_id: c for c in cards}
+    out = {}
+    for sid, result in batch.results.items():
+        if isinstance(result, Exception):     # never overwrite a stored post with a crash (e.g. LLM 402)
+            errors[f"{sid}/{by_store[sid].platform}"] = f"{type(result).__name__}: {str(result)[:160]}"
+            continue
+        sims = [dict(p.__dict__) for p in batch.similarity if sid in (p.store_a, p.store_b)]
+        out[sid] = log_version(by_store[sid], result, seconds=batch.seconds.get(sid), similarity=sims,
+                               regenerated=sid in batch.regenerated, dev_mode=deps.is_dev_mode, runs_dir=runs_dir)
+    return out
 
 
 def prepare_today(date, deps: Deps | None = None, runs_dir=None, on_progress: Progress = None,
-                  card_map: Optional[Callable[[RecommendationCard], RecommendationCard]] = None) -> PreparedDay:
-    """Morning run: every store's default card for `date` through generate_batch (8E included). Each final
-    result is stored as that store's prepared post (agent.runs.log_prepared); staff open the app to it and
-    重新生成 runs live. Locked cards (and stores without an unlocked card) are skipped and listed.
-    card_map is for the --fake rehearsal only (maps each card onto the synthetic DemoBook)."""
+                  card_map: Optional[Callable[[RecommendationCard], RecommendationCard]] = None,
+                  platforms: tuple = STAFF_PLATFORMS, wechat: str = "auto") -> PreparedDay:
+    """Morning run: every store's default card for `date`, one version per platform, each platform through
+    generate_batch (8E across that platform's posts). The 朋友圈 version is also the store's prepared post
+    (agent.runs.log_prepared); every version is stored with log_version. Same card = same model, angle and
+    fact card on every platform; only format and length follow the platform rules.
+
+    wechat: "auto" adds a 公众号 version only for stores whose weekly 公众号 minimum is not met yet
+    (agent.recommend.weekly); "all" for every store; "none" never. Locked cards (and stores without an
+    unlocked card) are skipped and listed. card_map is for the --fake rehearsal only (maps each card onto the
+    synthetic DemoBook)."""
     from agent.recommend.store_data import default_card, load_store_data
+    from agent.recommend.weekly import behind, weekly_progress
     from agent.runs import log_prepared
     deps = deps or default_deps()
     data = load_store_data()
@@ -758,19 +788,129 @@ def prepare_today(date, deps: Deps | None = None, runs_dir=None, on_progress: Pr
             locked[st["store_id"]] = LOCKED_MESSAGES.get(card.locked_reason or "", "该推荐暂不可生成，请等待总部确认")
         else:
             cards.append(card_map(card) if card_map else card)
-    batch = generate_batch(cards, deps, on_progress=on_progress)
-    by_store = {c.store_id: c for c in cards}
-    paths, errors = {}, {}
-    for sid, result in batch.results.items():
-        if isinstance(result, Exception):     # never overwrite a stored post with a crash (e.g. LLM 402)
-            errors[sid] = f"{type(result).__name__}: {str(result)[:160]}"
-            continue
-        # The morning card is stored; if 8E changed hook / angle, result.task records what actually ran.
-        sims = [dict(p.__dict__) for p in batch.similarity if sid in (p.store_a, p.store_b)]
-        paths[sid] = log_prepared(by_store[sid], result, seconds=batch.seconds.get(sid), similarity=sims,
-                                  regenerated=sid in batch.regenerated, dev_mode=deps.is_dev_mode,
-                                  runs_dir=runs_dir)
-    return PreparedDay(date=str(date), batch=batch, paths=paths, locked=locked, errors=errors)
+    plan: dict[str, list] = {p: [dataclasses.replace(c, platform=p) for c in cards] for p in platforms}
+    skipped: list[str] = []
+    if wechat != "none" and WECHAT not in plan:
+        due = [c for c in cards if wechat == "all"
+               or behind(weekly_progress(c.store_id, date, data)).get(WECHAT, 0) > 0]
+        skipped = sorted({c.store_id for c in cards} - {c.store_id for c in due})
+        if due:
+            plan[WECHAT] = [dataclasses.replace(c, platform=WECHAT) for c in due]
+    paths, errors, batches, versions = {}, {}, {}, {}
+    for platform, pcards in plan.items():
+        _say(on_progress, "card", f"{platform}：{len(pcards)} 家门店")
+        batch = generate_batch(pcards, deps, on_progress=on_progress, keep_angle=True)
+        batches[platform] = batch
+        versions[platform] = _store_versions(pcards, batch, deps, runs_dir, errors)
+        if platform == "朋友圈":
+            by_store = {c.store_id: c for c in pcards}
+            for sid, result in batch.results.items():
+                if isinstance(result, Exception):
+                    continue
+                sims = [dict(p.__dict__) for p in batch.similarity if sid in (p.store_a, p.store_b)]
+                paths[sid] = log_prepared(by_store[sid], result, seconds=batch.seconds.get(sid), similarity=sims,
+                                          regenerated=sid in batch.regenerated, dev_mode=deps.is_dev_mode,
+                                          runs_dir=runs_dir)
+    for key in list(errors):                  # keep the old "store_id -> crash" shape for the 朋友圈 batch
+        sid, _, platform = key.partition("/")
+        if platform == "朋友圈":
+            errors[sid] = errors.pop(key)
+    main = batches.get("朋友圈") or next(iter(batches.values()), BatchResult(results={}, similarity=[]))
+    return PreparedDay(date=str(date), batch=main, paths=paths, locked=locked, errors=errors, batches=batches,
+                       versions=versions, wechat_skipped=skipped)
+
+
+COMPARE_STORES = ("S01", "S04", "S08", "S02")
+
+
+@dataclass
+class DemoPrecompute:
+    day: PreparedDay
+    others: BatchResult                      # every other unlocked slot per store, 朋友圈
+    compare_model: Optional[str]
+    compare: Optional[BatchResult]
+    baseline_card: Optional[str]
+    seconds: dict[str, float] = field(default_factory=dict)      # step -> wall seconds
+    llm_calls: dict[str, int] = field(default_factory=dict)      # step -> LLM calls
+
+
+def prepare_demo(date, deps: Deps | None = None, runs_dir=None, on_progress: Progress = None,
+                 card_map: Optional[Callable[[RecommendationCard], RecommendationCard]] = None) -> DemoPrecompute:
+    """Everything the UI can show for `date`, stored like prepared posts so the demo reads instead of
+    generating: prepare_today (朋友圈 + 小红书 + 公众号 where due), every other unlocked slot of every store
+    (换一条), the 三店对比 set (S01/S04/S08/S02, first product in an active campaign, 朋友圈, with similarity)
+    and the 对照组 pair for S01 (baseline + our prepared post). Live generation stays for 重新生成."""
+    from agent.recommend.store_data import cards_for, load_store_data, product_card
+    from agent.runs import _payload, log_stored, log_version
+    deps = deps or default_deps()
+    data = load_store_data()
+    seconds: dict[str, float] = {}
+    calls: dict[str, int] = {}
+
+    def n_calls() -> int:
+        return len(getattr(deps.llm, "calls", []) or [])
+
+    def step(name):
+        class _S:
+            def __enter__(self):
+                self.t, self.c = time.perf_counter(), n_calls()
+
+            def __exit__(self, *exc):
+                seconds[name] = round(time.perf_counter() - self.t, 1)
+                calls[name] = n_calls() - self.c
+        return _S()
+
+    with step("prepare_today"):
+        day = prepare_today(date, deps, runs_dir=runs_dir, on_progress=on_progress, card_map=card_map)
+    with step("other_slots"):
+        others = [c for st in data.stores for c in cards_for(st["store_id"], date, data)
+                  if not c.is_default and not c.locked]
+        others = [card_map(c) if card_map else c for c in others]
+        # One batch per slot: 8E compares posts that would be shown side by side (and store ids stay unique).
+        merged = BatchResult(results={}, similarity=[])
+        for slot in dict.fromkeys(c.slot for c in others):
+            group = [c for c in others if c.slot == slot]
+            b = generate_batch(group, deps, on_progress=on_progress)
+            for c in group:
+                r = b.results.get(c.store_id)
+                if r is not None and not isinstance(r, Exception):
+                    log_version(c, r, seconds=b.seconds.get(c.store_id), dev_mode=deps.is_dev_mode,
+                                runs_dir=runs_dir)
+                merged.results[c.card_id] = r
+    compare_model, compare = None, None
+    with step("compare"):
+        from agent.recommend.common import parse_date
+        d = parse_date(date)
+        model = next((m for p in data.promos if parse_date(p["start"]) <= d <= parse_date(p["end"])
+                      for m in p.get("models") or []), None)
+        ccards = [c for sid in COMPARE_STORES if (c := product_card(sid, model, date, data))] if model else []
+        ccards = [dataclasses.replace(card_map(c) if card_map else c, platform="朋友圈", is_default=False)
+                  for c in ccards]
+        if ccards:
+            compare_model = model
+            compare = generate_batch(ccards, deps, on_progress=on_progress)
+            log_stored(date, "compare", f"{model}__moments", {
+                "model": model, "platform": "朋友圈", "stores": [c.store_id for c in ccards],
+                "cards": [c.to_dict() for c in ccards],
+                "results": {sid: (_payload(r) if not isinstance(r, Exception) else {"error": repr(r)})
+                            for sid, r in compare.results.items()},
+                "status": {sid: type(r).__name__ for sid, r in compare.results.items()},
+                "similarity": [dict(p.__dict__) for p in compare.similarity],
+                "regenerated": list(compare.regenerated), "wall_seconds": compare.wall_seconds,
+                "dev_mode": deps.is_dev_mode}, runs_dir)
+    baseline_card = None
+    with step("baseline"):
+        from agent.recommend.store_data import default_card
+        card = default_card("S01", date, data)
+        if card is not None and not card.locked:
+            card = card_map(card) if card_map else card
+            base = generate_baseline(card, deps)
+            log_stored(date, "baseline", card.card_id, {"card_id": card.card_id, "model": card.model_id,
+                                                        "baseline": base.to_dict(), "dev_mode": deps.is_dev_mode},
+                       runs_dir)
+            baseline_card = card.card_id
+    return DemoPrecompute(day=day, others=merged, compare_model=compare_model, compare=compare,
+                          baseline_card=baseline_card, seconds=seconds, llm_calls=calls)
 
 
 # ---------------------------------------------------------------- edit

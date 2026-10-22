@@ -87,7 +87,8 @@ def test_failed_regeneration_is_visible_with_an_existing_result():
 
 def test_role_rule_marks_non_moments_as_manager_only():
     cards = ui_data.get_cards("S01", "2026-10-19")
-    card = next(c for c in cards if c.platform != "朋友圈")
+    card = dataclasses.replace(cards[0], platform="小红书")      # the card's 小红书 version
+    cards = [card, *cards[1:]]
     s = store_tab.fresh_session()
     s.update({"store_id": "S01", "cards": cards, "active_card_id": card.card_id,
               "results": {}, "published": {}, "chips": {}})

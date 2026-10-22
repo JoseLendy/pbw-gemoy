@@ -83,7 +83,8 @@ def test_reset_demo_state_keeps_prepared_posts_and_clear_prepared_removes_them(t
     card_id = default_card("S01", TODAY).card_id
     reset_demo_state()
     assert prepared_post("S01", TODAY, card_id=card_id, runs_dir=tmp_path) is not None
-    assert clear_prepared(TODAY, runs_dir=tmp_path) == len(stores())
+    n = len(list((tmp_path / TODAY / "prepared").rglob("*.json")))     # prepared posts + every platform version
+    assert n >= len(stores()) and clear_prepared(TODAY, runs_dir=tmp_path) == n
     assert prepared_post("S01", TODAY, card_id=card_id, runs_dir=tmp_path) is None
     assert clear_prepared(TODAY, runs_dir=tmp_path) == 0
 
@@ -125,5 +126,6 @@ def test_a_crashed_store_never_overwrites_its_prepared_post(tmp_path):
 
     deps.write_post = boom
     day = prepare_today(TODAY, deps, runs_dir=tmp_path, card_map=demo)
-    assert set(day.errors) == set(stores()) and day.paths == {}
+    assert {k for k in day.errors if "/" not in k} == set(stores()) and day.paths == {}
+    assert {k.split("/")[1] for k in day.errors if "/" in k} >= {"小红书"}      # no version stored either
     assert prepared_post("S01", TODAY, card_id=card_id, runs_dir=tmp_path) == before

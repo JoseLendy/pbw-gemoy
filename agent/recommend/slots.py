@@ -20,6 +20,7 @@ from agent.recommend.scoring import (
 SLOT_LABELS = {"potential": "潜力款", "promo": "活动款", "new_release": "新品款", "customer_question": "顾客问答"}
 SLOT_ORDER = ("potential", "promo", "new_release", "customer_question")
 HOOK_EPOCH = dt.date(2026, 1, 1)      # fixed epoch for the peer-aware daily rotation
+DEFAULT_PLATFORM = "朋友圈"
 
 # Scenario keys (agent/schemas.Scenario) by segment outside any calendar window.
 SEGMENT_SCENARIO = {"student": "campus_daily", "office": "office", "family": "family_upgrade",
@@ -92,7 +93,9 @@ def build_cards(stores, models, signals, idx, promos, calendar, quota, angles, p
                 questions, publish_rows, seg_cfg, pool, today: dt.date) -> dict[str, list[dict]]:
     """{store_id: [card dict, ...]} for every store. Reference implementation (plan §10.5 step 5)."""
     mby = {m["model_id"]: m for m in models}
-    platform = quota["rotation"][today.weekday()]
+    # Every card opens on 朋友圈 (every staff member posts there). Other platforms are versions of the same
+    # card; which one to post today is a suggestion from weekly progress (agent/recommend/weekly.py).
+    platform = DEFAULT_PLATFORM
     recent = recent_models(publish_rows, today)
     q_counts = question_counts(questions)
     peers = defaultdict(list)
