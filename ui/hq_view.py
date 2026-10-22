@@ -10,12 +10,12 @@ import html
 
 from agent import ui_data
 
-# Frosted-glass inline styles: the panels are translucent dark glass with white text, so the tables keep
-# light text on a translucent/transparent background (no white boxes) and the warn highlight is amber.
-_WARN_BG = "rgba(245,158,11,0.16)"
-_CELL = "padding:5px 9px;border-bottom:1px solid rgba(255,255,255,0.12);color:rgba(255,255,255,0.92)"
-_HEAD = "padding:6px 9px;text-align:left;background:rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.72)"
-_MUTED = "rgba(255,255,255,0.62)"
+# Light pastel inline styles: the panels are white cards on a warm cream page, so the tables use dark ink on
+# white with hairline rules, and the warn highlight is a soft apricot.
+_WARN_BG = "#FFF5E6"
+_CELL = "padding:9px 10px;border-bottom:1px solid #F2ECE6;color:#1F1F1F"
+_HEAD = "padding:8px 10px;text-align:left;background:#FAF6F2;border-bottom:1px solid #EFE6DD;color:#8A817A;font-weight:600;font-size:12.5px"
+_MUTED = "#8A817A"
 
 
 def _esc(value) -> str:
@@ -32,10 +32,10 @@ def posting_html() -> str:
     rows = []
     for s in data["stats"]:
         pct = s["rate"] * 100
-        bar = (f'<div style="height:8px;width:100%;background:rgba(255,255,255,0.14);border-radius:4px">'
-               f'<div style="height:8px;width:{pct:.1f}%;background:{"#F87171" if s["low"] else "#4ADE80"};'
-               f'border-radius:4px"></div></div>')
-        flag = (' <span style="font-size:11px;color:#FCD34D;background:rgba(245,158,11,0.20);border-radius:8px;'
+        bar = (f'<div style="height:6px;width:100%;background:#F1ECE7;border-radius:3px">'
+               f'<div style="height:6px;width:{pct:.1f}%;background:{"#F0907F" if s["low"] else "#7FCBA4"};'
+               f'border-radius:3px"></div></div>')
+        flag = (' <span style="font-size:11px;color:#C2410C;background:#FFE8D6;border-radius:8px;'
                 'padding:1px 6px">偏低</span>' if s["low"] else "")
         rows.append(f'<tr style="background:{_WARN_BG if s["low"] else "transparent"}">'
                     f'<td style="{_CELL}">{_esc(s["store_name"])}</td>'
@@ -58,21 +58,21 @@ def release_html() -> str:
     blocks = []
     for d in drafts:
         status = "已确认发布" if d["verified"] else "待总部确认"
-        color = "#4ADE80" if d["verified"] else "#FBBF24"
+        color = "#2F8F5B" if d["verified"] else "#B45309"
         refs = "".join(
             f'<tr><td style="{_CELL}">{_esc(r["ref_id"])}</td><td style="{_CELL}">{_esc(r["fields"])}</td>'
-            f'<td style="{_CELL}">{_esc(r["source_title"])}<div style="font-size:11px;color:rgba(255,255,255,0.55)">'
+            f'<td style="{_CELL}">{_esc(r["source_title"])}<div style="font-size:11px;color:#A39A92">'
             f'{_esc(r["source_path"])}</div></td></tr>' for r in d["refs"])
         note = ("已解锁门店生成（演示状态）；具体数值仍需按知识库事实卡核验。"
                 if d["verified"] else
                 "演示审核清单：以下只是字段与来源参考，不是已核验的事实卡数值。")
-        note_style = ("color:#BBF7D0;background:rgba(34,197,94,0.14)" if d["verified"]
-                      else "color:#FDE68A;background:rgba(245,158,11,0.14)")
+        note_style = ("color:#2F6B47;background:#E8F6EE" if d["verified"]
+                      else "color:#8A5300;background:#FFF3DC")
         blocks.append(
-            f'<div style="border:1px solid rgba(255,255,255,0.18);border-radius:8px;padding:12px;background:rgba(255,255,255,0.05)">'
+            f'<div style="border:1px solid #F0E8E0;border-radius:14px;padding:14px;background:#FFFCF9">'
             f'<div style="display:flex;justify-content:space-between;align-items:center">'
-            f'<b style="font-size:15px;color:#fff">{_esc(d["display_name"])}</b>'
-            f'<span style="font-size:12px;color:{color};background:rgba(255,255,255,0.10);border-radius:10px;padding:2px 8px">'
+            f'<b style="font-size:15px;color:#1F1F1F">{_esc(d["display_name"])}</b>'
+            f'<span style="font-size:12px;color:{color};background:#F6F1EC;border-radius:10px;padding:2px 8px">'
             f'{_esc(status)}</span></div>'
             f'<div style="font-size:12px;color:{_MUTED};margin:4px 0 8px">演示上市日期：{_esc(d["launch_date"])}'
             f' · 总部确认一次，全部门店解锁</div>'
@@ -112,7 +112,7 @@ def plan_html() -> str:
         for p in platforms:
             v = r["progress"][p]
             short = p in r["behind"]
-            style = f'{_CELL};text-align:center' + (";background:rgba(245,158,11,0.20);color:#FCD34D;font-weight:700" if short else "")
+            style = f'{_CELL};text-align:center' + (";background:#FFF1DD;color:#B45309;font-weight:700" if short else "")
             cells.append(f'<td style="{style}">{v["done"]}/{v["minimum"]}</td>')
         rows.append(f'<tr><td style="{_CELL}">{_esc(r["store_name"])}</td>{"".join(cells)}'
                     f'<td style="{_CELL}">{_esc(r["suggestion"])}</td></tr>')

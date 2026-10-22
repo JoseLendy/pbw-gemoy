@@ -11,6 +11,7 @@ slow (ima + LLM) work so page loads and store switches never wait behind a gener
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -44,6 +45,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from agent.formatter import render_download, render_publishable, render_report  # noqa: E402
+from agent.intake import SCENARIO_CHIPS  # noqa: E402
 from agent.pipeline import edit as pipeline_edit, run as pipeline_run, run_all_platforms  # noqa: E402
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult  # noqa: E402
 from agent.ui_data import DEPS, plain_error, reset_token, today as demo_today  # noqa: E402
@@ -316,15 +318,45 @@ def api_meta() -> dict:
     products = compare_view_products()
     return {
         "today": demo_today(),
-        "stores": [{"store_id": s["store_id"], "store_name": s["store_name"]} for s in state.STORES],
+        "stores": [{"store_id": s["store_id"], "store_name": s["store_name"], "district": s.get("district", ""),
+                    "anchor": s.get("anchor_poi", "")} for s in state.STORES],
         "chips": [{"chip_id": k, "text": v["text"]} for k, v in state.POOL.items()],
         "platforms": list(state.PLATFORM_TABS),
         "compare_products": products,
         "compare_platforms": list(compare_view.PLATFORMS),
         "manual_platforms": [PLATFORM_LABELS[p] for p in ("xiaohongshu", "moments", "wechat_article", "poster", "douyin")],
         "manual_examples": MANUAL_EXAMPLES,
+        "manual_products": manual_products(),
+        "manual_scenarios": list(SCENARIO_CHIPS),
         "quick_edits": list(state.QUICK_EDITS),
     }
+
+
+def manual_products() -> list[dict]:
+    """Catalog models for the 点击输入 product step (names only; resolved again by intake)."""
+    try:
+        return [{"model_id": m.model_id, "name": m.canonical_name, "route": m.route}
+                for m in DEPS.catalog.models.values()]
+    except Exception as e:  # noqa: BLE001
+        log.warning("manual_products failed: %s", e)
+        return []
+
+
+# ---------------------------------------------------------------- engineer gate (演示功能)
+class UnlockReq(BaseModel):
+    code: str = ""
+
+
+@app.post("/api/engineer/unlock")
+def api_engineer_unlock(req: UnlockReq) -> dict:
+    """Soft gate for the engineer-only demo views (四店对比 / 对照组). The passcode lives in .env as
+    ENGINEER_PASSCODE; it is never returned or logged. This hides the views, it is not access control."""
+    expected = os.getenv("ENGINEER_PASSCODE", "")
+    if not expected:
+        return {"ok": False, "reason": "未配置工程师口令（.env 中的 ENGINEER_PASSCODE）"}
+    time.sleep(0.4)   # slows guessing a little
+    ok = hmac.compare_digest(req.code.encode("utf-8"), expected.encode("utf-8"))
+    return {"ok": ok, "reason": "" if ok else "口令不正确"}
 
 
 def compare_view_products() -> list[dict]:
