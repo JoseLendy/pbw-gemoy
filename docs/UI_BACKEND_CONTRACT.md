@@ -89,11 +89,21 @@ A delivered card post always passed every check: with `fallback=True`, `run_from
 |---|---|---|
 | HQ fact-card overrides (`set_fact_card_status`) | backend, in memory | **yes** |
 | store data cache (`load_store_data`) | backend, in memory | **yes** |
-| prepared posts (`runs/<date>/prepared/`) | backend, on disk (real run logs) | no: `clear_prepared(date)` only |
+| prepared posts + stored versions / 三店对比 / 对照组 (`runs/<date>/prepared/**`) | backend, on disk (real run logs) | no: `clear_prepared(date)` only |
+| today's 已发布 marks (`runs/published/<date>.json`, weekly progress) | backend, on disk | no; `ui_data.reset()` (重置演示) clears them |
 | real run logs (`runs/<date>/*.json`) | backend, on disk | never |
 | per-product fact cache (`runs/cache/`, in memory) | backend | no: `clear_fact_cache()` only after a KB update |
 | 已发布 marks, question chips, selected store / staff, current preview, edit history | **UI session** | no: the UI must clear these itself on 重置演示 |
 
-## 4. Fallback counts (CLI)
+## 4. Platform versions, precompute, edit and export (2026-10-22)
+
+- **One card, every platform.** Cards open on 朋友圈. `prepare_today` stores a 朋友圈 and a 小红书 version of each default card (same model, angle and fact card), plus 公众号 where the store's weekly 公众号 minimum is not met. `prepare_today --demo` (`prepare_demo`) also stores every other unlocked slot, the 三店对比 set and the S01 对照组 pair. Files: `runs/<date>/prepared/versions/<card_id>__<platform>.json`, `…/compare/<model>__<platform>.json`, `…/baseline/<card_id>.json`.
+- **Read first, generate second.** `ui_data.stored_version(card, platform)`, `stored_compare(model, platform)`, `stored_baseline(card_id)` (+ `baseline_from_payload`). The UI shows a stored result at once, labelled 「生成于 …」; live generation only on 重新生成 / 生成公众号文章 or when nothing is stored.
+- **Weekly progress (a suggestion, not a lock).** `ui_data.weekly_progress(store_id)` → `{progress, suggestion, line}`; `weekly_progress_all()` for 总部端 本周计划; `mark_published(store_id, platform, card_id)` records 已发布 per platform.
+- **Inline edit.** `ui_data.check_edit(text, result)` → `EditCheck(passed, post, failing, issues, seconds)`: deterministic checks only, no LLM. On pass the UI keeps `post` as 「已修改·已核验」 and calls `log_human_edit(card, platform, original, edited)`.
+- **Export.** `agent.export.wechat_text(post)` is the 复制文案 text; `ui_data.export_zip(post, store_id, text)` writes `<store>-<date>-<platform>.zip` (文案.txt, 1.jpg…, 文章.md for 公众号).
+- **No personal names.** Cards and tasks carry no `nickname`; 8B `personal_name` fails any name or sign-off.
+
+## 5. Fallback counts (CLI)
 
 `scripts/prepare_today.py` and `scripts/eval_cards.py` print each store's status: `PASS`, `PASS (trimmed)`, `PASS (next_card)`, `NEEDS_REVIEW（需人工确认）`, `LOCKED`, or the error. The eval counts a pass only when no fallback was needed.

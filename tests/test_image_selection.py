@@ -87,8 +87,8 @@ def test_denylist_config_holds_hashes_only():
     rows = data.get("images") or []
     assert rows, "the denylist must list the known bad images"
     for row in rows:
-        assert set(row) <= {"id_sha256", "reason"}
-        assert len(row["id_sha256"]) == 64 and int(row["id_sha256"], 16) >= 0
+        assert set(row) <= {"id_hash", "reason"}
+        assert len(row["id_hash"]) == 16 and int(row["id_hash"], 16) >= 0
         assert not any(s in row.get("reason", "") for s in ("img_", "hwpc_", "vmall_", ".jpg", ".png"))
 
 

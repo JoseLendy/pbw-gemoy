@@ -96,9 +96,10 @@ def main(argv=None) -> int:
     cta = "有问题可以私信我。"          # no 周末 / opening-hours promise: the store data has none
 
     def invite(task, named=True):      # each card's own store landmark (S02's card must not name S01's)
-        what = f"{name}实机" if named else "实机"        # the product's name is not a product claim
-        return (f"店在{task.landmark}附近，想上手{what}可以过来看看。" if task.landmark
-                else f"想上手{what}可以来店里看看。")
+        # The product's name is not a product claim; 「实机」 would promise a demo unit the store data never states.
+        what = f"想了解{name}，" if named else ""
+        return (f"{what}店在{task.landmark}附近，可以过来看看。" if task.landmark
+                else f"{what}可以来店里看看。")
 
     def draft(*sentences, task=None, named=True):
         task = task or plain

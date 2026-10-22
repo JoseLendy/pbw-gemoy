@@ -4,7 +4,8 @@ Which KB images a post may show (used by agent.platform_plan before any image is
     usable(images) -> list[ImageRef]      # denylisted images removed; a picture saved twice is kept once
     is_denied(media_id) / media_hash(media_id) / same_picture(a, b)
 
-1. Manual denylist: config/image_denylist.yaml lists sha256(media_id) only, with a generic reason. No raw media id
+1. Manual denylist: config/image_denylist.yaml lists the first 16 hex characters of sha256(media_id) only,
+   with a generic reason (16, so the secrets scan never sees a key-like token). No raw media id
    (it embeds a KB id), no file name and no caption is ever committed.
 2. Same picture: the KB stores some pictures twice under different names (re-encoded or colour-graded copies).
    Two images are the same picture when their 8x8 difference hash differs in at most 3 bits AND their coarse
@@ -32,8 +33,11 @@ _fingerprints: dict[str, Optional[tuple[int, tuple]]] = {}
 __all__ = ["usable", "is_denied", "media_hash", "same_picture", "fingerprint", "clear_cache"]
 
 
+HASH_CHARS = 16
+
+
 def media_hash(media_id: str) -> str:
-    return hashlib.sha256((media_id or "").encode("utf-8")).hexdigest()
+    return hashlib.sha256((media_id or "").encode("utf-8")).hexdigest()[:HASH_CHARS]
 
 
 @lru_cache(maxsize=1)
@@ -44,7 +48,7 @@ def _denied_hashes() -> frozenset:
     except Exception as e:  # noqa: BLE001 - a broken denylist must be visible, not silently empty
         log.warning("image denylist unreadable: %s", e)
         return frozenset()
-    return frozenset(str(r.get("id_sha256", "")).lower() for r in rows if isinstance(r, dict))
+    return frozenset(str(r.get("id_hash", "")).lower() for r in rows if isinstance(r, dict))
 
 
 def is_denied(media_id: str) -> bool:
