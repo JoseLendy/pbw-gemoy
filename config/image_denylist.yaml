@@ -1,0 +1,22 @@
+# Images never planned into a post (agent/image_filter.py). Manual list, reviewed 2026-10-22.
+# Keyed by the first 16 hex characters of sha256(media_id): no raw media id (it embeds a KB id), no file name and no caption is committed.
+# To add one: python -c "from agent.image_filter import media_hash; print(media_hash('<media_id>'))"   (16 hex characters)
+images:
+  - id_hash: 83484cfbb30e6349
+    reason: stylus-scene photo that shows no stylus
+  - id_hash: 5790ee28ec75a37e
+    reason: mall promo with a printed cooling-power claim
+  - id_hash: 8053fd215aa44f15
+    reason: mall promo with a printed display spec and an eye-comfort claim
+  - id_hash: 522112d3b9d8cb3c
+    reason: mall promo with printed subsidy terms
+  - id_hash: 4f537d6aa82d5930
+    reason: mall promo with a printed battery-life claim and no qualifier
+  - id_hash: db39e8e7013a5c9a
+    reason: processor badge graphic labelled as a body-detail photo
+  - id_hash: 5271c7abd679c8ed
+    reason: promo graphic with a printed screen-ratio figure and no qualifier
+  - id_hash: 0e0bf54650b1bdf2
+    reason: processor badge graphic with a printed processor tier
+  - id_hash: c42574acaabc03dc
+    reason: processor badge graphic labelled as a product exterior photo

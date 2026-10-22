@@ -1,0 +1,241 @@
+{
+  "S01": {
+    "weights": {
+      "student": 0.533,
+      "office": 0.044,
+      "family": 0.422,
+      "shopper": 0.0
+    },
+    "dominant": "student",
+    "top_category": "university",
+    "top_category_count": 2,
+    "top_category_example": "浙江大学紫金港校区",
+    "category_counts": {
+      "university": 2,
+      "middle_school": 1,
+      "primary_school": 1,
+      "residential": 5,
+      "office": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S02": {
+    "weights": {
+      "student": 0.5,
+      "office": 0.069,
+      "family": 0.432,
+      "shopper": 0.0
+    },
+    "dominant": "student",
+    "top_category": "university",
+    "top_category_count": 2,
+    "top_category_example": "杭州电子科技大学",
+    "category_counts": {
+      "university": 2,
+      "middle_school": 1,
+      "primary_school": 1,
+      "residential": 4,
+      "office": 2
+    },
+    "poi_source": "fixture"
+  },
+  "S03": {
+    "weights": {
+      "student": 0.596,
+      "office": 0.058,
+      "family": 0.317,
+      "shopper": 0.029
+    },
+    "dominant": "student",
+    "top_category": "university",
+    "top_category_count": 3,
+    "top_category_example": "浙江科技大学",
+    "category_counts": {
+      "university": 3,
+      "middle_school": 1,
+      "primary_school": 1,
+      "residential": 5,
+      "office": 2,
+      "mall": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S04": {
+    "weights": {
+      "student": 0.0,
+      "office": 0.781,
+      "family": 0.19,
+      "shopper": 0.029
+    },
+    "dominant": "office",
+    "top_category": "office",
+    "top_category_count": 12,
+    "top_category_example": "钱江新城商务区",
+    "category_counts": {
+      "office": 12,
+      "industrial_park": 1,
+      "residential": 3,
+      "primary_school": 1,
+      "mall": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S05": {
+    "weights": {
+      "student": 0.0,
+      "office": 0.81,
+      "family": 0.076,
+      "shopper": 0.114
+    },
+    "dominant": "office",
+    "top_category": "office",
+    "top_category_count": 15,
+    "top_category_example": "（模拟）写字楼11",
+    "category_counts": {
+      "industrial_park": 2,
+      "office": 15,
+      "residential": 2,
+      "primary_school": 1,
+      "mall": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S06": {
+    "weights": {
+      "student": 0.0,
+      "office": 0.704,
+      "family": 0.117,
+      "shopper": 0.179
+    },
+    "dominant": "office",
+    "top_category": "office",
+    "top_category_count": 13,
+    "top_category_example": "滨江高新区",
+    "category_counts": {
+      "office": 13,
+      "industrial_park": 2,
+      "residential": 2,
+      "primary_school": 1,
+      "mall": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S07": {
+    "weights": {
+      "student": 0.0,
+      "office": 0.02,
+      "family": 0.98,
+      "shopper": 0.0
+    },
+    "dominant": "family",
+    "top_category": "residential",
+    "top_category_count": 12,
+    "top_category_example": "三墩住宅区",
+    "category_counts": {
+      "residential": 12,
+      "primary_school": 2,
+      "middle_school": 1,
+      "office": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S08": {
+    "weights": {
+      "student": 0.0,
+      "office": 0.028,
+      "family": 0.832,
+      "shopper": 0.14
+    },
+    "dominant": "family",
+    "top_category": "residential",
+    "top_category_count": 10,
+    "top_category_example": "九堡住宅区",
+    "category_counts": {
+      "residential": 10,
+      "primary_school": 2,
+      "middle_school": 1,
+      "mall": 1,
+      "office": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S09": {
+    "weights": {
+      "student": 0.0,
+      "office": 0.01,
+      "family": 0.923,
+      "shopper": 0.067
+    },
+    "dominant": "family",
+    "top_category": "residential",
+    "top_category_count": 11,
+    "top_category_example": "良渚文化村",
+    "category_counts": {
+      "residential": 11,
+      "primary_school": 2,
+      "middle_school": 1,
+      "mall": 1,
+      "office": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S10": {
+    "weights": {
+      "student": 0.0,
+      "office": 0.178,
+      "family": 0.303,
+      "shopper": 0.52
+    },
+    "dominant": "shopper",
+    "top_category": "mall",
+    "top_category_count": 2,
+    "top_category_example": "湖滨银泰in77",
+    "category_counts": {
+      "mall": 2,
+      "office": 6,
+      "residential": 3,
+      "middle_school": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S11": {
+    "weights": {
+      "student": 0.083,
+      "office": 0.329,
+      "family": 0.118,
+      "shopper": 0.47
+    },
+    "dominant": "shopper",
+    "top_category": "mall",
+    "top_category_count": 2,
+    "top_category_example": "杭州大厦",
+    "category_counts": {
+      "mall": 2,
+      "office": 6,
+      "residential": 3,
+      "middle_school": 1,
+      "university": 1
+    },
+    "poi_source": "fixture"
+  },
+  "S12": {
+    "weights": {
+      "student": 0.055,
+      "office": 0.223,
+      "family": 0.282,
+      "shopper": 0.439
+    },
+    "dominant": "shopper",
+    "top_category": "mall",
+    "top_category_count": 2,
+    "top_category_example": "城西银泰城",
+    "category_counts": {
+      "mall": 2,
+      "office": 5,
+      "residential": 4,
+      "middle_school": 1,
+      "university": 1
+    },
+    "poi_source": "fixture"
+  }
+}

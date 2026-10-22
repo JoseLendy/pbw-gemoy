@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
@@ -125,7 +126,7 @@ def test_argv_never_contains_keys_and_env_is_inherited(run, client):
     run["results"] = [ok({"is_end": True})]
     client.call("get_knowledge_list", {"knowledge_base_id": "kb"})
     argv, env, kw = run["argv"][0], run["env"][0], run["kw"][0]
-    assert argv[0] == "node" and argv[1].endswith("ima-skill/ima_api.cjs")
+    assert argv[0] == "node" and Path(argv[1]).as_posix().endswith("ima-skill/ima_api.cjs")
     assert argv[2] == "openapi/wiki/v1/get_knowledge_list" and isinstance(argv, list)
     assert not any(FAKE_CID in a or FAKE_KEY in a for a in argv)
     assert env["IMA_OPENAPI_CLIENTID"] == FAKE_CID

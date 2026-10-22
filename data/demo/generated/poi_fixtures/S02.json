@@ -1,0 +1,85 @@
+{
+  "store_id": "S02",
+  "pois": [
+    {
+      "name": "杭州电子科技大学",
+      "category": "university",
+      "typecode": "141201",
+      "distance_m": 300,
+      "is_anchor": true,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）高校1",
+      "category": "university",
+      "typecode": "141201",
+      "distance_m": 1017,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）中学1",
+      "category": "middle_school",
+      "typecode": "141202",
+      "distance_m": 707,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）小学1",
+      "category": "primary_school",
+      "typecode": "141203",
+      "distance_m": 751,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区1",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 769,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区2",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 213,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区3",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 526,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区4",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1065,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼1",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 869,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼2",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 618,
+      "is_anchor": false,
+      "is_demo": true
+    }
+  ]
+}

@@ -239,3 +239,186 @@ def test_auto_cite_finds_field_when_llm_omits_it():
     p.intro = "宿舍、教室来回跑，多屏协同让课件直接拖到电脑上。"
     new, fixed = auto_cite(p, [_llm_issue("uncited_claim", "", "多屏协同让课件直接拖到电脑上", "F11")], fake_ledger())
     assert fixed and new.intro.endswith("拖到电脑上 [F11]。")
+
+
+# ------------------------------------------------------------------ Phase 5: 8A LLM input (false-positive proof)
+class _CaptureLLM:
+    def __init__(self):
+        self.user = ""
+
+    def chat_json(self, system, user, stage="", **kw):
+        self.user = user
+        return {"issues": []}
+
+
+def _uncited_block(post):
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(post, fake_ledger(), llm)
+    return llm.user.split("<uncited>")[1].split("</uncited>")[0]
+
+
+def test_llm_layer_does_not_list_a_tagged_sentence_as_uncited():
+    """Real 朋友圈 eval: '…70 Wh 额定容量电池 [F32]。' came back as uncited_claim because the tagged set kept
+    the final 。 and the uncited split dropped it, so every tagged sentence was ALSO sent as uncited."""
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。屏幕 14.2 英寸 [F3]！"]
+    assert "1.25 kg" not in _uncited_block(p) and "14.2" not in _uncited_block(p)
+
+
+def test_llm_layer_still_lists_untagged_sentences():
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。一整天不用充电。"]
+    block = _uncited_block(p)
+    assert "一整天不用充电" in block and "1.25 kg" not in block
+
+
+def test_wrong_tag_on_a_variant_specific_value_is_a_tag_mismatch():
+    """Canary: '约 1.25 kg [F6]' (F6 is the battery; 1.25 kg is the 标准版 weight F1) with no variant
+    requested used to raise only variant_unspecified (warn) and pass."""
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F6]。"]
+    issues = check_facts(p, fake_ledger(), {}).issues
+    assert any(i.code == "tag_mismatch" and i.severity == "error" and i.fact_id == "F1" for i in issues)
+
+
+def test_right_tag_on_a_variant_specific_value_is_still_only_a_warning():
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。"]
+    issues = check_facts(p, fake_ledger(), {}).issues
+    assert not [i for i in issues if i.severity == "error"]
+
+
+def test_llm_layer_does_not_send_image_captions_as_uncited_claims():
+    """Real canary: captions come verbatim from the KB image index (the plan check owns them; the code layer
+    of 8A already skips them), but the LLM layer listed them as uncited sentences and the judge flagged the
+    model name / colour in them on every clean draft."""
+    from agent.schemas import PostImage
+    p = fake_post("moments")
+    p.body = ["重量约 1.25 kg [F1]。"]
+    p.images = [PostImage("img-1", "文末", "DemoBook 14 星空灰正面"), PostImage("img-2", "文末", "DemoBook 14 接口特写")]
+    block = _uncited_block(p)
+    assert "星空灰" not in block and "接口特写" not in block
+
+
+# ------------------------------------------------------------------ verbatim fact containing "；" (canary proof)
+def _ledger_with_semicolon_claim():
+    import copy
+    from tests.fakes import _f
+    led = copy.deepcopy(fake_ledger())
+    led.facts.append(_f(13, "demobook-14", "angle_6", "other", "更适合常带演示机出门的人；演示兼容是选购前提",
+                        "更适合常带演示机出门的人；演示兼容是选购前提", kind="claim", src="卖点与限制.md"))
+    return led
+
+
+def test_a_verbatim_tagged_fact_containing_a_semicolon_is_one_tagged_claim():
+    """Real canary: a KB 可用结论 quoted verbatim and tagged once
+    was split at the fact's own '；' and its first half reported as untagged / uncited."""
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["挑电脑前先看看它适合谁：更适合常带演示机出门的人；演示兼容是选购前提 [F13]。"]
+    assert not [i for i in check_facts(p, led, {}).issues if i.code in ("untagged_claim", "uncited_claim")]
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(p, led, llm)
+    assert "更适合常带演示机出门的人" not in llm.user.split("<uncited>")[1]
+
+
+def test_an_untagged_spec_before_a_semicolon_is_still_flagged():
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["内存 16 GB；更适合常带演示机出门的人；演示兼容是选购前提 [F13]。"]
+    assert any(i.code == "untagged_claim" and "16 GB" in i.span for i in check_facts(p, led, {}).issues)
+
+
+def test_a_semicolon_fact_tagged_with_another_id_still_splits():
+    """The '；' is kept only when the quote carries its OWN fact's tag; any other tag splits as before."""
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["更适合常带演示机出门的人；演示兼容是选购前提 [F1]。"]
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(p, led, llm)
+    assert "更适合常带演示机出门的人" in llm.user.split("<uncited>")[1]
+
+
+def test_the_judge_sees_the_whole_verbatim_fact_as_the_cited_sentence():
+    led = _ledger_with_semicolon_claim()
+    p = fake_post("moments")
+    p.body = ["更适合常带演示机出门的人；演示兼容是选购前提 [F13]。"]
+    from agent.checks.facts import _llm_layer
+    llm = _CaptureLLM()
+    _llm_layer(p, led, llm)
+    cited = llm.user.split("<cited>")[1].split("</cited>")[0]
+    assert "更适合常带演示机出门的人；演示兼容是选购前提。 -> F13" in cited and "\x00" not in llm.user
+
+
+# ------------------------------------------------------------------ "a/b unit" in one fact (false-positive proof)
+def _ledger_with_slash_weight():
+    import copy
+    from tests.fakes import _f
+    led = copy.deepcopy(fake_ledger())
+    led.facts.append(_f(14, "demobook-14", "angle_7", "design", "两种键盘版本重量约 1.38/1.36 kg",
+                        "两种键盘版本重量约 1.38/1.36 kg", kind="claim", src="卖点与限制.md"))
+    return led
+
+
+def test_both_numbers_of_an_a_slash_b_value_belong_to_the_tagged_fact():
+    """Real 2026-10-23 S01: a combined fact wrote two keyboard weights as 'a/b kg'; the unit parser reads only
+    the number in front of the unit, so 8A called 'a kg [F#]' a tag_mismatch and asked for the single-weight
+    fact's tag too, which then broke the 朋友圈 one-fact rule."""
+    led = _ledger_with_slash_weight()
+    p = fake_post("moments")
+    p.body = ["一种键盘版本约 1.38 kg，另一种约 1.36 kg [F14]。"]
+    issues = check_facts(p, led, {}).issues
+    assert not [i for i in issues if i.code in ("tag_mismatch", "unsupported_number")]
+
+
+def test_a_number_outside_the_slash_pair_is_still_a_mismatch():
+    led = _ledger_with_slash_weight()
+    p = fake_post("moments")
+    p.body = ["一种键盘版本约 1.37 kg [F14]。"]
+    issues = check_facts(p, led, {}).issues
+    assert any(i.code in ("tag_mismatch", "unsupported_number") and "1.37" in (i.span or "") for i in issues)
+
+
+# ------------------------------------------------------------------ a Windows-only fact stated for every version
+def _ledger_with_windows_fact():
+    import copy
+    from tests.fakes import _f
+    led = copy.deepcopy(fake_ledger())
+    led.facts.append(_f(15, "demobook-14", "power_button", "design", "指纹电源键", "指纹电源键", variant="Windows 版"))
+    return led
+
+
+def test_a_version_bound_fact_stated_for_all_versions_fails():
+    led = _ledger_with_windows_fact()
+    p = fake_post("moments")
+    p.body = ["开机时按到的就是这颗指纹电源键 [F15]。"]
+    assert any(i.code == "os_variant_unstated" and i.severity == "error" for i in check_facts(p, led, {}).issues)
+
+
+def test_a_version_bound_fact_with_its_system_named_passes():
+    led = _ledger_with_windows_fact()
+    p = fake_post("moments")
+    p.body = ["Windows 版开机时按到的是指纹电源键 [F15]。"]
+    assert not [i for i in check_facts(p, led, {}).issues if i.code == "os_variant_unstated"]
+    p.body = ["开机时按到的是指纹电源键 [F15]。"]
+    assert not [i for i in check_facts(p, led, {}, variant="Windows 版").issues if i.code == "os_variant_unstated"]
+
+
+@pytest.mark.parametrize("value, written", [
+    ("PD 3.0/65W 快充", "快充功率 3 W"),          # a version number before "/" is not a second wattage
+    ("支持 Wi-Fi 6/2.4GHz", "支持 6 GHz 频段"),    # a standard's generation is not a frequency
+    ("屏幕约 1/2 英寸边框", "边框约 1 英寸"),       # a fraction is not two lengths
+])
+def test_a_slash_that_is_not_a_value_pair_still_fails(value, written):
+    """Review of the 'a/b unit' fix: only two like-for-like values share the unit."""
+    import copy
+    from tests.fakes import _f
+    led = copy.deepcopy(fake_ledger())
+    led.facts.append(_f(30, "demobook-14", "spec_x", "other", value, value))
+    p = fake_post("moments")
+    p.body = [f"{written} [F30]。"]
+    issues = check_facts(p, led, {}).issues
+    assert any(i.code in ("unsupported_number", "tag_mismatch") for i in issues), [i.code for i in issues]

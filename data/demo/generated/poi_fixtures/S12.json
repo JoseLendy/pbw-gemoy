@@ -1,0 +1,109 @@
+{
+  "store_id": "S12",
+  "pois": [
+    {
+      "name": "城西银泰城",
+      "category": "mall",
+      "typecode": "060101",
+      "distance_m": 50,
+      "is_anchor": true,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）商场1",
+      "category": "mall",
+      "typecode": "060101",
+      "distance_m": 1326,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼1",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 589,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼2",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 393,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼3",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 398,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼4",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 1082,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼5",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 925,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区1",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1141,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区2",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1256,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区3",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 410,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区4",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 501,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）中学1",
+      "category": "middle_school",
+      "typecode": "141202",
+      "distance_m": 812,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）高校1",
+      "category": "university",
+      "typecode": "141201",
+      "distance_m": 1309,
+      "is_anchor": false,
+      "is_demo": true
+    }
+  ]
+}

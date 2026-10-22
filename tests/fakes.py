@@ -345,7 +345,8 @@ def fake_reconcile(task: Task, analysis: ScenarioAnalysis, ledger: Ledger, model
     pending: list[str] = []
     used_attrs: set[str] = set()
     for cat in _prioritise(list(analysis.categories), task):
-        facts = [f for f in ledger.facts if f.category == cat and f.attribute not in used_attrs]
+        facts = [f for f in ledger.facts if f.category == cat and f.attribute not in used_attrs
+                 and f.id not in (task.avoid_facts or [])]
         if not facts:
             dropped[cat] = "知识库无该类事实，未使用"
             continue
@@ -373,7 +374,7 @@ def fake_reconcile(task: Task, analysis: ScenarioAnalysis, ledger: Ledger, model
                                "邀请到店上手体验"], cta_type="到店体验", pending=pending)
 
 
-def fake_plan_images(bundle: ModelBundle, platform: str, strategy: Strategy) -> ImagePlan:
+def fake_plan_images(bundle: ModelBundle, platform: str, strategy: Strategy, focus=None) -> ImagePlan:
     lo, hi = PLATFORM_IMAGE_RANGE[platform]
     imgs = [im for im in bundle.images if im.model_id == bundle.model.model_id][:hi]
     pos = ["标题下方", "第1段后", "第2段后", "第3段后", "文末", "文末", "文末", "文末", "文末"]

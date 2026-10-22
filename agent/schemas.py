@@ -10,6 +10,7 @@ final; add new optional fields only via the lead.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from dataclasses import field as dc_field
 from typing import Literal, Optional
 
 # ---------------------------------------------------------------- enums / keys
@@ -25,10 +26,11 @@ PLATFORM_IMAGE_RANGE = {
 }
 
 Scenario = Literal["back_to_school", "office", "creator", "family_upgrade",
-                   "enterprise", "store_visit", "new_launch", "holiday"]
+                   "enterprise", "store_visit", "new_launch", "holiday", "campus_daily"]
 SCENARIO_LABELS = {
     "back_to_school": "开学季", "office": "职场办公", "creator": "内容创作", "family_upgrade": "家庭换新",
     "enterprise": "企业采购", "store_visit": "门店到店", "new_launch": "新品首发", "holiday": "节日营销",
+    "campus_daily": "校园日常",   # student stores outside the 开学季 window (proactive cards)
 }
 
 # Selling-point categories used by scenario analysis (step 2) and the ledger (step 4).
@@ -69,6 +71,26 @@ class Task:
     platform: Optional[str] = None          # a Platform key
     extra_requirements: list[str] = field(default_factory=list)  # e.g. "加上500元补贴" (checks decide)
     notes: list[str] = field(default_factory=list)  # 待确认 lines from intake (e.g. a variant not in the KB)
+    # -- recommender brief (PROACTIVE_AGENT_PLAN §10.7). All optional with defaults: the manual intake flow
+    #    never sets them. Filled by agent/recommend/to_task.card_to_task; read by Phase 2 writer / checkers.
+    source: Literal["manual", "card"] = "manual"
+    card_id: Optional[str] = None
+    store_id: Optional[str] = None
+    store_name: Optional[str] = None
+    slot: Optional[str] = None              # potential | promo | new_release | customer_question
+    segment: Optional[str] = None           # student | office | family | shopper
+    hook: Optional[str] = None              # hook id from angles.json
+    voice: Optional[str] = None             # voice id from angles.json (staff override already applied)
+    landmark: Optional[str] = None
+    angle: Optional[str] = None
+    calendar_theme: Optional[str] = None
+    promo: Optional[dict] = None            # CardPromo.to_dict(): the ONLY allowed price source
+    question: Optional[dict] = None         # CardQuestion.to_dict(): the only allowed customer-question source
+    staff: Optional[dict] = None            # StaffContext.to_dict() if a person was given
+    card_date: Optional[str] = None         # ISO date of the card: an active-campaign check needs it
+    # -- 8E batch variety (generate_batch only): what other stores already use today. Empty otherwise.
+    avoid_facts: list[str] = field(default_factory=list)     # fact ids: reconcile picks another point
+    avoid_phrases: list[str] = field(default_factory=list)   # wording: the writer says it differently
     to_dict = _d
 
 
@@ -199,6 +221,16 @@ class Strategy:
 
 
 @dataclass
+class EditBlocked:
+    """pipeline.edit() refused an instruction before calling the writer (e.g. "加上立减500" with no matching
+    promotion record). `prev` is the unchanged previous result, so the UI can keep showing it."""
+    instruction: str
+    message: str                   # Chinese, cites the rule; shown to the user
+    rule: str = "price_traceability"
+    prev: Optional["RunResult"] = None
+
+
+@dataclass
 class NeedsHuman:
     conflicts: list[Conflict]
     message: str                   # Chinese, shown to the user
@@ -248,13 +280,14 @@ class Post:
 # ---------------------------------------------------------------- step 8: checks
 @dataclass
 class CheckIssue:
-    stage: Literal["8A", "8B", "8C"]
+    stage: Literal["8A", "8B", "8C", "8D"]
     severity: Literal["error", "warn"]
     code: str                      # e.g. "unsupported_number", "sibling_value", "banned_word", "image_count"
     message: str                   # Chinese, shown in 核验结果
     field: str = ""                # "title" | "intro" | "body[2]" | "cta" | "tags" | "images" | ""
     span: str = ""                 # offending text
     fact_id: str = ""
+    also_stages: list[str] = dc_field(default_factory=list)  # e.g. 8C + 8D dedupe: primary 8D, also 8C
 
 
 @dataclass
@@ -283,3 +316,144 @@ class RunResult:
     sources: list[SourceRecord] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
     loops: int = 0
+    fallback: Optional[str] = None  # None | "trimmed" | "next_card" (card runs that failed after 2 rewrites)
+
+
+@dataclass
+class FailingSentence:
+    field: str                      # title / intro / body[i] / cta
+    sentence: str                   # publishable text (no [F#] tags)
+    stage: str                      # 8A / 8B / 8C / 8D
+    code: str
+    reason: str                     # Chinese, from the checker
+
+
+@dataclass
+class NeedsReview:
+    """A card run that still failed after 2 rewrites, trimming and the next card. Nothing was delivered:
+    the UI shows 「需人工确认」 with the draft, the failing sentences and why. Never publishable as is."""
+    card: "RecommendationCard"
+    draft: "RunResult"              # the best (fewest errors) checked draft; its post must not be published
+    failing: list[FailingSentence]
+    message: str = "需人工确认：自动核验未通过，已列出未通过的句子和原因"
+    attempts: list[str] = field(default_factory=list)   # e.g. ["S01-…-potential", "trimmed", "S01-…-promo"]
+    to_dict = _d
+
+
+# ---------------------------------------------------------------- recommender (PROACTIVE_AGENT_PLAN §10.7)
+# Field names match data/demo/templates/recommendation_card.example.json exactly. A card is per STORE;
+# a StaffContext only overrides the voice for one person's version of the post (plan §2.1 demo
+# mode: no login, no auth, no session).
+@dataclass
+class CardReason:
+    text: str
+    source: Literal["poi", "sales", "promo", "release", "questions", "calendar"]
+    is_demo: bool = True            # drives the 模拟 badge
+
+
+@dataclass
+class CardHook:
+    id: str                         # scene | question | customer | myth | checklist (angles.json)
+    label: str
+
+
+@dataclass
+class CardVoice:
+    id: str                         # manager | techie | senior (angles.json)
+    label: str
+
+
+@dataclass
+class CardPromo:
+    campaign_id: str
+    name: str
+    mechanic: str
+    price_info: Optional[dict] = None   # {label, value, currency, conditions} — the ONLY allowed price source
+    source: str = "DEMO"
+    to_dict = _d
+
+
+@dataclass
+class CardQuestion:
+    chip_id: str
+    text: str
+    count: int
+    to_dict = _d
+
+
+@dataclass
+class RecommendationCard:
+    card_id: str
+    store_id: str
+    store_name: str
+    date: str                       # ISO date
+    slot: Literal["potential", "promo", "new_release", "customer_question"]
+    slot_label: str                 # 潜力款 / 活动款 / 新品款 / 顾客问答
+    model_id: Optional[str]         # writer must fetch facts for exactly this ID
+    display_name: Optional[str]
+    platform: str                   # Chinese label from the weekly rotation (朋友圈 / 小红书 / 公众号)
+    segment: str                    # student | office | family | shopper
+    segment_label: str
+    angle: str
+    scenario: Optional[str] = None  # a Scenario key, calendar-aware (agent/recommend/slots.scenario_for)
+    calendar_theme: Optional[str] = None
+    hook: Optional[CardHook] = None
+    voice: Optional[CardVoice] = None
+    landmark: str = ""
+    reasons: list[CardReason] = field(default_factory=list)
+    locked: bool = False
+    locked_reason: Optional[str] = None    # "fact_card_draft" → show 待总部确认, don't generate
+    promo: Optional[CardPromo] = None
+    question: Optional[CardQuestion] = None
+    scores: dict = field(default_factory=dict)   # fit / index / potential / share / peer_share; never in copy
+    is_default: bool = False
+    is_demo: bool = True
+    to_dict = _d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RecommendationCard":
+        d = {k: v for k, v in dict(d).items() if k in cls.__dataclass_fields__}   # old records: e.g. nickname
+        d["reasons"] = [r if isinstance(r, CardReason) else CardReason(**r) for r in d.get("reasons") or []]
+        for key, typ in (("hook", CardHook), ("voice", CardVoice), ("promo", CardPromo), ("question", CardQuestion)):
+            v = d.get(key)
+            d[key] = typ(**v) if isinstance(v, dict) else v
+        return cls(**d)
+
+
+@dataclass
+class LockedResult:
+    """run_from_card() on a locked card: nothing was generated, no LLM or ima call was made."""
+    card: "RecommendationCard"
+    reason: str                     # card.locked_reason, e.g. "fact_card_draft"
+    message: str                    # Chinese, shown to the user: 新品资料待总部确认，暂不可生成
+    to_dict = _d
+
+
+BASELINE_LABEL = "对照组：未经约束的普通大模型输出"
+
+
+@dataclass
+class BaselineResult:
+    """generate_baseline(): one naive LLM call for the video's before/after shot. NEVER our result:
+    `display_text` always starts with BASELINE_LABEL and the UI must show it as the control group."""
+    card_id: str
+    model_id: Optional[str]
+    platform: str
+    prompt: str                     # the naive prompt that was sent
+    text: str                       # raw model output, unchecked
+    display_text: str               # label + text: the only form the UI should render
+    hits: list["CheckIssue"] = field(default_factory=list)   # 8D stage-1 hits, for highlighting only
+    label: str = BASELINE_LABEL
+    is_baseline: bool = True
+    to_dict = _d
+
+
+@dataclass
+class StaffContext:
+    """Who is posting (demo mode, no auth). Only the voice may differ from the store card; a post never
+    carries a personal name (no sign-off), so it works for whoever posts it."""
+    staff_id: str
+    display_name: str
+    role: Literal["staff", "manager"] = "staff"
+    voice: Optional[str] = None     # voice id override; must be allowed for the card's segment
+    to_dict = _d

@@ -87,3 +87,14 @@ holiday:
     - 不写限时折扣与满减
   cta_style: 邀请到店看实物、咨询礼品包装等资料内已有的服务
   persona_card: 门店顾客
+
+campus_daily:
+  label: 校园日常
+  audience: 在校大学生（学期中）
+  focus: 上课、图书馆、宿舍之间来回带；续航、手机平板协同、小组作业
+  categories: [portability, battery, collaboration, display, storage_memory, system]
+  forbidden:
+    - 不编造学生优惠、教育补贴或赠品
+    - 不写"开学季"促销语境
+  cta_style: 邀请下课顺路到店上手掂重量、试屏幕
+  persona_card: 学生用户

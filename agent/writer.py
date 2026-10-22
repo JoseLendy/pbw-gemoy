@@ -33,7 +33,8 @@ def _platform_rules(platform: str) -> str:
 
 
 def _fact_line(f) -> str:
-    return f"{f.id} | {f.attribute} | {f.value} | 变体={f.variant} | 来源={f.source_title}"
+    qual = f" | 限定={f.qualifier}" if getattr(f, "qualifier", "") else ""
+    return f"{f.id} | {f.attribute} | {f.value} | 变体={f.variant}{qual} | 来源={f.source_title}"
 
 
 def _usable(ledger: Ledger, strategy: Strategy) -> tuple[list, list]:
@@ -46,13 +47,47 @@ def _usable(ledger: Ledger, strategy: Strategy) -> tuple[list, list]:
 
 
 def _boundaries(ledger: Ledger, chosen: list) -> list[str]:
+    """Boundary lines for the chosen facts, plus the uncategorised and "other" (model-wide) lines: the same
+    selection the 8B judge enforces (checks.compliance.relevant_boundaries), so the writer is never held to a
+    model-wide line (e.g. a "bind to the sold SKU" rule) it was not shown."""
     cats = {f.category for f in chosen}
-    return [b["text"] for b in ledger.boundaries if b.get("category") in cats or not b.get("category")]
+    return [b["text"] for b in ledger.boundaries
+            if b.get("category") in cats or not b.get("category") or b.get("category") == "other"]
 
 
 def _plan_lines(plan: ImagePlan) -> str:
     return "\n".join(f"{p.image.media_id} | 位置={p.position} | 说明={p.caption} | 来源={p.image.source_path}"
                      for p in plan.items) or "（无可用图片，images 留空）"
+
+
+def brief_block(task: Task) -> str:
+    """The recommendation card's writer brief (hook / voice / landmark / angle / promo / sales ban).
+    Empty string for the manual flow, so that prompt is byte-identical to before Phase 2."""
+    try:
+        from agent.style.profile import brief
+        return brief(task)
+    except Exception:  # a style module failure must never stop a run
+        return ""
+
+
+def product_names(task: Task) -> list[str]:
+    """[full display name, unambiguous short forms...] for the task's model (8C product_unnamed accepts these)."""
+    try:
+        from agent.checks.conformance import accepted_product_names
+        names = accepted_product_names(task.model_id, task.product_query if task.source == "card" else None)
+    except Exception:  # noqa: BLE001 - P3 module missing: fall back to what the task carries
+        names = []
+    return names or [n for n in (task.product_query,) if n]
+
+
+def _name_line(task: Task) -> str:
+    names = product_names(task)
+    if not names:
+        return ""
+    short = "、".join(f"「{n}」" for n in names[1:4])
+    return (f"产品名称：「{names[0]}」。文案里至少完整写出一次这个名称"
+            + (f"（或无歧义的官方简称：{short}）" if short else "")
+            + "；不能只用“这台”“这款”指代，也不要写成会对应多个型号的简称（如只写系列名加尺寸）。\n")
 
 
 def _context(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan) -> str:
@@ -61,7 +96,15 @@ def _context(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan) ->
     parts = [
         f"## 任务\n型号={task.model_id}；人群={strategy.analysis.audience}；场景={task.scenario}；"
         f"平台={PLATFORM_LABELS.get(task.platform or '', task.platform)}；变体={task.variant or '未指定'}\n"
+        + _name_line(task) +
         f"额外要求（若涉及价格、补贴、销量、奖项、评价、测试结果、政策承诺，一律不写）：{task.extra_requirements or '无'}",
+    ]
+    # Proactive flow only: the card's hook / voice / landmark / angle / promo become explicit instructions.
+    # Empty for source == "manual", so the manual prompt is byte-identical to before Phase 2.
+    card_brief = brief_block(task)
+    if card_brief:
+        parts.append("## 门店推荐卡要求（优先级高于通用写作偏好）\n" + card_brief)
+    parts += [
         f"## 策略\n切入点：{strategy.angle}\n行动引导类型：{strategy.cta_type}\n卖点顺序：\n"
         + "\n".join(f"- {sp.fact_id}：{sp.reason}" for sp in strategy.selling_points),
         "## 已选事实（必须引用）\n" + "\n".join(_fact_line(f) for f in chosen),
@@ -162,7 +205,8 @@ def write_post(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan, 
     # tags are always filled
     if not post.tags:
         post.tags = [PLATFORM_LABELS.get(post.platform, post.platform)]
-        if task.scenario:
+        # A card run never gets "新品首发" as a fallback tag: that is a release claim 8B would block.
+        if task.scenario and not (task.source == "card" and task.scenario == "new_launch"):
             from agent.schemas import SCENARIO_LABELS
             post.tags.append(SCENARIO_LABELS.get(task.scenario, task.scenario))
     return post
@@ -193,7 +237,10 @@ def rewrite(post: Post, issues: list[CheckIssue], task: Task, strategy: Strategy
         current["images"] = [im.__dict__ for im in post.images]
     msgs = [{"field": i.field, "code": i.code, "message": i.message, "span": i.span, "fact_id": i.fact_id}
             for i in issues if i.severity == "error"]
+    usable = [f for f in chosen + others if f.id in allowed]
     user = (_context(task, strategy, ledger, plan)
+            + "\n\n## 本轮可用的事实编号（改写只能引用这些；其他编号会被删除）\n"
+            + "\n".join(_fact_line(f) for f in usable)
             + "\n\n## 需要修改的字段（当前内容）\n" + json.dumps(current, ensure_ascii=False)
             + "\n\n## 核验问题\n" + json.dumps(msgs, ensure_ascii=False)
             + "\n\n只输出需要修改的字段。不得新增事实。")
@@ -207,5 +254,9 @@ def rewrite(post: Post, issues: list[CheckIssue], task: Task, strategy: Strategy
                tags=f.get("tags", post.tags) or post.tags, selling_points=list(post.selling_points),
                images=f.get("images", post.images))
     used = _used_ids(new)
-    new.selling_points = [i for i in dict.fromkeys(post.selling_points + used) if i in allowed and ledger.get(i)]
+    # An id whose tag this rewrite removed is no longer a selling point (otherwise it lingers, e.g. as a
+    # second 朋友圈 point no sentence cites). Ids declared without ever being tagged are kept as before.
+    removed = set(_used_ids(post)) - set(used)
+    new.selling_points = [i for i in dict.fromkeys(post.selling_points + used)
+                          if i in allowed and ledger.get(i) and i not in removed]
     return new

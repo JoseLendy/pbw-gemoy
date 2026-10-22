@@ -1,0 +1,13 @@
+store_id,store_name,district,address,intended_type,traffic_tier,anchor_poi,anchor_category,lat,lng,is_demo
+S01,紫金港店,西湖区,杭州市西湖区浙江大学紫金港校区,campus,2,浙江大学紫金港校区,university,,,true
+S02,下沙高教园店,钱塘区,杭州市钱塘区杭州电子科技大学,campus,2,杭州电子科技大学,university,,,true
+S03,小和山店,西湖区,杭州市西湖区浙江科技大学小和山校区,campus,1,浙江科技大学,university,,,true
+S04,钱江新城店,上城区,杭州市上城区钱江新城,office,3,钱江新城商务区,office,,,true
+S05,未来科技城店,余杭区,杭州市余杭区梦想小镇,office,2,梦想小镇,industrial_park,,,true
+S06,滨江店,滨江区,杭州市滨江区滨江高新区,office,2,滨江高新区,office,,,true
+S07,三墩店,西湖区,杭州市西湖区三墩镇,residential,1,三墩住宅区,residential,,,true
+S08,九堡店,上城区,杭州市上城区九堡,residential,1,九堡住宅区,residential,,,true
+S09,良渚店,余杭区,杭州市余杭区良渚文化村,residential,1,良渚文化村,residential,,,true
+S10,湖滨商圈店,上城区,杭州市上城区湖滨银泰in77,mall,3,湖滨银泰in77,mall,,,true
+S11,武林广场店,拱墅区,杭州市拱墅区杭州大厦,mall,3,杭州大厦,mall,,,true
+S12,城西银泰店,拱墅区,杭州市拱墅区城西银泰城,mall,2,城西银泰城,mall,,,true

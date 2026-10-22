@@ -1,0 +1,133 @@
+{
+  "store_id": "S07",
+  "pois": [
+    {
+      "name": "三墩住宅区",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 150,
+      "is_anchor": true,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区1",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 881,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区2",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1320,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区3",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1058,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区4",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1183,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区5",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 614,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区6",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1233,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区7",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 123,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区8",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 334,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区9",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1199,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区10",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 646,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区11",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 796,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）小学1",
+      "category": "primary_school",
+      "typecode": "141203",
+      "distance_m": 500,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）小学2",
+      "category": "primary_school",
+      "typecode": "141203",
+      "distance_m": 645,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）中学1",
+      "category": "middle_school",
+      "typecode": "141202",
+      "distance_m": 1229,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼1",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 1012,
+      "is_anchor": false,
+      "is_demo": true
+    }
+  ]
+}

@@ -233,3 +233,53 @@ def test_find_conflicts_ignores_claims_lists_and_qualifier_kinds(demo):
 def test_parse_specs_unknown_label_keeps_label_in_quote():
     facts, _, _ = parse_specs("## 其他\n演示标签\n\n演示取值说明，用于测试。\n", "demobook-14")
     assert facts[0].attribute == "spec_1" and facts[0].quote == "演示标签 演示取值说明，用于测试。"
+
+
+# ------------------------------------------------------------------ OS-bound features (S04 fingerprint, 2026-10-23)
+def _os_ledger(*boundaries):
+    import copy
+    from tests.fakes import _f, fake_ledger
+    led = copy.deepcopy(fake_ledger())
+    led.facts += [_f(20, "demobook-14", "power_button", "design", "演示识别电源键", "演示识别电源键"),
+                  _f(21, "demobook-14", "feature", "design", "Linux版演示键仅作开机键", "Linux版演示键仅作开机键",
+                     kind="claim"),
+                  _f(22, "demobook-14", "keyboard", "design", "支持演示快键", "支持演示快键")]
+    led.boundaries = [{"category": "design", "text": t, "source_title": "产品事实.md"} for t in boundaries]
+    return led
+
+
+def test_a_feature_the_kb_says_linux_lacks_is_bound_to_windows():
+    """Real 2026-10-23 S04: a power-button feature was tagged all versions although the model's own boundary
+    says the Linux version lacks it; the post stated it for every version."""
+    from agent.ledger import bind_os_variants
+    led = bind_os_variants(_os_ledger("Linux 版：只保留开机，不支持演示识别。", "演示快键功能仅限 Windows 版本产品支持。"))
+    assert led.get("F20").variant == "Windows 版"
+    assert led.get("F22").variant == "Windows 版"
+    assert led.get("F21").variant == "all"            # already names its own system: left as written
+
+
+def test_no_os_boundary_means_no_binding():
+    from agent.ledger import bind_os_variants
+    led = bind_os_variants(_os_ledger("以上演示功能仅限 Windows 版本产品支持。", "演示处理器仅限 Windows 版本产品搭载。"))
+    assert all(led.get(f).variant == "all" for f in ("F20", "F21", "F22"))
+
+
+def test_a_bare_function_line_names_no_feature():
+    from agent.ledger import bind_os_variants
+    led = _os_ledger("功能仅限 Windows 版本产品支持。")
+    led.facts[-1].value = led.facts[-1].quote = "智慧功能"
+    led = bind_os_variants(led)
+    assert not [f.id for f in led.facts if f.variant == "Windows 版"]
+
+
+def test_a_generic_word_after_not_supported_binds_nothing():
+    """Review: 'Linux 版：不支持部分功能' made 部分 a term and bound every fact containing it."""
+    from agent.ledger import _os_bound_terms
+    led = _os_ledger("Linux 版：不支持部分功能。")
+    assert _os_bound_terms(led.boundaries) == []
+
+
+def test_a_listed_pair_and_version_wording_are_both_read():
+    from agent.ledger import _os_bound_terms
+    terms = _os_bound_terms(_os_ledger("Linux 版本：不支持演示识别和演示开关。").boundaries)
+    assert "演示" in terms and not any("和" in t for t in terms)

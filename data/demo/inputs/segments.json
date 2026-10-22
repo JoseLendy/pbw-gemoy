@@ -1,0 +1,16 @@
+{
+  "_doc": "POI category -> audience segment. Used by gen_fake_data.py AND by agent/recommend/poi.py. Typecodes from Amap POI classification table (verified 2026-10-21).",
+  "radius_m": 1500,
+  "decay_m": 500,
+  "segments": ["student", "office", "family", "shopper"],
+  "segment_labels": {"student": "学生客群", "office": "上班族客群", "family": "家庭客群", "shopper": "逛街/送礼客群"},
+  "categories": {
+    "university":      {"typecodes": ["141201"], "segment": "student", "importance": 5.0, "label": "高校"},
+    "middle_school":   {"typecodes": ["141202"], "segment": "family",  "importance": 2.0, "label": "中学"},
+    "primary_school":  {"typecodes": ["141203"], "segment": "family",  "importance": 2.0, "label": "小学"},
+    "residential":     {"typecodes": ["120302", "120300"], "segment": "family", "importance": 1.5, "label": "住宅小区"},
+    "office":          {"typecodes": ["120201"], "segment": "office",  "importance": 1.0, "label": "写字楼"},
+    "industrial_park": {"typecodes": ["120100"], "segment": "office",  "importance": 2.0, "label": "产业园区"},
+    "mall":            {"typecodes": ["060101", "060100"], "segment": "shopper", "importance": 3.0, "label": "商场"}
+  }
+}

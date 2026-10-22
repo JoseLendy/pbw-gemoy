@@ -1,0 +1,173 @@
+{
+  "store_id": "S05",
+  "pois": [
+    {
+      "name": "梦想小镇",
+      "category": "industrial_park",
+      "typecode": "120100",
+      "distance_m": 200,
+      "is_anchor": true,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼1",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 601,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼2",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 434,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼3",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 1046,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼4",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 877,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼5",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 652,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼6",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 1240,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼7",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 549,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼8",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 764,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼9",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 214,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼10",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 569,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼11",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 165,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼12",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 746,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼13",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 921,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼14",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 648,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）写字楼15",
+      "category": "office",
+      "typecode": "120201",
+      "distance_m": 235,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）产业园区1",
+      "category": "industrial_park",
+      "typecode": "120100",
+      "distance_m": 944,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区1",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 1071,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）住宅小区2",
+      "category": "residential",
+      "typecode": "120302",
+      "distance_m": 911,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）小学1",
+      "category": "primary_school",
+      "typecode": "141203",
+      "distance_m": 1158,
+      "is_anchor": false,
+      "is_demo": true
+    },
+    {
+      "name": "（模拟）商场1",
+      "category": "mall",
+      "typecode": "060101",
+      "distance_m": 592,
+      "is_anchor": false,
+      "is_demo": true
+    }
+  ]
+}

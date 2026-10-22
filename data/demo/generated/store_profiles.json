@@ -1,0 +1,122 @@
+{
+  "S01": {
+    "store_id": "S01",
+    "store_name": "紫金港店",
+    "landmark": "紫金港校区东门对面",
+    "landmark_source": "edited_by_store",
+    "voice": "senior",
+    "voice_label": "学长学姐风",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S02": {
+    "store_id": "S02",
+    "store_name": "下沙高教园店",
+    "landmark": "杭州电子科技大学附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "techie",
+    "voice_label": "懂技术的店员",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S03": {
+    "store_id": "S03",
+    "store_name": "小和山店",
+    "landmark": "浙江科技大学附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "techie",
+    "voice_label": "懂技术的店员",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S04": {
+    "store_id": "S04",
+    "store_name": "钱江新城店",
+    "landmark": "钱江新城商务区附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "manager",
+    "voice_label": "亲切店长",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S05": {
+    "store_id": "S05",
+    "store_name": "未来科技城店",
+    "landmark": "梦想小镇附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "techie",
+    "voice_label": "懂技术的店员",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S06": {
+    "store_id": "S06",
+    "store_name": "滨江店",
+    "landmark": "滨江高新区附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "manager",
+    "voice_label": "亲切店长",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S07": {
+    "store_id": "S07",
+    "store_name": "三墩店",
+    "landmark": "三墩住宅区附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "manager",
+    "voice_label": "亲切店长",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S08": {
+    "store_id": "S08",
+    "store_name": "九堡店",
+    "landmark": "九堡住宅区附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "manager",
+    "voice_label": "亲切店长",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S09": {
+    "store_id": "S09",
+    "store_name": "良渚店",
+    "landmark": "良渚文化村附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "manager",
+    "voice_label": "亲切店长",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S10": {
+    "store_id": "S10",
+    "store_name": "湖滨商圈店",
+    "landmark": "湖滨银泰in77附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "techie",
+    "voice_label": "懂技术的店员",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S11": {
+    "store_id": "S11",
+    "store_name": "武林广场店",
+    "landmark": "杭州大厦附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "techie",
+    "voice_label": "懂技术的店员",
+    "editable_by_store": true,
+    "is_demo": true
+  },
+  "S12": {
+    "store_id": "S12",
+    "store_name": "城西银泰店",
+    "landmark": "城西银泰城附近",
+    "landmark_source": "auto_from_poi",
+    "voice": "techie",
+    "voice_label": "懂技术的店员",
+    "editable_by_store": true,
+    "is_demo": true
+  }
+}

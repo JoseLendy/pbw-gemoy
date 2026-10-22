@@ -1,0 +1,450 @@
+[
+  {
+    "store_id": "S01",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S01",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S01",
+    "chip_id": "Q07",
+    "text": "旧电脑资料怎么迁移",
+    "date": "2026-10-19",
+    "is_demo": true
+  },
+  {
+    "store_id": "S01",
+    "chip_id": "Q08",
+    "text": "老人小孩好不好上手",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S01",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S01",
+    "chip_id": "Q01",
+    "text": "学生用够不够",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S01",
+    "chip_id": "Q06",
+    "text": "能不能跑设计/剪辑软件",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S02",
+    "chip_id": "Q03",
+    "text": "续航能撑一整天吗",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S02",
+    "chip_id": "Q03",
+    "text": "续航能撑一整天吗",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S02",
+    "chip_id": "Q06",
+    "text": "能不能跑设计/剪辑软件",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S02",
+    "chip_id": "Q06",
+    "text": "能不能跑设计/剪辑软件",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S02",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-14",
+    "is_demo": true
+  },
+  {
+    "store_id": "S03",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S03",
+    "chip_id": "Q01",
+    "text": "学生用够不够",
+    "date": "2026-10-19",
+    "is_demo": true
+  },
+  {
+    "store_id": "S03",
+    "chip_id": "Q03",
+    "text": "续航能撑一整天吗",
+    "date": "2026-10-14",
+    "is_demo": true
+  },
+  {
+    "store_id": "S03",
+    "chip_id": "Q06",
+    "text": "能不能跑设计/剪辑软件",
+    "date": "2026-10-19",
+    "is_demo": true
+  },
+  {
+    "store_id": "S03",
+    "chip_id": "Q02",
+    "text": "能不能和手机/平板互传文件",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S04",
+    "chip_id": "Q01",
+    "text": "学生用够不够",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S04",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-14",
+    "is_demo": true
+  },
+  {
+    "store_id": "S04",
+    "chip_id": "Q02",
+    "text": "能不能和手机/平板互传文件",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S04",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S04",
+    "chip_id": "Q05",
+    "text": "数据安全怎么保障",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q03",
+    "text": "续航能撑一整天吗",
+    "date": "2026-10-16",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q03",
+    "text": "续航能撑一整天吗",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q02",
+    "text": "能不能和手机/平板互传文件",
+    "date": "2026-10-16",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q06",
+    "text": "能不能跑设计/剪辑软件",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q05",
+    "text": "数据安全怎么保障",
+    "date": "2026-10-19",
+    "is_demo": true
+  },
+  {
+    "store_id": "S05",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S06",
+    "chip_id": "Q03",
+    "text": "续航能撑一整天吗",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S06",
+    "chip_id": "Q03",
+    "text": "续航能撑一整天吗",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S06",
+    "chip_id": "Q05",
+    "text": "数据安全怎么保障",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S07",
+    "chip_id": "Q02",
+    "text": "能不能和手机/平板互传文件",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S07",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S07",
+    "chip_id": "Q02",
+    "text": "能不能和手机/平板互传文件",
+    "date": "2026-10-14",
+    "is_demo": true
+  },
+  {
+    "store_id": "S07",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-16",
+    "is_demo": true
+  },
+  {
+    "store_id": "S08",
+    "chip_id": "Q07",
+    "text": "旧电脑资料怎么迁移",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S08",
+    "chip_id": "Q02",
+    "text": "能不能和手机/平板互传文件",
+    "date": "2026-10-14",
+    "is_demo": true
+  },
+  {
+    "store_id": "S08",
+    "chip_id": "Q02",
+    "text": "能不能和手机/平板互传文件",
+    "date": "2026-10-19",
+    "is_demo": true
+  },
+  {
+    "store_id": "S08",
+    "chip_id": "Q06",
+    "text": "能不能跑设计/剪辑软件",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S08",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-14",
+    "is_demo": true
+  },
+  {
+    "store_id": "S09",
+    "chip_id": "Q07",
+    "text": "旧电脑资料怎么迁移",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S09",
+    "chip_id": "Q07",
+    "text": "旧电脑资料怎么迁移",
+    "date": "2026-10-14",
+    "is_demo": true
+  },
+  {
+    "store_id": "S09",
+    "chip_id": "Q01",
+    "text": "学生用够不够",
+    "date": "2026-10-19",
+    "is_demo": true
+  },
+  {
+    "store_id": "S09",
+    "chip_id": "Q01",
+    "text": "学生用够不够",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S09",
+    "chip_id": "Q01",
+    "text": "学生用够不够",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S09",
+    "chip_id": "Q01",
+    "text": "学生用够不够",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-20",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q04",
+    "text": "出差带着重不重",
+    "date": "2026-10-18",
+    "is_demo": true
+  },
+  {
+    "store_id": "S10",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-16",
+    "is_demo": true
+  },
+  {
+    "store_id": "S11",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-16",
+    "is_demo": true
+  },
+  {
+    "store_id": "S11",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S11",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-19",
+    "is_demo": true
+  },
+  {
+    "store_id": "S11",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-16",
+    "is_demo": true
+  },
+  {
+    "store_id": "S11",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-16",
+    "is_demo": true
+  },
+  {
+    "store_id": "S12",
+    "chip_id": "Q10",
+    "text": "可以先到店试用吗",
+    "date": "2026-10-17",
+    "is_demo": true
+  },
+  {
+    "store_id": "S12",
+    "chip_id": "Q09",
+    "text": "送人选哪款合适",
+    "date": "2026-10-15",
+    "is_demo": true
+  },
+  {
+    "store_id": "S12",
+    "chip_id": "Q05",
+    "text": "数据安全怎么保障",
+    "date": "2026-10-17",
+    "is_demo": true
+  }
+]

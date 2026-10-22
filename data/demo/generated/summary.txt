@@ -1,0 +1,20 @@
+pbw gemoy demo data · today=2026-10-21 · seed=42 · platform today=朋友圈
+
+storetype        POI      dominant w     潜力款      index  default card  
+S01  campus      fixture  student  0.533 matebook-14-harmonyos0.365  潜力款 matebook-14-harmonyos
+S02  campus      fixture  student  0.5   -        -      活动款 matebook-14-harmonyos
+S03  campus      fixture  student  0.596 matebook-d-14-20240.595  潜力款 matebook-d-14-2024
+S04  office      fixture  office   0.781 matebook-x-pro-ultra0.525  潜力款 matebook-x-pro-ultra
+S05  office      fixture  office   0.81  -        -      活动款 matebook-14-2024
+S06  office      fixture  office   0.704 -        -      活动款 matebook-14-2024
+S07  residential fixture  family   0.98  -        -      活动款 matebook-d-16-se-2024
+S08  residential fixture  family   0.832 matebook-d-16-se-20240.504  潜力款 matebook-d-16-se-2024
+S09  residential fixture  family   0.923 -        -      活动款 matebook-d-16-se-2024
+S10  mall        fixture  shopper  0.52  matebook-14-harmonyos0.561  潜力款 matebook-14-harmonyos
+S11  mall        fixture  shopper  0.47  -        -      活动款 matebook-14-2024
+S12  mall        fixture  shopper  0.439 -        -      活动款 matebook-14-2024
+
+best-seller matebook-14-2024 index range: 0.76-1.26 (should hover ~1.0)
+stock-out check: S02/matebook-14-harmonyos stock=0 (must not be 潜力款)
+
+All checks passed.

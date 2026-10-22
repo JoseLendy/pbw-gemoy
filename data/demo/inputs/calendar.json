@@ -1,0 +1,7 @@
+[
+  {"event": "双十一", "start": "2026-11-01", "end": "2026-11-11", "theme": "购物节前做功课", "segments": ["student", "office", "family", "shopper"]},
+  {"event": "双十二", "start": "2026-12-01", "end": "2026-12-12", "theme": "年底换机", "segments": ["office", "family", "shopper"]},
+  {"event": "期末考试季", "start": "2026-12-20", "end": "2027-01-15", "theme": "复习/论文季", "segments": ["student"]},
+  {"event": "春节", "start": "2027-01-23", "end": "2027-02-13", "theme": "送礼/全家换新", "segments": ["family", "shopper"]},
+  {"event": "开学季", "start": "2027-02-15", "end": "2027-03-10", "theme": "新学期装备", "segments": ["student", "family"]}
+]

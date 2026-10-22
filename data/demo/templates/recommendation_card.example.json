@@ -1,0 +1,55 @@
+{
+  "card_id": "S01-2026-10-21-potential",
+  "store_id": "S01",
+  "store_name": "紫金港店",
+  "date": "2026-10-21",
+  "slot": "potential",
+  "slot_label": "潜力款",
+  "model_id": "matebook-14-harmonyos",
+  "display_name": "HUAWEI MateBook 14（鸿蒙版）",
+  "platform": "朋友圈",
+  "segment": "student",
+  "segment_label": "学生客群",
+  "angle": "全天续航",
+  "scenario": "campus_daily",
+  "calendar_theme": "购物节前做功课",
+  "hook": {
+    "id": "question",
+    "label": "问题开头"
+  },
+  "voice": {
+    "id": "senior",
+    "label": "学长学姐风"
+  },
+  "landmark": "紫金港校区东门对面",
+  "reasons": [
+    {
+      "text": "门店1.5km内有2所高校（浙江大学紫金港校区等）→ 学生客群为主",
+      "source": "poi",
+      "is_demo": true
+    },
+    {
+      "text": "该型号本店销量占比低于同类商圈门店 64%",
+      "source": "sales",
+      "is_demo": true
+    },
+    {
+      "text": "距双十一还有 21 天",
+      "source": "calendar",
+      "is_demo": false
+    }
+  ],
+  "locked": false,
+  "locked_reason": null,
+  "promo": null,
+  "question": null,
+  "scores": {
+    "fit": 0.717,
+    "index": 0.365,
+    "potential": 0.455,
+    "share": 0.084,
+    "peer_share": 0.2299
+  },
+  "is_default": true,
+  "is_demo": true
+}

@@ -147,16 +147,14 @@ AI_TELL_PATTERNS: list[tuple[str, str]] = [
 MAX_EXCLAMATIONS = 2
 REPEATED_OPENING_MIN = 3
 
+# Rules already stated in prompts/system_prompt.md (fact tags, prices, competitors, personal experience)
+# are not repeated here (Phase 5 prompt-bloat guard); both reach the writer together.
 WRITING_RULES: list[str] = [
     "像一个熟悉产品的真人在说话：用具体的事实和场景，不堆砌形容词。",
-    "每一个产品数值和功能都要标注事实编号，例如写“重量约X kg [F1]”；没有编号的参数一律不写。",
     "不用套话：不写 赋能、打造、不仅仅是…更是、综上所述、总而言之、值得一提的是、让我们…、在当今…时代、无论是…还是…。",
     "不用破折号「——」；全文感叹号不超过 2 个；避免连续三句用同样的开头。",
     "长短句交错，段落短；一段只讲一件事。",
-    "不写价格、优惠、销量、库存、奖项、评价、测试成绩、售后政策，除非事实清单里有对应条目。",
     "不出现绝对化用语（最、第一、唯一、顶级、全网、首选等），上限值写成“可达 / 最多 X”。",
-    "不提及任何其他品牌或竞品，不做对比。",
-    "不编造个人使用经历（亲测、我用了X天、入手X个月）。",
 ]
 
 # ----------------------------------------------------------------- helpers
@@ -217,7 +215,8 @@ def build_prompt_rules(platform: str) -> str:
     else:
         lines.append("- 平台标签写在 tags 字段即可，正文里不要出现 #话题")
     if r["selling_points_max"] == 1:
-        lines.append("- 只讲一个核心卖点：selling_points 只放一个事实编号，正文只围绕这一个点")
+        lines.append("- 只讲一个核心卖点：selling_points 只放一个事实编号，正文只围绕这一个点；"
+                     "正文只标注这一个事实编号，不再引用其他事实（包括背景事实）")
     elif r["selling_points_max"]:
         lines.append(f"- 卖点不超过 {r['selling_points_max']} 个")
     if r["title_max"]:
@@ -297,12 +296,7 @@ def check_post(post: Post, platform: str) -> list[CheckIssue]:
         if m.group(0) not in cited:
             cited.append(m.group(0))
     if r["selling_points_max"] == 1:
-        if len(post.selling_points) != 1:
-            issues.append(_issue("moments_focus", f"朋友圈只讲一个核心卖点，selling_points 有 {len(post.selling_points)} 个",
-                                 field="selling_points", span="，".join(post.selling_points)))
-        if len(cited) > 1:
-            issues.append(_issue("moments_focus", f"朋友圈正文引用了 {len(cited)} 个事实，只能围绕一个核心卖点",
-                                 field="body", span="".join(cited)))
+        issues += _moments_focus_issues(post, [c[1:-1] for c in cited])
     elif r["selling_points_max"] and len(post.selling_points) > r["selling_points_max"]:
         issues.append(_issue("too_many_selling_points",
                              f"卖点 {len(post.selling_points)} 个，超过上限 {r['selling_points_max']} 个",
@@ -326,6 +320,37 @@ def check_post(post: Post, platform: str) -> list[CheckIssue]:
 
     # --- AI tells
     issues += _ai_tell_issues(post)
+    return issues
+
+
+_SENT_PIECE_RE = re.compile(r"[^。！？!?；;\n]+[。！？!?；;\n]*")
+
+
+def _moments_focus_issues(post: Post, cited_ids: list[str]) -> list[CheckIssue]:
+    """朋友圈只讲一个核心卖点, judged on the facts the text cites ([F#] tags in title/intro/body/cta).
+
+    post.selling_points is only consulted when the text cites nothing: an id listed there but cited by no
+    sentence is not something the post says (e.g. a tag a rewrite removed). When the text cites more than
+    one fact, one issue is raised per field that carries an extra tag, with that sentence as the span, so
+    the rewrite receives that field and the T4 trim can locate the sentence."""
+    if not cited_ids:
+        if len(post.selling_points) != 1:
+            return [_issue("moments_focus", f"朋友圈只讲一个核心卖点，selling_points 有 {len(post.selling_points)} 个",
+                           field="selling_points", span="，".join(post.selling_points))]
+        return []
+    if len(cited_ids) == 1:
+        return []
+    core = next((i for i in post.selling_points if i in cited_ids), cited_ids[0])
+    extra = [i for i in cited_ids if i != core]
+    extra_tags = [f"[{i}]" for i in extra]
+    msg = (f"朋友圈正文引用了 {len(cited_ids)} 个事实（{'、'.join(cited_ids)}），只能围绕一个核心卖点：保留 [{core}]，"
+           f"删去 {''.join(extra_tags)} 和只由它支持的说法")
+    issues: list[CheckIssue] = []
+    for fld, text in [("title", post.title), ("intro", post.intro),
+                      *[(f"body[{i}]", b) for i, b in enumerate(post.body)], ("cta", post.cta)]:
+        piece = next((p.strip() for p in _SENT_PIECE_RE.findall(text or "") if any(t in p for t in extra_tags)), "")
+        if piece:
+            issues.append(_issue("moments_focus", msg, field=fld, span=piece))
     return issues
 
 

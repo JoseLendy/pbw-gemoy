@@ -18,8 +18,24 @@ venv/
 logs/
 *.log
 outputs/
+runs/
 .DS_Store
 __MACOSX/
 
 # archives (ima-skill/ itself IS committed, unmodified, per WORKFLOW v4)
 *.zip
+
+# demo data kit is tracked on purpose (synthetic store data, no KB content);
+# data/demo/inputs/poi_cache/ files from fetch_poi.py may be committed too
+!data/demo/
+!data/demo/**
+
+# eval reports from real runs contain KB-derived copy: never commit
+eval/
+
+# frontend (node_modules and build output are generated)
+frontend/node_modules/
+frontend/dist/
+# extracted precompute archive (copied to runs/)
+2026-10-23/
+ErrorReport*.md

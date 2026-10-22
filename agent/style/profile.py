@@ -1,0 +1,181 @@
+"""
+Writer brief (plan §6.1): a recommendation card's hook / voice / landmark / angle /
+calendar theme / promo become an explicit instruction block in the writer prompt.
+
+    from agent.style.profile import brief
+    brief(task)   # "" for the manual flow (task.source == "manual"), so that path is unchanged
+
+Everything here is instruction text built from the card's own fields. No fact, price or customer
+quote is invented: the promo block can only echo the card's promo record, and the customer hook can
+only echo the card's logged question.
+"""
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Optional
+
+from agent.recommend.common import INPUTS, load_json
+
+# Tone directions per voice id (angles.json). These describe HOW to sound, never WHAT to claim.
+VOICE_TONE = {
+    "manager": "像店长跟熟客说话：亲切、直白，先关心对方怎么用，再说产品，不用推销话术。",
+    "techie": "像懂技术的店员：讲清楚参数在实际使用里意味着什么，克制、不夸张，不堆形容词。",
+    "senior": "像学长学姐分享经验：口语、平等，讲校园里的具体场景；不摆推销腔，也不要编造自己的使用经历。",
+}
+
+# Opening instruction per hook id (angles.json). The customer hook is special: it may only quote the log.
+HOOK_OPENING = {
+    "scene": "开头用一个具体场景切入（时间、地点、正在做的事），不要先列参数。",
+    "question": "开头直接问读者一个问题（用“你”来问）；不要转述成“顾客常问”“很多人问”；全文反问句不超过 1 个。",
+    "myth": "开头先点出一个常见的误解，再用资料里的事实说明；用你自己的话写，不要用「你可能以为」「很多人以为」"
+            "这类固定开头；不写“有人说/常听人说”；不贬低其他品牌，不做对比。",
+    "checklist": "开头用清单式引入（例如“买之前先看这几点”），后面每条对应事实编号。",
+}
+CUSTOMER_HOOK = "customer"
+
+
+@lru_cache(maxsize=1)
+def _angles() -> dict:
+    return load_json(INPUTS / "angles.json")
+
+
+def _label(items: list[dict], key: Optional[str]) -> Optional[str]:
+    item = next((i for i in items if i.get("id") == key), None)
+    return item.get("label") if item else None
+
+
+def voice_label(voice_id: Optional[str]) -> Optional[str]:
+    return _label(_angles()["voices"], voice_id) if voice_id else None
+
+
+def hook_label(hook_id: Optional[str]) -> Optional[str]:
+    return _label(_angles()["hooks"], hook_id) if hook_id else None
+
+
+def _hook_block(task) -> list[str]:
+    hook = getattr(task, "hook", None)
+    if hook == CUSTOMER_HOOK:
+        q = getattr(task, "question", None)
+        if not q:
+            # No logged question: the customer hook must not be used. Say so explicitly instead of
+            # quietly falling back, so the writer never invents a customer quote to fill the opening.
+            return ["开头不得使用“顾客问答”式开头：本店没有该问题的记录。改用场景或问题开场。",
+                    "不得虚构顾客提问、顾客原话、评价或反馈。"]
+        text = (q or {}).get("text") or ""
+        count = (q or {}).get("count")
+        times = f"（近 7 天被问到 {count} 次）" if count else ""
+        return [f"开头用“顾客问答”式切入，且只能引用本店真实记录过的这一个问题：“{text}”{times}。",
+                "不得添加其他顾客问题、顾客原话、评价或人数统计；不得写成“很多顾客都说好”。"]
+    opening = HOOK_OPENING.get(hook or "")
+    return [f"开头方式：{hook_label(hook) or '场景开头'}。{opening or HOOK_OPENING['scene']}"]
+
+
+def _voice_block(task) -> list[str]:
+    voice = getattr(task, "voice", None)
+    if not voice:
+        return []
+    label = voice_label(voice) or voice
+    tone = VOICE_TONE.get(voice, "")
+    return [f"语气：{label}。{tone}"]
+
+
+def _detail_block(task) -> list[str]:
+    out: list[str] = []
+    landmark = getattr(task, "landmark", None)
+    if landmark:
+        out.append(f"正文里要自然带一次门店位置：{landmark}（这是只有本店写得出的细节）。只出现一次，不要写地址细节之外的信息。")
+    out.append("全文不出现任何人名、昵称或署名（结尾不落款，正文也不写“找某某”这类称呼）；"
+               "需要时用第一人称邀请：“私信我”“到店找我”，这样谁发都合适。")
+    return out
+
+
+def _angle_block(task) -> list[str]:
+    out: list[str] = []
+    angle = getattr(task, "angle", None)
+    if angle:
+        out.append(f"内容角度：{angle}。整篇围绕这个角度组织，不要写成参数清单。")
+    theme = getattr(task, "calendar_theme", None)
+    if theme:
+        out.append(f"时间背景（只是写作思路，不要照抄这几个字）：{theme}。用你自己的话点到时间即可，"
+                   "只用来说明“什么时候适合看/买”，不得暗示折扣、优惠、降价、库存或促销价。")
+    return out
+
+
+def _promo_block(task) -> list[str]:
+    promo = getattr(task, "promo", None)
+    price = (promo or {}).get("price_info") if promo else None
+    if not price:
+        return ["本文没有任何价格记录：不得写价格、优惠、补贴、立减、折扣、分期、免息或库存说法。"]
+    label = price.get("label") or "活动价"
+    value = str(price.get("value") or "")
+    cur = price.get("currency") or "CNY"
+    cond = (price.get("conditions") or "").strip()
+    demo = (promo or {}).get("source") == "DEMO"
+    lines = [f"唯一允许出现的价格来自活动记录「{(promo or {}).get('name', '')}」：{label} {value} {cur}"
+             + (f"，适用条件：{cond}" if cond else "") + "。",
+             "金额与条件必须与这条记录完全一致：不改数字、不加码、不叠加其他优惠、不写“到手价”。"]
+    if cond:
+        lines.append(f"提到这个价格时，必须同时写出适用条件：{cond}。")
+    if demo:
+        lines.append("这是演示活动价：写出价格时紧跟在金额后面标注 [演示活动]（例如 4999 元 [演示活动]）。")
+    return lines
+
+
+def _claim_block(task) -> list[str]:
+    """Phase 5 eval: the systematic 8A unsupported_claim / 8B false_promise causes, stated up front."""
+    lines = [
+        "只写事实本身，不要从参数推出体验结论或承诺：不写“不费劲”“轻松些”“不用另买转接头”“不用重新适应”"
+        "“按一下就能开机”“一整天够用”这类结果。可以写这个参数在什么场景会用到，感受留给顾客到店自己试。",
+        "场景写成读者的场景（“适合每天背去上课的同学”“如果你常在图书馆待一下午”），"
+        "不要写成你自己或店员的经历（“我每天背着去上课”“我用下来”）。",
+    ]
+    if not getattr(task, "question", None):
+        lines.append("不得转述别人的话或经历：不写“顾客常问”“常听……说”“很多人问”“有人以为”“同学们都说”。")
+    return lines
+
+
+# Stock wording that read as copy-paste across stores (2026-10-23 review). Also matched by 8E across the day.
+STOCK_PHRASES = ("你可能以为", "很多人以为", "先把这个数字记下来", "先做功课", "做做功课")
+
+
+def _variety_block(task) -> list[str]:
+    lines = ["不要用这些套话：" + "、".join(f"「{p}」" for p in STOCK_PHRASES) + "。",
+             "行动引导只说怎么来、来做什么（到店上手、私信），不写“以……为准”“按实际……确认”这类条件或免责说法；"
+             "条件只写在对应的事实句里。"]
+    facts = list(getattr(task, "avoid_facts", None) or [])
+    if facts:
+        lines.append("今天其他门店已经在讲这些卖点：" + "、".join(facts) + "。本文换一个卖点。")
+    phrases = list(getattr(task, "avoid_phrases", None) or [])
+    if phrases:
+        lines.append("今天其他门店已经用过这些说法，本文换一种说法，不要出现：" + "、".join(f"「{p}」" for p in phrases) + "。")
+    return lines
+
+
+def _release_block(task) -> list[str]:
+    # The card's demo launch_date only schedules it; it is never given to the writer (Phase 5, Task 2).
+    # Only the new-launch scenario pulls the writer toward 新品 wording; 8B blocks it on every card run.
+    if getattr(task, "scenario", None) != "new_launch":
+        return []
+    return ["不得写“新品、首发、新上市、刚发布、即将上市、新款、开售”等说法，也不得写上市或发布日期，"
+            "除非这句话标注了一条明确写有上市/发布信息的事实编号；事实清单里没有这类事实时，一律不写。"]
+
+
+def brief(task) -> str:
+    """Instruction block for the writer, built only from the card's own brief fields.
+
+    Returns "" for the manual flow (source != "card"), so prompts/writer.md behaviour is unchanged there."""
+    if getattr(task, "source", "manual") != "card":
+        return ""
+    lines: list[str] = ["以下要求来自门店今日推荐卡，优先级高于通用写作偏好。"]
+    lines += _hook_block(task)
+    lines += _voice_block(task)
+    lines += _detail_block(task)
+    lines += _angle_block(task)
+    lines += _promo_block(task)
+    lines += _claim_block(task)
+    lines += _variety_block(task)
+    lines += _release_block(task)
+    return "\n".join(f"- {line}" for line in lines if line)
+
+
+__all__ = ["brief", "voice_label", "hook_label", "VOICE_TONE", "HOOK_OPENING", "CUSTOMER_HOOK", "STOCK_PHRASES"]

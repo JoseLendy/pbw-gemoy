@@ -4,6 +4,11 @@ Step 6 image plan (WORKFLOW §3 step 6): choose, order and place images for one 
 Candidates are bundle.images only: they already passed the 3-signal rule in agent/catalog.py.
 Never pads with sibling or generic images. Captions come from the KB caption or, if that is empty,
 from the scene words in the KB file name. Never invented.
+
+Before choosing, agent.image_filter.usable drops denylisted images and keeps one copy of a picture the KB
+stores twice, so no post shows the same picture twice. With `focus` (the selling-point facts as
+"category attribute value" strings), images that show that selling point come first; a 朋友圈 post with no
+fitting image gets one neutral product image instead of unrelated ones.
 """
 from __future__ import annotations
 
@@ -32,6 +37,20 @@ _CATEGORY_KEYWORDS = {
 }
 # Exterior photos never sit next to these claims (WORKFLOW rule: no image "proves" performance).
 _NO_IMAGE_CATEGORIES = {"performance", "storage_memory"}
+# Words in a selling-point fact -> words an image's file name or caption must contain to show that point.
+_FOCUS_WORDS = [
+    (("键盘", "键程"), ("键盘",)),
+    (("触控板",), ("触控板",)),
+    (("屏", "显示", "分辨率", "刷新率", "OLED", "色域", "护眼"), ("屏",)),
+    (("续航", "电池", "Wh", "充电", "快充"), ("续航", "快充")),
+    (("接口", "USB", "HDMI", "雷电", "Type-C"), ("接口",)),
+    (("协同", "超级终端", "互联", "多设备", "多屏"), ("协同", "超级终端", "互联")),
+    (("重量", "kg", "厚度", "mm", "轻薄", "便携", "机身"), ("轻薄", "机身")),
+    (("配色", "颜色", "外观"), ("配色", "颜色", "外观")),
+    (("手写笔", "触控笔"), ("手写笔",)),
+    (("摄像头", "扬声器", "麦克风", "音效"), ("影音", "摄像")),
+]
+_NEUTRAL_ORDER = {"main": 0, "detail": 1, "unknown": 2, "scene": 3, "color": 4}
 _ROLE_PRIORITY = {"main": 0, "scene": 1, "detail": 2, "unknown": 3, "color": 4}
 
 SHORTAGE_NOTE = "知识库该型号图片不足，待确认"
@@ -78,17 +97,32 @@ def _caption(im: ImageRef) -> str:
     return im.caption or scene_words(im.title)
 
 
-def plan_images(bundle: ModelBundle, platform: str, strategy: Strategy) -> ImagePlan:
+def _focus_fit(imgs: list[ImageRef], focus: list[str] | None) -> list[ImageRef]:
+    """Images that show one of the focus facts (performance / storage facts never get a "proof" image)."""
+    words: list[str] = []
+    for f in focus or []:
+        if f.split(" ", 1)[0] in _NO_IMAGE_CATEGORIES:
+            continue
+        for fact_words, image_words in _FOCUS_WORDS:
+            if any(w.lower() in f.lower() for w in fact_words):
+                words += [w for w in image_words if w not in words]
+    return [im for im in imgs if any(w in _text(im) for w in words)]
+
+
+def plan_images(bundle: ModelBundle, platform: str, strategy: Strategy,
+                focus: list[str] | None = None) -> ImagePlan:
+    from agent.image_filter import usable
     lo, hi = PLATFORM_IMAGE_RANGE[platform]
-    imgs = list(bundle.images)
+    imgs = usable(bundle.images)
     if not imgs:
         if platform == "poster":
             return ImagePlan(platform, [], shortage=True, note=POSTER_NO_IMAGE_NOTE)
         note = TEXT_ONLY_NOTE if bundle.model.route == "text_only" or not bundle.model.has_images else SHORTAGE_NOTE
         return ImagePlan(platform, [], shortage=True, note=note)
 
+    fit = _focus_fit(imgs, focus) if focus is not None else []
     if platform == "poster":
-        main = next((im for im in imgs if _role(im) == "main"), None)
+        main = next((im for im in fit + imgs if _role(im) == "main"), None) or (fit[0] if fit else None)
         pick = main or imgs[0]
         return ImagePlan(platform, [PlannedImage(pick, "海报主视觉", _caption(pick))],
                          note="" if main else POSTER_NO_MAIN_NOTE)
@@ -98,13 +132,19 @@ def plan_images(bundle: ModelBundle, platform: str, strategy: Strategy) -> Image
     cats = _paragraph_categories(strategy)
 
     if platform == "moments":
+        if focus is not None:
+            # Only images that show the selling point; none fits -> one neutral product image, not filler.
+            neutral = sorted(imgs, key=lambda im: (_NEUTRAL_ORDER.get(_role(im), 2), imgs.index(im)))
+            chosen = fit[:n] if fit else neutral[:1]
+            items = [PlannedImage(im, f"配图第{i + 1}张", _caption(im)) for i, im in enumerate(chosen)]
+            return _finish(platform, items, lo)
         ordered = sorted(imgs, key=lambda im: ({"main": 0, "scene": 1}.get(_role(im), 2), imgs.index(im)))
         chosen = ordered[:n]
         items = [PlannedImage(im, f"配图第{i + 1}张", _caption(im)) for i, im in enumerate(chosen)]
         return _finish(platform, items, lo)
 
     # 1 lead image (main first), then one per paragraph category where an image fits, then fill.
-    pool = sorted(imgs, key=lambda im: (_ROLE_PRIORITY.get(_role(im), 3), imgs.index(im)))
+    pool = sorted(imgs, key=lambda im: (im not in fit, _ROLE_PRIORITY.get(_role(im), 3), imgs.index(im)))
     chosen: list[tuple[ImageRef, str]] = []
     lead = pool.pop(0)
     chosen.append((lead, "标题下方"))

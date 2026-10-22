@@ -13,6 +13,7 @@ If they disagree: CONTRACTS.md §1 > kb_structure.md > WORKFLOW.md.
 1. Never print, echo, cat, log or display `.env` or any API Key or Client ID, not even masked. Status UIs show "已配置".
 2. KB is read-only. Only use read APIs: search_knowledge_base, get_knowledge_list, search_knowledge, get_media_info. Never call create_media, add_knowledge, import_urls, check_repeated_names or any upload script.
 3. Never commit KB content: no KB text, quotes, prices or image files in code, tests, prompts, configs, docs or examples. Fixtures are synthetic (DemoBook). `kb_snapshot/`, `.cache/`, `outputs/`, `logs/` stay gitignored.
+   **Only exception:** generated outputs in `samples/`, written by `scripts/export_samples.py` from real runs: the published post text, store/reasons and check results (fact field + value as used in the post, source as a generic label). Never verbatim KB quotes, KB article paths, image files or image file names; the exporter's leak scan refuses them.
 4. ima quota: only the P1 (data) workstream calls ima, with targeted calls and the disk cache. Never walk the whole KB tree. Never work around a 403 or a quota error (220021).
 5. ima is called only through `ima-skill/ima_api.cjs` (kept unmodified in the repo) via `agent/ima_wrapper.py`.
 6. Only edit files your workstream owns (CONTRACTS.md §2). Never edit `agent/schemas.py`, `tests/fakes.py`, `docs/CONTRACTS.md` or `CLAUDE.md` unless you are P5.
