@@ -63,10 +63,10 @@ async function run(url, body) {
     await stream(url, body, (evt) => {
       if (evt.event === 'progress') progress.value = [...progress.value, evt.message]
       else if (evt.event === 'done') handle(evt.data)
-      else if (evt.event === 'error') stopHtml.value = `<div class="hw-stop">⛔ ${evt.message}</div>`
+      else if (evt.event === 'error') stopHtml.value = `<div class="hw-stop">出错：${evt.message}</div>`
     })
   } catch (e) {
-    stopHtml.value = `<div class="hw-stop">⛔ ${e.message || '请求失败'}</div>`
+    stopHtml.value = `<div class="hw-stop">出错：${e.message || '请求失败'}</div>`
   } finally {
     busy.value = false
   }
@@ -154,14 +154,14 @@ async function reset() {
       </div>
 
       <div v-else key="result" class="hw-result-view">
-        <div v-if="busy || progress.length" class="hw-progress-box center">
+        <div v-if="busy || progress.length" class="hw-progress-box center" role="status" aria-live="polite">
           <div v-for="(l, i) in progress" :key="i">{{ l }}</div>
           <div v-if="busy && !progress.length">· 正在理解需求…</div>
         </div>
         <PhoneStage :html="result ? result.phone_html : ''" :busy="busy && !result">
           <template #tools>
             <div class="hw-plat-wrap">
-              <button class="hw-round" title="换平台" :disabled="busy || !result" @click="platOpen = !platOpen">换</button>
+              <button class="hw-round" title="换平台" aria-label="换平台" aria-haspopup="true" :aria-expanded="platOpen" :disabled="busy || !result" @click="platOpen = !platOpen">换</button>
               <div v-if="platOpen" class="hw-side-sel">
                 <label v-for="p in meta.manual_platforms" :key="p">
                   <input type="radio" name="platform" :checked="result && result.platform_label === p" @change="pickPlatform(p)" />

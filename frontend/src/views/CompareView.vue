@@ -30,9 +30,9 @@ async function run() {
     await stream('/api/compare/run', { model_id: model.value, platform: platform.value }, (evt) => {
       if (evt.event === 'progress') progress.value = [...progress.value, evt.message]
       else if (evt.event === 'result') { html.value = evt.html || EMPTY; summary.value = evt.summary || '' }
-      else if (evt.event === 'error') progress.value = [...progress.value, '⛔ ' + evt.message]
+      else if (evt.event === 'error') progress.value = [...progress.value, '出错：' + evt.message]
     })
-  } catch (e) { progress.value = [...progress.value, '⛔ ' + (e.message || '请求失败')] }
+  } catch (e) { progress.value = [...progress.value, '出错：' + (e.message || '请求失败')] }
   finally { busy.value = false }
 }
 watch(() => props.active, (on) => { if (on) showStored() })
@@ -61,7 +61,7 @@ onMounted(() => { if (props.active) showStored() })
       </div>
       <button class="btn btn-primary" :disabled="busy" @click="run">生成四店对比</button>
     </div>
-    <div v-if="busy || progress.length" class="hw-progress-box">
+    <div v-if="busy || progress.length" class="hw-progress-box" role="status" aria-live="polite">
       <div v-for="(l, i) in progress" :key="i">{{ l }}</div>
       <div v-if="busy && !progress.length">· 正在生成四店对比…</div>
     </div>

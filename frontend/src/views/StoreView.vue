@@ -17,6 +17,7 @@ const text = ref('')            // the editable 正文 box
 const copied = ref(false)
 const typing = ref(false)
 const page = ref(1)             // 1 = overview, 2 = phone + text
+watch(page, () => window.scrollTo({ top: 0 }))   // page 2 opens at its top, not at page 1's scroll
 let cancelType = null
 let imageTimer = null
 let suppressInput = false
@@ -48,7 +49,7 @@ async function call(url, body = {}) {
   try {
     setView(await postJson(url, body))
   } catch (e) {
-    progress.value = '⛔ ' + (e.message || '请求失败')
+    progress.value = '出错：' + (e.message || '请求失败')
   }
 }
 
@@ -60,10 +61,10 @@ async function slow(url, body = {}) {
     await stream(url, body, (evt) => {
       if (evt.event === 'progress') progress.value = evt.message
       else if (evt.event === 'view') { progress.value = ''; setView(evt.data, { live: true }) }
-      else if (evt.event === 'error') progress.value = '⛔ ' + evt.message
+      else if (evt.event === 'error') progress.value = '出错：' + evt.message
     })
   } catch (e) {
-    progress.value = '⛔ ' + (e.message || '请求失败')
+    progress.value = '出错：' + (e.message || '请求失败')
   } finally {
     busy.value = false
   }
@@ -179,7 +180,7 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
             <template v-else>
               <div class="card-head">{{ panel.head }}</div>
               <div class="card-product"><b>{{ panel.product }}</b><span class="card-platform">{{ panel.platform }}</span></div>
-              <div v-if="panel.locked" class="hw-banner warn">🔒 {{ panel.locked }}</div>
+              <div v-if="panel.locked" class="hw-banner warn">{{ panel.locked }}</div>
               <div v-if="panel.notice" class="hw-banner note">{{ panel.notice }}</div>
               <div v-if="panel.reasons && panel.reasons.length" class="card-reasons">
                 <div class="card-reasons-title">为什么推这条</div>
@@ -219,7 +220,7 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
         </div>
 
         <div class="store-stack">
-          <div v-if="busy || progress" class="hw-progress-line">{{ progress || '· 正在准备…' }}</div>
+          <div v-if="busy || progress" class="hw-progress-line" role="status" aria-live="polite">{{ progress || '· 正在准备…' }}</div>
 
           <PhoneStage :html="v.phone_html" :busy="busy" />
 

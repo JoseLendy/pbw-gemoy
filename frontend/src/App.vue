@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loadMeta, meta, refreshStatus, status } from './api.js'
 import StoreView from './views/StoreView.vue'
 import CompareView from './views/CompareView.vue'
@@ -26,6 +26,21 @@ const storeKey = ref(0)
 let statusTimer = null
 
 function onReset() { storeKey.value++ }   // 重置演示: the store view remounts and reloads on next open
+watch(tab, (key) => {
+  window.scrollTo({ top: 0 })   // each tab opens at its top, not at the last tab's scroll
+  if (hashParams().tab !== key) history.replaceState(null, '', '#tab=' + key)   // deep link / refresh keeps the tab
+})
+
+// tablist keyboard model: arrows / Home / End move focus and select (roving tabindex)
+function onTabKey(e) {
+  const i = TABS.findIndex((t) => t.key === tab.value)
+  const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key]
+  if (next === undefined) return
+  e.preventDefault()
+  const j = (next + TABS.length) % TABS.length
+  tab.value = TABS[j].key
+  e.currentTarget.querySelectorAll('[role="tab"]')[j].focus()
+}
 
 onMounted(async () => {
   window.addEventListener('hashchange', () => { const p = hashParams(); if (TABS.some((t) => t.key === p.tab)) tab.value = p.tab })
@@ -39,6 +54,7 @@ onBeforeUnmount(() => clearInterval(statusTimer))
 <template>
   <video class="hw-bg-video" autoplay muted loop playsinline src="/background.mp4"></video>
   <div class="hw-page">
+    <a class="skip-link" href="#main">跳到主要内容</a>
     <header class="hw-top">
       <div class="hw-brand">
         <img class="hw-brand-logo" src="/logo.png" alt="HUAWEI" />
@@ -47,12 +63,12 @@ onBeforeUnmount(() => clearInterval(statusTimer))
           <div class="hw-brand-sub">演示日期：{{ meta.today || status.today || '…' }}</div>
         </div>
       </div>
-      <nav class="hw-tabs" role="tablist">
-        <button v-for="t in TABS" :key="t.key" class="hw-tab" :class="{ on: tab === t.key }" role="tab" :aria-selected="tab === t.key" @click="tab = t.key">{{ t.label }}</button>
+      <nav class="hw-tabs" role="tablist" aria-label="功能" @keydown="onTabKey">
+        <button v-for="t in TABS" :key="t.key" class="hw-tab" :class="{ on: tab === t.key }" role="tab" :aria-selected="tab === t.key" :tabindex="tab === t.key ? 0 : -1" @click="tab = t.key">{{ t.label }}</button>
       </nav>
     </header>
 
-    <main class="hw-main">
+    <main id="main" class="hw-main" tabindex="-1">
       <StoreView :key="storeKey" :active="tab === 'store'" v-show="tab === 'store'" />
       <CompareView :active="tab === 'compare'" v-show="tab === 'compare'" />
       <HqView :active="tab === 'hq'" v-show="tab === 'hq'" @reset="onReset" />
