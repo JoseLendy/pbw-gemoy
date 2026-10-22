@@ -23,7 +23,8 @@ onMounted(() => { if (props.active) load() })
   <div class="page page-wide-aside page-with-head">
     <header class="page-head">
       <h1>总部端</h1>
-      <p>各门店发布情况、本周计划与今日推荐分布。</p>
+      <p v-if="d && d.scope === 'store'">{{ d.store_name }} · 本店发布情况、本周计划与新品确认。</p>
+      <p v-else>各门店发布情况、本周计划与今日推荐分布。</p>
     </header>
 
     <div class="page-main">
@@ -48,14 +49,16 @@ onMounted(() => { if (props.active) load() })
       <section class="card">
         <h3 class="aside-title">新品上市审核<span class="tag">演示</span></h3>
         <div class="table-host" v-html="d.release"></div>
-        <button v-if="d.has_draft" class="btn btn-dark btn-block" @click="verify"><ShieldCheck :size="16" aria-hidden="true" />确认发布</button>
+        <button v-if="d.has_draft" class="btn btn-dark btn-block" @click="verify">
+          <ShieldCheck :size="16" aria-hidden="true" />{{ d.scope === 'store' ? '确认本店发布' : '确认发布（全部门店）' }}
+        </button>
         <div v-if="d.verify_msg" class="server-html" v-html="cleanHtml(d.verify_msg)"></div>
       </section>
       <section class="card">
         <h3 class="aside-title">顾客高频问题</h3>
         <div class="table-host" v-html="d.questions"></div>
       </section>
-      <section class="card">
+      <section v-if="d.can_reset" class="card">
         <h3 class="aside-title">重置演示</h3>
         <p class="muted small">重置新品状态、门店推荐、已发布标记与顾客提问。已准备的内容保留。</p>
         <button v-if="!confirmReset" class="btn btn-light btn-block" @click="confirmReset = true"><RotateCcw :size="16" aria-hidden="true" />重置演示</button>

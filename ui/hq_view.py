@@ -27,10 +27,12 @@ def _banner(text: str, kind: str = "ok") -> str:
     return f'<div class="{cls}" style="margin:8px 0">{_esc(text)}</div>'
 
 
-def posting_html() -> str:
+def posting_html(store_id: str = "") -> str:
+    """Posting rate per store; a manager's view is scoped to their own store."""
     data = ui_data.publish_stats()
     rows = []
-    for s in data["stats"]:
+    stats = [s for s in data["stats"] if not store_id or s["store_id"] == store_id]
+    for s in stats:
         pct = s["rate"] * 100
         bar = (f'<div style="height:6px;width:100%;background:#F1ECE7;border-radius:3px">'
                f'<div style="height:6px;width:{pct:.1f}%;background:{"#F0907F" if s["low"] else "#7FCBA4"};'
@@ -51,21 +53,32 @@ def posting_html() -> str:
             f'<tbody>{"".join(rows)}</tbody></table>')
 
 
-def release_html() -> str:
-    drafts = ui_data.new_release_drafts()
+def release_html(store_id: str = "") -> str:
+    """The new-product gate. With `store_id` (a manager) each product shows whether *this store* may
+    generate it; without one (a developer) it is the company-wide demo state."""
+    drafts = ui_data.new_release_drafts(store_id or None)
     if not drafts:
         return _banner("当前没有在售新品草稿。", "note")
     blocks = []
     for d in drafts:
-        status = "已确认发布" if d["verified"] else "待总部确认"
+        if store_id:
+            status = "已确认发布（本店）" if d["verified"] else "待本店确认"
+        else:
+            status = "已确认发布" if d["verified"] else "待总部确认"
+            if d["approved_stores"]:
+                status += f"（{len(d['approved_stores'])} 家门店）"
         color = "#2F8F5B" if d["verified"] else "#B45309"
         refs = "".join(
             f'<tr><td style="{_CELL}">{_esc(r["ref_id"])}</td><td style="{_CELL}">{_esc(r["fields"])}</td>'
             f'<td style="{_CELL}">{_esc(r["source_title"])}<div style="font-size:11px;color:#A39A92">'
             f'{_esc(r["source_path"])}</div></td></tr>' for r in d["refs"])
-        note = ("已解锁门店生成（演示状态）；具体数值仍需按知识库事实卡核验。"
-                if d["verified"] else
-                "演示审核清单：以下只是字段与来源参考，不是已核验的事实卡数值。")
+        if d["verified"]:
+            note = ("本店店员已可生成这条新品（演示状态）；具体数值仍需按知识库事实卡核验。" if store_id
+                    else "已解锁门店生成（演示状态）；具体数值仍需按知识库事实卡核验。")
+        else:
+            note = ("确认后，本店店员即可生成这条新品。以下只是字段与来源参考，不是已核验的事实卡数值。"
+                    if store_id else
+                    "演示审核清单：以下只是字段与来源参考，不是已核验的事实卡数值。")
         note_style = ("color:#2F6B47;background:#E8F6EE" if d["verified"]
                       else "color:#8A5300;background:#FFF3DC")
         blocks.append(
@@ -75,7 +88,7 @@ def release_html() -> str:
             f'<span style="font-size:12px;color:{color};background:#F6F1EC;border-radius:10px;padding:2px 8px">'
             f'{_esc(status)}</span></div>'
             f'<div style="font-size:12px;color:{_MUTED};margin:4px 0 8px">演示上市日期：{_esc(d["launch_date"])}'
-            f' · 总部确认一次，全部门店解锁</div>'
+            f' · {"店长确认本店后，本店店员解锁" if store_id else "总部确认一次，全部门店解锁"}</div>'
             f'<div style="font-size:12px;{note_style};border-radius:6px;padding:6px 8px;margin-bottom:8px">'
             f'{_esc(note)}</div>'
             '<table style="width:100%;border-collapse:collapse;font-size:12px;background:transparent">'
@@ -84,26 +97,26 @@ def release_html() -> str:
     return "".join(blocks)
 
 
-def has_draft() -> bool:
-    return any(not d["verified"] for d in ui_data.new_release_drafts())
+def has_draft(store_id: str = "") -> bool:
+    return any(not d["verified"] for d in ui_data.new_release_drafts(store_id or None))
 
 
-def questions_html() -> str:
+def questions_html(store_id: str = "") -> str:
     rows = "".join(
         f'<tr><td style="{_CELL};text-align:center">{i + 1}</td><td style="{_CELL}">{_esc(q["text"])}</td>'
         f'<td style="{_CELL};text-align:right">{q["count"]}</td>'
         f'<td style="{_CELL};text-align:right">{q["stores"]} 店</td></tr>'
-        for i, q in enumerate(ui_data.question_stats(8)))
+        for i, q in enumerate(ui_data.question_stats(8, store_id or None)))
     return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:transparent">'
             f'<thead><tr><th style="{_HEAD}">#</th><th style="{_HEAD}">顾客问题</th>'
             f'<th style="{_HEAD};text-align:right">次数</th><th style="{_HEAD};text-align:right">覆盖门店</th>'
             f'</tr></thead><tbody>{rows}</tbody></table>')
 
 
-def plan_html() -> str:
+def plan_html(store_id: str = "") -> str:
     """本周计划: each store's weekly progress against the minimums (a suggestion, not a fixed rotation).
     A platform still short of its minimum is highlighted."""
-    rows_data = ui_data.weekly_progress_all()
+    rows_data = [r for r in ui_data.weekly_progress_all() if not store_id or r["store_id"] == store_id]
     platforms = list(rows_data[0]["progress"]) if rows_data else []
     head = "".join(f'<th style="{_HEAD};text-align:center">{_esc(p)}</th>' for p in platforms)
     rows = []
@@ -124,39 +137,52 @@ def plan_html() -> str:
             f'<tbody>{"".join(rows)}</tbody></table>')
 
 
-def distribution_html() -> str:
+def distribution_html(store_id: str = "") -> str:
     rows = "".join(
         f'<tr><td style="{_CELL}">{_esc(x["store_name"])}</td>'
         f'<td style="{_CELL}">{_esc(x["display_name"])}</td>'
         f'<td style="{_CELL}">{_esc(x["slot_label"])} · {_esc(x["platform"])}</td>'
         f'<td style="{_CELL}">{_esc(x["segment_label"])} · {_esc(x["angle"])}</td></tr>'
-        for x in ui_data.recommendation_distribution())
+        for x in ui_data.recommendation_distribution() if not store_id or x["store_id"] == store_id)
     return ('<table style="width:100%;border-collapse:collapse;font-size:14px;background:transparent">'
             f'<thead><tr><th style="{_HEAD}">门店</th><th style="{_HEAD}">今日一条</th>'
             f'<th style="{_HEAD}">槽位 · 平台</th><th style="{_HEAD}">客群 · 角度</th></tr></thead>'
             f'<tbody>{rows}</tbody></table>')
 
 
-def on_verify():
-    drafts = [d for d in ui_data.new_release_drafts() if not d["verified"]]
+def on_verify(store_id: str = "", store_name: str = "") -> dict:
+    """Confirm the first new product this account still needs to confirm. A manager (store_id) unlocks it
+    for their own store only; a developer confirms it for every store. `verified_model` is returned so
+    server.py can persist the approval in the accounts database."""
+    drafts = [d for d in ui_data.new_release_drafts(store_id or None) if not d["verified"]]
     if not drafts:
-        return {**view(), "verify_msg": _banner("没有待确认的新品。", "note"), "reset_msg": ""}
+        return {**view(store_id, store_name), "verify_msg": _banner("没有待确认的新品。", "note"),
+                "verified_model": "", "reset_msg": ""}
     model = drafts[0]
-    ui_data.verify_new_product(model["model_id"])
-    msg = _banner(f"已确认发布（演示解锁）：{model['display_name']}。全部门店的新品款已解锁；"
-                  "本演示未对具体数值做事实核验，切回门店端即可看到。")
-    return {**view(), "verify_msg": msg, "reset_msg": ""}
+    if store_id:
+        ui_data.verify_new_product_for_store(model["model_id"], store_id)
+        msg = _banner(f"已确认本店发布（演示解锁）：{model['display_name']}。"
+                      f"{store_name or '本店'}的店员现在可以生成这条新品；本演示未对具体数值做事实核验。")
+    else:
+        ui_data.verify_new_product(model["model_id"])
+        msg = _banner(f"已确认发布（演示解锁）：{model['display_name']}。全部门店的新品款已解锁；"
+                      "本演示未对具体数值做事实核验，切回门店端即可看到。")
+    return {**view(store_id, store_name), "verify_msg": msg, "verified_model": model["model_id"],
+            "reset_msg": ""}
 
 
 def on_reset():
     ui_data.reset()
     msg = _banner("已重置演示数据：新品恢复待确认，门店推荐重置；已发布标记与顾客提问将在回到门店端时清空。"
                   "（已准备的口播稿不会被删除。）", "note")
-    return {**view(), "verify_msg": "", "reset_msg": msg}
+    return {**view(), "verify_msg": "", "verified_model": "", "reset_msg": msg}
 
 
-def view() -> dict:
-    """Everything the 总部端 screen shows, rendered fresh (all offline reads)."""
-    return {"posting": posting_html(), "release": release_html(), "has_draft": has_draft(),
-            "questions": questions_html(), "plan": plan_html(), "distribution": distribution_html(),
-            "verify_msg": "", "reset_msg": ""}
+def view(store_id: str = "", store_name: str = "") -> dict:
+    """Everything the 总部端 screen shows, rendered fresh (all offline reads). A manager's view is
+    scoped to their store; a developer's view covers every store."""
+    return {"posting": posting_html(store_id), "release": release_html(store_id),
+            "has_draft": has_draft(store_id), "questions": questions_html(store_id),
+            "plan": plan_html(store_id), "distribution": distribution_html(store_id),
+            "scope": "store" if store_id else "all", "store_name": store_name,
+            "verify_msg": "", "verified_model": "", "reset_msg": ""}

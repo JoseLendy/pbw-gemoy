@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 from collections import defaultdict
 
-from agent.recommend import explain
+from agent.recommend import approvals, explain
 from agent.recommend.common import parse_date
 from agent.recommend.scoring import (
     CALENDAR_LOOKAHEAD_DAYS, NEW_RELEASE_PRIORITY_DAYS, NEW_RELEASE_WINDOW_DAYS, RECENT_POST_DAYS, eligible,
@@ -166,7 +166,9 @@ def build_cards(stores, models, signals, idx, promos, calendar, quota, angles, p
             launch = parse_date(m["launch_date"])
             if abs((launch - today).days) > NEW_RELEASE_WINDOW_DAYS:
                 continue
-            verified = m["fact_card_status"] == "verified"
+            # process-wide HQ verification, or a manager's confirmation for this store only
+            verified = (m["fact_card_status"] == "verified"
+                        or approvals.is_approved(m["model_id"], sid))
             kb_launch = parse_date(m["kb_launch_date"]) if m.get("kb_launch_date") else None
             text = explain.release_reason(launch, verified, kb_launch)
             cards.append(card("new_release", m["model_id"],

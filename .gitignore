@@ -19,6 +19,10 @@ logs/
 *.log
 outputs/
 runs/
+
+# local account / approval database (never commit)
+data/*.db
+data/*.db-*
 .DS_Store
 __MACOSX/
 

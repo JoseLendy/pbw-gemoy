@@ -129,12 +129,12 @@ function scheduleImagePoll() {
 }
 
 async function open() {
+  // The server binds a staff/manager login to its own store and role; this only follows a #store= demo
+  // deep link for a developer, and never touches the role of a store account.
   await call('/api/store/view')
-  // the 登录 account wins over the server default; a #store= deep link wins over both
   const m = /[#&]store=(S\d+)/.exec(location.hash || '')
-  const want = m ? m[1] : (account.kind === 'store' ? account.store_id : '')
+  const want = m ? m[1] : ''
   if (want && view.value && view.value.store_id !== want) await call('/api/store/select', { store_id: want })
-  if (account.kind === 'store' && view.value && view.value.role !== account.role) await call('/api/store/role', { role: account.role })
 }
 watch(() => props.active, (on) => { if (on) open() })
 onMounted(() => { if (props.active) open() })
@@ -165,7 +165,10 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
             <!-- a locked 新品款 can only be generated once 总部端 确认发布, so point at it instead of dead-ending -->
             <div v-if="panel.locked" class="note warn locked-note">
               <span>{{ panel.locked }}</span>
-              <button class="btn btn-light btn-sm" @click="goHq">去总部端「确认发布」</button>
+              <button v-if="account.role === 'manager' || account.role === 'developer'" class="btn btn-light btn-sm" @click="goHq">
+                去总部端「确认发布」
+              </button>
+              <span v-else class="small">等待店长在总部端确认本店发布后，即可生成。</span>
             </div>
             <div v-if="panel.notice" class="note info">{{ panel.notice }}</div>
             <ul v-if="panel.reasons && panel.reasons.length" class="reasons" aria-label="为什么推这条">

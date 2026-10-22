@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from agent.recommend import poi, sales, slots
+from agent.recommend import approvals, poi, sales, slots
 from agent.recommend.common import GENERATED, INPUTS, load_csv, load_json, parse_date
 from agent.recommend.profiles import build_profiles
 from agent.schemas import CardPromo, RecommendationCard
@@ -68,9 +68,22 @@ def fact_card_overrides() -> dict[str, str]:
     return dict(_FACT_CARD_STATUS)
 
 
+def set_store_approval(model_id: str, store_id: str, approved: bool = True) -> None:
+    """A manager confirmed this new product for their own store (or HQ confirmed it for every store).
+    Store-scoped, unlike set_fact_card_status (process-wide). Invalidates the cache."""
+    approvals.set_approval(model_id, store_id, approved)
+    _CACHE.clear()
+
+
+def store_approvals() -> dict[str, list[str]]:
+    """model_id -> the store ids whose staff may generate it."""
+    return approvals.snapshot()
+
+
 def reload() -> None:
     """Drop the cache and every in-memory override; the next load reads the files again."""
     _FACT_CARD_STATUS.clear()
+    approvals.clear()
     _CACHE.clear()
 
 

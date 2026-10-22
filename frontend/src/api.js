@@ -20,26 +20,46 @@ export const meta = reactive({ today: '', stores: [], chips: [], platforms: [], 
   compare_platforms: [], manual_platforms: [], manual_examples: [], manual_products: [], manual_scenarios: [],
   quick_edits: [] })
 
-// ---- demo account (登录) and the engineer gate, both per browser tab like the session id
+// ---- demo account (登录), per browser tab like the session id
 function readJson(key, fallback) {
   try { return JSON.parse(sessionStorage.getItem(key)) || fallback } catch { return fallback }
 }
 function writeJson(key, value) {
   try { sessionStorage.setItem(key, JSON.stringify(value)) } catch { /* private mode: keep in memory */ }
 }
-/** kind: 'store' | 'hq'; store_id / store_name / role only for a store account. Empty until 登录. */
-export const account = reactive(readJson('hwpc-account', { kind: '', store_id: '', store_name: '', role: '店员' }))
+/** The signed-in account. role: 'staff' | 'manager' | 'developer' | '' (not signed in).
+ *  kind is 'store' for staff/manager and 'dev' for the developer. */
+const EMPTY_ACCOUNT = { username: '', role: '', role_label: '', store_id: '', store_name: '',
+  display_name: '', kind: '' }
+export const account = reactive({ ...EMPTY_ACCOUNT, ...readJson('hwpc-account', {}) })
 export function setAccount(next) {
-  Object.assign(account, next)
+  Object.assign(account, EMPTY_ACCOUNT, next || {})
   writeJson('hwpc-account', { ...account })
 }
-export const engineer = reactive({ unlocked: readJson('hwpc-engineer', false) === true })
-export async function unlockEngineer(code) {
-  const r = await postJson('/api/engineer/unlock', { code })
-  if (r.ok) { engineer.unlocked = true; writeJson('hwpc-engineer', true) }
+export function clearAccount() { setAccount(null) }
+
+/** POST /api/auth/login; the server owns the session→account binding. A store account must sign in
+ *  under the shop picked on the login screen; the developer account is company-wide. */
+export async function login(username, password, storeId = '') {
+  const r = await postJson('/api/auth/login', { username, password, store_id: storeId })
+  if (r.ok && r.account) setAccount(r.account)
   return r
 }
-export function lockEngineer() { engineer.unlocked = false; writeJson('hwpc-engineer', false) }
+export async function logout() {
+  try { await postJson('/api/auth/logout') } catch { /* the client still signs out */ }
+  clearAccount()
+}
+/** Reconcile with the server on page load: a stale tab after a server restart must sign in again. */
+export async function refreshAccount() {
+  try {
+    const r = await postJson('/api/auth/me')
+    if (r && r.account) setAccount(r.account)
+    else clearAccount()
+  } catch { /* backend down: keep what we had */ }
+}
+export async function demoAccounts() {
+  try { return await getJson('/api/auth/demo-accounts') } catch { return { accounts: [], password: '' } }
+}
 
 /** Server banners still carry emoji status marks; the UI draws its own tone, so drop them. */
 const EMOJI_MARKS = /(?:✅|❌|⚠️|⚠|ℹ️|ℹ|💬|🔒|⛔|⏱️|⏱|✏️|✏)️?\s?/g
@@ -47,19 +67,29 @@ export function cleanHtml(html) { return (html || '').replace(EMOJI_MARKS, '') }
 export const status = reactive({ kb_name: '', kb_state: '', kb_ok: false, checking: true, index_label: '',
   index_status: '', model: '', model_fast: '', configured: false, dev_mode: false, fake_fields: [], error: '', today: '' })
 
+async function failure(resp) {
+  let detail = ''
+  try {
+    const body = await resp.json()
+    detail = body.detail || body.reason || body.error || ''
+  } catch { /* not JSON */ }
+  return new Error(detail || '请求失败 ' + resp.status)
+}
+
 export async function postJson(url, body = {}) {
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId.value, ...body }),
   })
-  if (!resp.ok) throw new Error('请求失败 ' + resp.status)
+  if (!resp.ok) throw await failure(resp)
   return resp.json()
 }
 
 export async function getJson(url) {
-  const resp = await fetch(url)
-  if (!resp.ok) throw new Error('请求失败 ' + resp.status)
+  const sep = url.includes('?') ? '&' : '?'
+  const resp = await fetch(`${url}${sep}session_id=${encodeURIComponent(sessionId.value)}`)
+  if (!resp.ok) throw await failure(resp)
   return resp.json()
 }
 

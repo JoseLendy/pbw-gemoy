@@ -12,7 +12,6 @@ slow (ima + LLM) work so page loads and store switches never wait behind a gener
 """
 from __future__ import annotations
 
-import hmac
 import io
 import json
 import logging
@@ -43,14 +42,16 @@ for _proxy_var in ("NO_PROXY", "no_proxy"):
     _hosts = [h.strip() for h in os.environ.get(_proxy_var, "").split(",") if h.strip()]
     os.environ[_proxy_var] = ",".join(dict.fromkeys([*_hosts, "127.0.0.1", "localhost", "::1"]))
 
-from fastapi import FastAPI, Request  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
+from agent import accounts  # noqa: E402
 from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags  # noqa: E402
 from agent.intake import SCENARIO_CHIPS  # noqa: E402
 from agent.pipeline import edit as pipeline_edit, run as pipeline_run  # noqa: E402
+from agent.recommend import store_data  # noqa: E402
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult  # noqa: E402
 from agent.ui_data import DEPS, plain_error, reset_token, today as demo_today  # noqa: E402
 from ui import baseline_view, compare_view, hq_view, state  # noqa: E402
@@ -60,6 +61,28 @@ from ui.components import (  # noqa: E402
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("server")
+
+# ---------------------------------------------------------------- accounts + role sessions
+# Accounts live in SQLite (agent/accounts.py); a login binds a role to the browser tab's session id.
+# The database is seeded once with staff-<store> / manager-<store> / dev demo accounts. Approvals written
+# by a manager are store-scoped, so only that store's staff unlock the new product.
+ROLE_LABELS = accounts.ROLE_LABELS
+_AUTH: dict[str, dict] = {}
+_AUTH_LOCK = threading.Lock()
+
+
+def _bootstrap_accounts() -> None:
+    """Create the schema, seed demo accounts and restore persisted approvals into the recommender."""
+    try:
+        accounts.init_db()
+        accounts.seed_demo_accounts(state.STORES)
+        for model_id, store_id in accounts.all_approvals():
+            store_data.set_store_approval(model_id, store_id)
+    except Exception as e:  # noqa: BLE001 - a missing database must not take the app down
+        log.warning("账号数据库不可用，登录与新品审核可能无法使用: %s", e)
+
+
+_bootstrap_accounts()
 
 KB_NAME = "任德耀新建华为PC知识库"
 DIST = ROOT / "frontend" / "dist"
@@ -215,10 +238,82 @@ def _session(sid: str) -> dict:
 
 def _store_session(sid: str) -> dict:
     s = _session(sid)
-    if not s.get("cards"):
+    acct = _account_of(sid)
+    if acct and acct.get("store_id") and acct.get("role") in ("staff", "manager"):
+        # A store login owns the store and the role: a deep link or an old session cannot switch it.
+        if (s.get("store_id") != acct["store_id"] or not s.get("cards")
+                or s.get("staff") != state.staff_for(acct)):
+            with s["lock"]:
+                state.bind_account(s, acct)
+    elif not s.get("cards"):
         with s["lock"]:
             if not s.get("cards"):
                 state.load_store(s, state.STORES[0]["store_id"])
+    return s
+
+
+# ---------------------------------------------------------------- auth helpers
+def _sid(value: str) -> str:
+    return (value or "").strip()[:64]
+
+
+def _account_of(sid: str) -> dict | None:
+    with _AUTH_LOCK:
+        acct = _AUTH.get(_sid(sid))
+        return dict(acct) if acct else None
+
+
+def _require(sid: str, roles: tuple[str, ...] = ("staff", "manager", "developer")) -> dict:
+    """Resolve the session's account, or stop with 401/403. Every store / generate endpoint is gated."""
+    sid = _sid(sid)
+    if not sid:
+        raise HTTPException(status_code=401, detail="会话已过期，请刷新页面后重新登录")
+    acct = _account_of(sid)
+    if acct is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    if roles and acct.get("role") not in roles:
+        raise HTTPException(status_code=403, detail="当前账号无权访问这个页面")
+    return acct
+
+
+def _require_demo(sid: str) -> None:
+    """四店对比 / 对照组: developer accounts only (the demo views are not part of the store flow)."""
+    _require(sid, ("developer",))
+
+
+def _account_payload(user: dict) -> dict:
+    """The login account the client stores: no hash, no salt, no password."""
+    role = user.get("role") or "staff"
+    store_id = user.get("store_id") or ""
+    store = next((s for s in state.STORES if s["store_id"] == store_id), {})
+    return {
+        "username": user.get("username") or "",
+        "role": role,
+        "role_label": ROLE_LABELS.get(role, role),
+        "store_id": store_id,
+        "store_name": store.get("store_name") or "",
+        "display_name": user.get("display_name") or store.get("store_name") or ROLE_LABELS.get(role, role),
+        "kind": "store" if role in ("staff", "manager") else "dev",
+    }
+
+
+def _public_account(acct: dict | None) -> dict | None:
+    if not acct:
+        return None
+    keys = ("username", "role", "role_label", "store_id", "store_name", "display_name", "kind")
+    return {k: acct.get(k, "") for k in keys}
+
+
+def _reset_session(sid: str) -> dict:
+    """A fresh tab state without changing the session id or its lock (login / logout)."""
+    s = _session(sid)
+    with s["lock"]:
+        lock = s["lock"]
+        s.clear()
+        s.update(fresh_session())
+        s["id"] = _sid(sid)
+        s["lock"] = lock
+        s["manual"] = {"id": s["id"], "reset_seen": reset_token()}
     return s
 
 
@@ -310,6 +405,12 @@ class Sid(BaseModel):
     session_id: str = ""
 
 
+class LoginReq(Sid):
+    username: str = ""
+    password: str = ""
+    store_id: str = ""   # the store picked on the login screen; staff/manager must match it
+
+
 class StoreReq(Sid):
     store_id: str = ""
 
@@ -388,21 +489,74 @@ def manual_products() -> list[dict]:
         return []
 
 
-# ---------------------------------------------------------------- engineer gate (演示功能)
-class UnlockReq(BaseModel):
-    code: str = ""
+# ---------------------------------------------------------------- login / logout
+@app.post("/api/auth/login")
+def api_auth_login(req: LoginReq) -> dict:
+    sid = _sid(req.session_id)
+    username = (req.username or "").strip().lower()
+    store_id = (req.store_id or "").strip().upper()
+    if not sid:
+        return {"ok": False, "reason": "会话已过期，请刷新页面后重试", "account": None}
+    if not username or not req.password:
+        return {"ok": False, "reason": "请输入账号和密码", "account": None}
+    try:
+        user = accounts.authenticate(username, req.password)
+    except Exception as e:  # noqa: BLE001
+        log.warning("login database unavailable: %s", e)
+        return {"ok": False, "reason": "登录服务暂时不可用，请稍后再试", "account": None}
+    if user is None:
+        time.sleep(0.35)   # slows guessing a little
+        return {"ok": False, "reason": "账号或密码不正确", "account": None}
+    acct = _account_payload(user)
+    # The shop picked on the login screen is part of the credential for a store account: it cannot sign
+    # in under another store (the developer account is company-wide and ignores the picker).
+    if acct["role"] != "developer":
+        if not store_id:
+            return {"ok": False, "reason": "请先选择门店", "account": None}
+        if store_id != acct["store_id"]:
+            where = acct["store_name"] or acct["store_id"] or "门店"
+            return {"ok": False, "reason": f"该账号属于{where}，请选择对应门店", "account": None}
+    with _AUTH_LOCK:
+        _AUTH[sid] = acct
+    s = _reset_session(sid)
+    with s["lock"]:
+        if acct["store_id"]:
+            state.bind_account(s, acct)
+            state.render(s)
+    return {"ok": True, "reason": "", "account": _public_account(acct)}
 
 
-@app.post("/api/engineer/unlock")
-def api_engineer_unlock(req: UnlockReq) -> dict:
-    """Soft gate for the engineer-only demo views (四店对比 / 对照组). The passcode lives in .env as
-    ENGINEER_PASSCODE; it is never returned or logged. This hides the views, it is not access control."""
-    expected = os.getenv("ENGINEER_PASSCODE", "")
-    if not expected:
-        return {"ok": False, "reason": "未配置工程师口令（.env 中的 ENGINEER_PASSCODE）"}
-    time.sleep(0.4)   # slows guessing a little
-    ok = hmac.compare_digest(req.code.encode("utf-8"), expected.encode("utf-8"))
-    return {"ok": ok, "reason": "" if ok else "口令不正确"}
+@app.post("/api/auth/logout")
+def api_auth_logout(req: Sid) -> dict:
+    sid = _sid(req.session_id)
+    with _AUTH_LOCK:
+        _AUTH.pop(sid, None)
+    if sid:
+        _reset_session(sid)
+    return {"ok": True}
+
+
+@app.post("/api/auth/me")
+def api_auth_me(req: Sid) -> dict:
+    return {"account": _public_account(_account_of(req.session_id))}
+
+
+@app.get("/api/auth/demo-accounts")
+def api_auth_demo_accounts() -> dict:
+    """Demo shortcuts for the login screen: usernames and roles, never a hash. The password is only
+    included when the operator has not set DEMO_PASSWORD."""
+    try:
+        users = accounts.list_users()
+    except Exception as e:  # noqa: BLE001
+        log.warning("demo accounts unavailable: %s", e)
+        users = []
+    order = {"staff": 0, "manager": 1, "developer": 2}
+    out = []
+    for u in users:
+        p = _account_payload(u)
+        out.append({k: p[k] for k in ("username", "role", "role_label", "store_id", "store_name", "display_name")})
+    out.sort(key=lambda x: (order.get(x["role"], 9), x["store_id"], x["username"]))
+    return {"accounts": out, "password": accounts.demo_password()}
 
 
 def compare_view_products() -> list[dict]:
@@ -417,6 +571,7 @@ def compare_view_products() -> list[dict]:
 @app.post("/api/store/view")
 def api_store_view(req: Sid) -> dict:
     """Opening / returning to the tab: reset and 确认发布 are picked up here (ui/state.on_tab_select)."""
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_tab_select(s)
@@ -424,13 +579,17 @@ def api_store_view(req: Sid) -> dict:
 
 @app.post("/api/store/select")
 def api_store_select(req: StoreReq) -> dict:
+    acct = _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
+        if acct["role"] in ("staff", "manager") and req.store_id != acct["store_id"]:
+            return state.render(s)          # a store login cannot switch to another store
         return state.on_store_change(req.store_id, s)
 
 
 @app.post("/api/store/platform")
 def api_store_platform(req: PlatformReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_platform(req.platform, s)
@@ -438,13 +597,17 @@ def api_store_platform(req: PlatformReq) -> dict:
 
 @app.post("/api/store/role")
 def api_store_role(req: RoleReq) -> dict:
+    acct = _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
+        if acct["role"] in ("staff", "manager"):
+            return state.render(s)          # the role comes from the login, not from a client toggle
         return state.on_role(req.role, s)
 
 
 @app.post("/api/store/toggle-other")
 def api_store_toggle(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_switch_toggle(s)
@@ -452,6 +615,7 @@ def api_store_toggle(req: Sid) -> dict:
 
 @app.post("/api/store/select-other")
 def api_store_select_other(req: IdxReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_select_other(int(req.idx), s)
@@ -459,6 +623,7 @@ def api_store_select_other(req: IdxReq) -> dict:
 
 @app.post("/api/store/generate")
 def api_store_generate(req: Sid):
+    _require(req.session_id)
     s = _store_session(req.session_id)
     blocked = rate_check(s["id"])
     if blocked:
@@ -477,6 +642,7 @@ def api_store_generate(req: Sid):
 
 @app.post("/api/store/quick-edit")
 def api_store_quick_edit(req: EditReq):
+    _require(req.session_id)
     s = _store_session(req.session_id)
     instruction = req.instruction if req.instruction in state.QUICK_EDITS else ""
     if not instruction:
@@ -499,6 +665,7 @@ def api_store_quick_edit(req: EditReq):
 
 @app.post("/api/store/recovery")
 def api_store_recovery(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_show_recovery(s)
@@ -506,6 +673,7 @@ def api_store_recovery(req: Sid) -> dict:
 
 @app.post("/api/store/publish")
 def api_store_publish(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_publish(s)
@@ -513,6 +681,7 @@ def api_store_publish(req: Sid) -> dict:
 
 @app.post("/api/store/text-input")
 def api_store_text_input(req: TextReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_text_input(req.text, s)
@@ -520,6 +689,7 @@ def api_store_text_input(req: TextReq) -> dict:
 
 @app.post("/api/store/check-save")
 def api_store_check_save(req: TextReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_check_save(req.text, s)
@@ -527,6 +697,7 @@ def api_store_check_save(req: TextReq) -> dict:
 
 @app.post("/api/store/revert")
 def api_store_revert(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_revert(s)
@@ -534,6 +705,7 @@ def api_store_revert(req: Sid) -> dict:
 
 @app.post("/api/store/chip")
 def api_store_chip(req: ChipReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_chip(req.chip_id, s)
@@ -542,6 +714,7 @@ def api_store_chip(req: ChipReq) -> dict:
 @app.post("/api/store/image-tick")
 def api_store_image_tick(req: Sid) -> dict:
     """The client polls this while image_pending: returns {"changed": bool, "data": view?}."""
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         view = state.on_image_tick(s)
@@ -550,6 +723,7 @@ def api_store_image_tick(req: Sid) -> dict:
 
 @app.get("/api/store/export-zip")
 def api_store_export_zip(session_id: str = ""):
+    _require(session_id)
     s = _store_session(session_id)
     with s["lock"]:
         out = state.export_zip(s)
@@ -560,6 +734,7 @@ def api_store_export_zip(session_id: str = ""):
 
 @app.get("/api/store/download-md")
 def api_store_download_md(session_id: str = ""):
+    _require(session_id)
     s = _store_session(session_id)
     with s["lock"]:
         out = state.download_text(s)
@@ -570,6 +745,7 @@ def api_store_download_md(session_id: str = ""):
 
 @app.get("/api/store/save-image")
 def api_store_save_image(session_id: str = ""):
+    _require(session_id)
     s = _store_session(session_id)
     with s["lock"]:
         out = state.save_image(s)
@@ -582,12 +758,14 @@ def api_store_save_image(session_id: str = ""):
 # ---------------------------------------------------------------- 三店对比
 @app.post("/api/compare/stored")
 def api_compare_stored(req: CompareReq) -> dict:
+    _require_demo(req.session_id)
     body, summary = compare_view.on_show_stored(req.model_id, req.platform)
     return {"html": body, "summary": summary}
 
 
 @app.post("/api/compare/run")
 def api_compare_run(req: CompareReq):
+    _require_demo(req.session_id)
     s = _session(req.session_id)
     blocked = rate_check(s["id"])
     if blocked:
@@ -602,19 +780,51 @@ def api_compare_run(req: CompareReq):
 
 # ---------------------------------------------------------------- 总部端
 @app.get("/api/hq/view")
-def api_hq_view() -> dict:
-    return hq_view.view()
+def api_hq_view(session_id: str = "") -> dict:
+    acct = _require(session_id, ("manager", "developer"))
+    if acct["role"] == "manager" and not acct["store_id"]:
+        raise HTTPException(status_code=403, detail="这个店长账号还没有绑定门店")
+    store_id = acct["store_id"] if acct["role"] == "manager" else ""
+    out = hq_view.view(store_id=store_id, store_name=acct.get("store_name", ""))
+    out["scope"] = "store" if store_id else "all"
+    out["can_reset"] = acct["role"] == "developer"
+    return out
 
 
 @app.post("/api/hq/verify")
-def api_hq_verify() -> dict:
-    return hq_view.on_verify()
+def api_hq_verify(req: Sid) -> dict:
+    """A manager confirms for their own store; a developer confirms for every store. The approval is
+    persisted so it survives a restart, and the recommender is updated in the same request."""
+    acct = _require(req.session_id, ("manager", "developer"))
+    if acct["role"] == "manager" and not acct["store_id"]:
+        raise HTTPException(status_code=403, detail="这个店长账号还没有绑定门店")
+    store_id = acct["store_id"] if acct["role"] == "manager" else ""
+    out = hq_view.on_verify(store_id=store_id, store_name=acct.get("store_name", ""))
+    model_id = out.get("verified_model") or ""
+    if model_id:
+        try:
+            if store_id:
+                accounts.approve_product(model_id, store_id, acct.get("username", ""))
+            else:
+                for st in state.STORES:
+                    accounts.approve_product(model_id, st["store_id"], acct.get("username", ""))
+        except Exception as e:  # noqa: BLE001 - the in-memory unlock still happened
+            log.warning("approval could not be written to the database: %s", e)
+    out["scope"] = "store" if store_id else "all"
+    out["can_reset"] = acct["role"] == "developer"
+    return out
 
 
 @app.post("/api/hq/reset")
-def api_hq_reset() -> dict:
-    """重置演示: backend state + every UI session (已发布 marks, chips, shown results). Prepared posts stay."""
+def api_hq_reset(req: Sid) -> dict:
+    """重置演示 (developer only): backend state + every UI session (已发布 marks, chips, shown results).
+    Prepared posts and accounts stay; persisted approvals are cleared."""
+    _require(req.session_id, ("developer",))
     out = hq_view.on_reset()
+    try:
+        accounts.clear_approvals()
+    except Exception as e:  # noqa: BLE001
+        log.warning("approvals could not be cleared from the database: %s", e)
     with _SESSIONS_LOCK:
         for s in _SESSIONS.values():
             sid, lock = s.get("id"), s.get("lock")
@@ -629,12 +839,14 @@ def api_hq_reset() -> dict:
 # ---------------------------------------------------------------- 对照组
 @app.post("/api/baseline/stored")
 def api_baseline_stored(req: StoreReq) -> dict:
+    _require_demo(req.session_id)
     left, right, meta = baseline_view.on_show_stored(req.store_id or state.STORES[0]["store_id"])
     return {"left": left, "right": right, "meta": meta}
 
 
 @app.post("/api/baseline/run")
 def api_baseline_run(req: StoreReq):
+    _require_demo(req.session_id)
     s = _session(req.session_id)
     blocked = rate_check(s["id"])
     if blocked:
@@ -763,6 +975,7 @@ def _manual_handle(result, m: dict) -> dict:
 
 @app.post("/api/manual/generate")
 def api_manual_generate(req: ManualReq):
+    _require(req.session_id)
     s = _session(req.session_id)
     m = _manual(s)
     text = (req.text or "").strip()
@@ -807,6 +1020,7 @@ def api_manual_check(req: ManualReq) -> dict:
     """Intake only, before the 直接输入 flow leaves the input page: ask the missing questions first, so the
     result page is never a dead end. The clarification is remembered, so the follow-up generate call with
     the same text + form is accepted as a continuation (api_manual_generate)."""
+    _require(req.session_id)
     s = _session(req.session_id)
     m = _manual(s)
     text = (req.text or "").strip()
@@ -831,6 +1045,7 @@ def api_manual_check(req: ManualReq) -> dict:
 
 @app.post("/api/manual/edit")
 def api_manual_edit(req: ManualEditReq):
+    _require(req.session_id)
     s = _session(req.session_id)
     m = _manual(s)
     prev = m.get("result")
@@ -860,6 +1075,7 @@ def api_manual_edit(req: ManualEditReq):
 def api_manual_platform(req: PlatformReq):
     """换平台: a cached platform switches instantly (the current one is always cached before the switch);
     only a platform the hidden prefetch has not reached yet is generated on demand."""
+    _require(req.session_id)
     s = _session(req.session_id)
     m = _manual(s)
     prev = m.get("result")
@@ -891,12 +1107,14 @@ def api_manual_platform(req: PlatformReq):
 @app.post("/api/manual/cache-status")
 def api_manual_cache_status(req: Sid) -> dict:
     """Polled while 换 is disabled: ready once every platform is cached."""
+    _require(req.session_id)
     return _manual_cache(_manual(_session(req.session_id)))
 
 
 @app.get("/api/manual/download-image")
 def api_manual_download_image(session_id: str = "", idx: int = 0):
     """保存图片: one image at a time. 下载所有图片 (below) zips the same per-post images."""
+    _require(session_id)
     s = _session(session_id)
     r = _manual(s).get("result")
     images = list(getattr(getattr(r, "post", None), "images", None) or [])
@@ -926,6 +1144,7 @@ def api_manual_download_images(session_id: str = ""):
     """下载所有图片: the current post's images as one zip, numbered like the per-image saves (1.png, 2.jpg …).
     Product decision 2026-10-22: the 生成 tab offers the zip the lead asked for; still per post, never the KB.
     Images that are not cached yet are fetched once; ones that fail are left out instead of failing the zip."""
+    _require(session_id)
     s = _session(session_id)
     r = _manual(s).get("result")
     images = list(getattr(getattr(r, "post", None), "images", None) or [])
@@ -958,6 +1177,7 @@ def api_manual_download_images(session_id: str = ""):
 def api_stream_image(session_id: str = "", scope: str = "manual", idx: int = 0):
     """The live preview's own image, addressed by index so no media id is ever sent to the browser.
     Served inline for the streaming phone (draft / revision events); 404 when not available yet."""
+    _require(session_id)
     s = _store_session(session_id) if scope == "store" else _session(session_id)
     host = s if scope == "store" else _manual(s)
     post = host.get("stream_post")
@@ -974,6 +1194,7 @@ def api_stream_image(session_id: str = "", scope: str = "manual", idx: int = 0):
 
 @app.get("/api/manual/download-md")
 def api_manual_download(session_id: str = ""):
+    _require(session_id)
     s = _session(session_id)
     r = _manual(s).get("result")
     if r is None:
@@ -984,6 +1205,7 @@ def api_manual_download(session_id: str = ""):
 
 @app.post("/api/manual/reset")
 def api_manual_reset(req: Sid) -> dict:
+    _require(req.session_id)
     s = _session(req.session_id)
     s["manual"] = {"id": s.get("id"), "reset_seen": reset_token()}
     return {"ok": True}

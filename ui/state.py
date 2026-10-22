@@ -149,6 +149,25 @@ def _ensure_stored(session: dict, card, key: str) -> None:
         results[key] = _PreparedDisplay(payload)
 
 
+def staff_for(account: dict) -> StaffContext:
+    """The person behind a login account, for the copy that says who is signed in."""
+    role = account.get("role") or "staff"
+    name = (account.get("display_name") or account.get("store_name")
+            or ("店长" if role == "manager" else "门店店员"))
+    return StaffContext(staff_id=account.get("username") or "demo-staff",
+                        display_name=name, role="manager" if role == "manager" else "staff")
+
+
+def bind_account(session: dict, account: dict) -> None:
+    """A staff/manager login owns both the store and the role for this session. A developer account has
+    no store binding and keeps the demo's store picker."""
+    if account.get("role") not in ("staff", "manager") or not account.get("store_id"):
+        return
+    if session.get("store_id") != account["store_id"] or not session.get("cards"):
+        load_store(session, account["store_id"])
+    session["staff"] = staff_for(account)
+
+
 def _staff(session: dict) -> StaffContext:
     return session.get("staff") or DEMO_STAFF
 
@@ -208,7 +227,8 @@ def load_store(session: dict, store_id: str) -> None:
     session["show_other"] = False
     session["image_pending"] = False
     session.pop("image_fetch_key", None)
-    session["overrides_seen"] = ui_data.fact_card_overrides()
+    # both a process-wide HQ confirmation and a manager's per-store one can unlock a new product
+    session["overrides_seen"] = (ui_data.fact_card_overrides(), ui_data.store_approvals())
     session["reset_token_seen"] = ui_data.reset_token()
     session.pop("edit_message", None)
     session.pop("recovery", None)
@@ -447,7 +467,8 @@ def on_tab_select(session: dict) -> dict:
         session.update(fresh_session())
         session["id"] = sid
         load_store(session, STORES[0]["store_id"])
-    elif session.get("cards") and session.get("overrides_seen") != ui_data.fact_card_overrides():
+    elif (session.get("cards")
+          and session.get("overrides_seen") != (ui_data.fact_card_overrides(), ui_data.store_approvals())):
         load_store(session, session.get("store_id") or STORES[0]["store_id"])
     elif not session.get("cards"):
         load_store(session, STORES[0]["store_id"])
@@ -558,7 +579,7 @@ def on_platform(platform: str, session: dict) -> dict:
 
 
 def on_role(role: str, session: dict) -> dict:
-    session["staff"] = DEMO_MANAGER if role == "店长" else DEMO_STAFF
+    session["staff"] = DEMO_MANAGER if role in ("店长", "manager") else DEMO_STAFF
     return render(session)
 
 
