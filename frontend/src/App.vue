@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Building2, Columns3, FlaskConical, LogIn, MousePointerClick, Scale, Store } from 'lucide-vue-next'
+import { Building2, Columns3, FlaskConical, LogIn, Scale, Sparkles, Store } from 'lucide-vue-next'
 import { account, engineer, loadMeta, meta, refreshStatus, status } from './api.js'
 import HomeView from './views/HomeView.vue'
 import ClickView from './views/ClickView.vue'
@@ -11,7 +11,7 @@ import BaselineView from './views/BaselineView.vue'
 
 const NAV = [
   { key: 'home', label: '门店端', icon: Store },
-  { key: 'click', label: '点击输入', icon: MousePointerClick },
+  { key: 'click', label: '生成', icon: Sparkles },
   { key: 'hq', label: '总部端', icon: Building2 },
   { key: 'login', label: '登录', icon: LogIn },
 ]

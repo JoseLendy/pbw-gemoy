@@ -80,6 +80,7 @@ const quickEdit = (ins) => slow('/api/store/quick-edit', { instruction: ins })
 const recovery = () => call('/api/store/recovery')
 const publish = () => call('/api/store/publish')
 const chip = (id) => call('/api/store/chip', { chip_id: id })
+const goHq = () => emit('go', 'hq')
 const revert = () => call('/api/store/revert')
 const checkSave = () => call('/api/store/check-save', { text: text.value })
 
@@ -154,7 +155,11 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
               <span v-if="panel.platform" class="tag">{{ panel.platform }}</span>
             </div>
             <h2 id="rec-title" class="rec-title">{{ panel.product }}</h2>
-            <div v-if="panel.locked" class="note warn">{{ panel.locked }}</div>
+            <!-- a locked 新品款 can only be generated once 总部端 确认发布, so point at it instead of dead-ending -->
+            <div v-if="panel.locked" class="note warn locked-note">
+              <span>{{ panel.locked }}</span>
+              <button class="btn btn-light btn-sm" @click="goHq">去总部端「确认发布」</button>
+            </div>
             <div v-if="panel.notice" class="note info">{{ panel.notice }}</div>
             <ul v-if="panel.reasons && panel.reasons.length" class="reasons" aria-label="为什么推这条">
               <li v-for="(r, i) in panel.reasons" :key="i">

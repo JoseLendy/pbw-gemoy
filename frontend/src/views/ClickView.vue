@@ -1,5 +1,5 @@
 <script setup>
-// 点击输入: two ways in. 点选 picks 产品 → 顾客 → 场景 → 平台 with pictures (the picks become one plain sentence for
+// 生成 (was 点击输入): two ways in. 点选 picks 产品 → 顾客 → 场景 → 平台 with pictures (the picks become one plain sentence for
 // intake and answer any clarification themselves); 直接输入 takes one sentence typed by the clerk. Both share the
 // result view: phone preview, quick edits, copy / download, report.
 import { computed, reactive, ref } from 'vue'
@@ -202,7 +202,7 @@ async function restart() {
 <template>
   <div class="page page-with-head" :class="{ 'page-with-tools': stage === 'input' }">
     <header class="page-head">
-      <h1>点击输入</h1>
+      <h1>生成</h1>
       <p>点选或直接说一句，生成经知识库核验、可直接发布的平台软文。</p>
     </header>
 
