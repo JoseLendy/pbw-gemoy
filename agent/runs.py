@@ -27,7 +27,7 @@ REHEARSAL_DIR = RUNS_DIR / "_rehearsal"
 PREPARED = "prepared"
 
 __all__ = ["RUNS_DIR", "REHEARSAL_DIR", "log_run", "log_batch", "latest_run",
-           "log_prepared", "prepared_post", "clear_prepared", "log_version", "stored_version", "log_stored",
+           "log_prepared", "prepared_post", "clear_prepared", "log_human_edit", "log_version", "stored_version", "log_stored",
            "stored"]
 
 
@@ -94,6 +94,22 @@ def log_batch(cards, batch, runs_dir: Path | None = None) -> Path:
         "regenerated": list(getattr(batch, "regenerated", [])),
         "timestamp": now.isoformat(timespec="seconds"),
     }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def log_human_edit(card, platform: str, original_text: str, edited_text: str, checks: list | None = None,
+                   runs_dir: Path | None = None) -> Path:
+    """A staff member edited the publishable text by hand and it passed 「检查并保存」: keep both texts."""
+    out_dir = Path(runs_dir) if runs_dir else RUNS_DIR
+    now = dt.datetime.now(dt.timezone.utc)
+    folder = out_dir / str(getattr(card, "date", None) or now.date().isoformat())
+    folder.mkdir(parents=True, exist_ok=True)
+    payload = {"kind": "human_edit", "card_id": card.card_id, "store_id": card.store_id,
+               "store_name": card.store_name, "model": card.model_id, "platform": platform,
+               "timestamp": now.isoformat(timespec="seconds"), "edited_by_human": True,
+               "original_text": original_text, "edited_text": edited_text, "checks": checks or []}
+    path = folder / f"{now.strftime('%Y%m%dT%H%M%S%fZ')}-{card.store_id}-{card.slot}-human_edit.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
     return path
 
