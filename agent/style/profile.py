@@ -1,5 +1,5 @@
 """
-Writer brief (plan §6.1): a recommendation card's hook / voice / landmark / nickname / angle /
+Writer brief (plan §6.1): a recommendation card's hook / voice / landmark / angle /
 calendar theme / promo become an explicit instruction block in the writer prompt.
 
     from agent.style.profile import brief
@@ -76,9 +76,7 @@ def _voice_block(task) -> list[str]:
         return []
     label = voice_label(voice) or voice
     tone = VOICE_TONE.get(voice, "")
-    staff = getattr(task, "staff", None) or {}
-    who = f"（本条按 {staff['display_name']} 的版本发布）" if staff.get("display_name") else ""
-    return [f"语气：{label}。{tone}{who}"]
+    return [f"语气：{label}。{tone}"]
 
 
 def _detail_block(task) -> list[str]:
@@ -86,12 +84,8 @@ def _detail_block(task) -> list[str]:
     landmark = getattr(task, "landmark", None)
     if landmark:
         out.append(f"正文里要自然带一次门店位置：{landmark}（这是只有本店写得出的细节）。只出现一次，不要写地址细节之外的信息。")
-    nickname = getattr(task, "nickname", None)
-    if nickname and (getattr(task, "platform", "") == "moments"):
-        out.append(f"结尾可以用「{nickname}」署名，只出现一次，单独成行放在最后；不要用逗号接在句子后面"
-                   f"（不写“……上手试试，{nickname}”）。")
-    elif nickname:
-        out.append("本平台不用署名：正文里不要出现昵称或店名落款。")
+    out.append("全文不出现任何人名、昵称或署名（结尾不落款，正文也不写“找某某”这类称呼）；"
+               "需要时用第一人称邀请：“私信我”“到店找我”，这样谁发都合适。")
     return out
 
 

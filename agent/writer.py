@@ -3,7 +3,6 @@ Step 7: writer + targeted rewrite. The LLM writes; code validates every field ag
 """
 from __future__ import annotations
 
-import copy
 import json
 import re
 from typing import Iterable
@@ -128,23 +127,6 @@ def has_absolute_word(post: Post) -> bool:
     return bool(_ABSOLUTE_RE.search(post.all_text()))
 
 
-def unglue_signoff(post: Post, nickname: str | None) -> Post:
-    """The staff sign-off goes on its own last line, never glued on with a comma ("……可以上手试试，小王")."""
-    if not nickname:
-        return post
-    glued = re.compile(r"[，,、]\s*" + re.escape(nickname) + r"\s*[。！!～~]?\s*$")
-
-    def fix(text: str) -> str | None:
-        return glued.sub("。", text.rstrip()) + "\n" + nickname if glued.search(text or "") else None
-
-    new = copy.copy(post)
-    if (cta := fix(post.cta)) is not None:
-        new.cta = cta
-    elif post.body and (last := fix(post.body[-1])) is not None:
-        new.body = [*post.body[:-1], last]
-    return new
-
-
 def _strip_bad_tags(text: str, valid: set[str]) -> str:
     return TAG_RE.sub(lambda m: m.group(0) if m.group(1) in valid else "", text or "")
 
@@ -220,8 +202,6 @@ def write_post(task: Task, strategy: Strategy, ledger: Ledger, plan: ImagePlan, 
                              field=n) for n in fields]
         post = rewrite(post, issues, task, strategy, ledger, plan, llm)
 
-    post = unglue_signoff(post, task.nickname)
-
     # tags are always filled
     if not post.tags:
         post.tags = [PLATFORM_LABELS.get(post.platform, post.platform)]
@@ -279,4 +259,4 @@ def rewrite(post: Post, issues: list[CheckIssue], task: Task, strategy: Strategy
     removed = set(_used_ids(post)) - set(used)
     new.selling_points = [i for i in dict.fromkeys(post.selling_points + used)
                           if i in allowed and ledger.get(i) and i not in removed]
-    return unglue_signoff(new, task.nickname)
+    return new

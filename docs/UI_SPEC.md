@@ -147,7 +147,7 @@ the delivered product instead of claiming same-card. Screenshot: `eval/ui_screen
 
 #### Stage 4 — optional, only if time allows (cut in this order if short: engagement → binding → staff picker)
 
-- Staff picker under the store selector, from a new data/demo/inputs/staff.csv (staff_id, store_id, display_name, role staff|manager, voice optional, nickname optional, is_demo); 2 people for S01, S02, S04, S08, S10, 1 manager elsewhere; validate voices against angles.json allowed_segments at startup; passes a StaffContext to generate().
+- Staff picker under the store selector, from a new data/demo/inputs/staff.csv (staff_id, store_id, display_name, role staff|manager, voice optional, is_demo; no nickname: posts carry no personal name); 2 people for S01, S02, S04, S08, S10, 1 manager elsewhere; validate voices against angles.json allowed_segments at startup; passes a StaffContext to generate().
 - 绑定演示 tab: 3 static steps (扫描门店码 → 「检测到你在紫金港店附近，是这家店吗？」[是] → 「绑定成功，之后打开即用」). No real QR, no location access.
 - 发布效果 panel in 总部端 from engagement_log.csv, with the note 「预览：真实互动数据接入为后续工作」.
 

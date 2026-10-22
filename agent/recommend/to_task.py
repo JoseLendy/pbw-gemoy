@@ -50,13 +50,10 @@ def card_to_task(card: RecommendationCard, staff: Optional[StaffContext] = None,
         raise ValueError(f"card {card.card_id}: scenario {card.scenario!r} is not a known Scenario key")
     angles = angles or load_json(INPUTS / "angles.json")
     voice_id = card.voice.id if card.voice else None
-    nickname = card.nickname
     if staff is not None:
         if staff.voice:
             check_voice(staff.voice, card.segment, angles, who=f"staff {staff.staff_id}")
             voice_id = staff.voice
-        if staff.nickname:
-            nickname = staff.nickname
     if voice_id is not None and voice_id not in voices_by_id(angles):
         raise ValueError(f"card {card.card_id}: unknown voice {voice_id!r}")
     return Task(
@@ -68,7 +65,7 @@ def card_to_task(card: RecommendationCard, staff: Optional[StaffContext] = None,
         platform=platform_key(card.platform),
         source="card", card_id=card.card_id, store_id=card.store_id, store_name=card.store_name,
         slot=card.slot, segment=card.segment, hook=card.hook.id if card.hook else None,
-        voice=voice_id, landmark=card.landmark or None, nickname=nickname or None,
+        voice=voice_id, landmark=card.landmark or None,
         angle=card.angle, calendar_theme=card.calendar_theme,
         promo=card.promo.to_dict() if card.promo else None,
         question=card.question.to_dict() if card.question else None,

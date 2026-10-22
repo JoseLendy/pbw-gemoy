@@ -225,13 +225,12 @@ def _8b_prompt(task):
 
 
 def test_8b_judge_is_told_the_cards_store_context():
-    """Real 朋友圈 eval S09: the brief told the writer to name the store's landmark and sign as the staff
-    member; the 8B judge, never shown that context, called '我店在良渚文化村附近…' an invented personal
+    """Real 朋友圈 eval S09: the brief told the writer to name the store's landmark; the 8B judge, never shown that context, called '我店在良渚文化村附近…' an invented personal
     experience. The judge must see the store data the card supplied."""
     task = _card_task()
-    assert task.landmark and task.nickname
+    assert task.landmark
     system, user = _8b_prompt(task)
-    assert "<store>" in user and task.landmark in user.split("<store>")[1] and task.nickname in user
+    assert "<store>" in user and task.landmark in user.split("<store>")[1] and "署名" not in user
     assert "不算编造" in system and "顾客" in system          # still: no invented customer experience
 
 

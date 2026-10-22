@@ -81,7 +81,7 @@ A delivered card post always passed every check: with `fallback=True`, `run_from
 
 ### Card fields the UI shows
 
-`RecommendationCard`: `card_id`, `store_id`, `store_name`, `date`, `slot`, `slot_label` (潜力款 / 活动款 / 新品款 / 顾客问答), `model_id`, `display_name` (always show in full: two models are both "MateBook 14"), `platform`, `segment_label`, `angle`, `hook`, `voice`, `landmark`, `nickname`, `reasons` (`CardReason`: `text`, `source`, `is_demo` → 模拟 badge), `locked`, `locked_reason`, `promo`, `question`, `is_default`. The 新品款 reason reads 「总部新品推送（演示流程）」.
+`RecommendationCard`: `card_id`, `store_id`, `store_name`, `date`, `slot`, `slot_label` (潜力款 / 活动款 / 新品款 / 顾客问答), `model_id`, `display_name` (always show in full: two models are both "MateBook 14"), `platform`, `segment_label`, `angle`, `hook`, `voice`, `landmark`, `reasons` (`CardReason`: `text`, `source`, `is_demo` → 模拟 badge), `locked`, `locked_reason`, `promo`, `question`, `is_default`. The 新品款 reason reads 「总部新品推送（演示流程）」.
 
 ## 3. State: what 重置演示 clears
 

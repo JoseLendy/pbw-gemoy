@@ -1,5 +1,6 @@
 """
-Store voice profile (plan §6.1): auto landmark / voice / nickname + the store's own edits.
+Store voice profile (plan §6.1): auto landmark / voice + the store's own edits. No personal name: posts are
+signed by nobody, so whoever posts them speaks in the first person (「私信我」「到店找我」).
 Voice is chosen by md5(store_id) among the voices allowed for the dominant segment; an override
 voice not allowed for that segment is rejected (never silently accepted).
 """
@@ -40,7 +41,6 @@ def build_profiles(stores: list[dict], signals: dict, angles: dict, overrides: d
             "store_id": st["store_id"], "store_name": st["store_name"],
             "landmark": f"{st['anchor_poi']}附近", "landmark_source": "auto_from_poi",
             "voice": voice["id"], "voice_label": voice["label"],
-            "nickname": angles["nicknames"][stable_hash(st["store_id"], "nick") % len(angles["nicknames"])],
             "editable_by_store": True, "is_demo": True,
         }
         ov = overrides.get(st["store_id"], {})
@@ -49,6 +49,4 @@ def build_profiles(stores: list[dict], signals: dict, angles: dict, overrides: d
             profiles[st["store_id"]].update(voice=ov["voice"], voice_label=voices[ov["voice"]]["label"])
         if "landmark" in ov:
             profiles[st["store_id"]].update(landmark=ov["landmark"], landmark_source="edited_by_store")
-        if "nickname" in ov:
-            profiles[st["store_id"]]["nickname"] = ov["nickname"]
     return profiles

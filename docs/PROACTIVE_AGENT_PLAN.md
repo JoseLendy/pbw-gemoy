@@ -313,7 +313,8 @@ Generated into `data/demo/generated/store_profiles.json`:
 |---|---|---|
 | `landmark` | **Auto**: `<anchor POI>附近`; store may edit | Local detail only this store can write ("下课走过来五分钟") |
 | `voice` | Default by `md5(store_id)` among voices allowed for the dominant segment; store may change | Tone of the post |
-| `nickname` | Auto from a small list; editable | Sign-off on 朋友圈 |
+
+**No personal name (2026-10-22).** A post never carries a staff name: no sign-off and no 「找小X」 in the text. Whoever posts it speaks in the first person (「私信我」「到店找我」), so one post works for every staff member. 8B `personal_name` (agent/checks/names.py, `config/personal_names.txt`) fails a post with a listed name, an addressed name or a sign-off; reconcile drops a 导购话术 line that names a person.
 
 Use `md5`, **not** Python's `hash()` (it is randomly salted per process, so assignments would change every run).
 
@@ -443,7 +444,7 @@ data/demo/
     promotions.json                2 national demo campaigns
     calendar.json                  5 events
     segments.json                  POI typecode → segment, importance, radius, decay
-    angles.json                    angles, hooks, voices, nicknames
+    angles.json                    angles, hooks, voices
     platform_quota.json            weekly rotation
     question_pool.json             10 question chips
     antiai_blocklist.json          8D rules
@@ -453,7 +454,7 @@ data/demo/
     poi_fixtures/<id>.json         fake POI (only for stores without a cache)
     store_signals.json             segment weights, dominant segment, POI source
     sales_weekly.csv               12 weeks × 12 stores × 6 models
-    store_profiles.json            landmark / voice / nickname
+    store_profiles.json            landmark / voice
     publish_log.csv                14 days posting log
     post_history.json              last 7 days posted (for the repeat filter)
     engagement_log.csv             views/likes/saves per post
@@ -482,11 +483,11 @@ Standard library only, deterministic. If the output ends with `PROBLEMS:`, fix i
 | `promotions.json` | `campaign_id, name, models, start, end, mechanic, price_info{model:{label,value,conditions}}, source` | WS-A | `price_info` may be `null`. Only these values may ever appear as prices in copy. |
 | `calendar.json` | `event, start, end, theme, segments` | — | |
 | `segments.json` | `radius_m, decay_m, categories{typecodes, segment, importance, label}` | WS-B | Shared by generator and app. |
-| `angles.json` | `segment_angles, hooks, voices{allowed_segments}, nicknames` | WS-C | |
+| `angles.json` | `segment_angles, hooks, voices{allowed_segments}` | WS-C | |
 | `platform_quota.json` | `rotation[7]`, `weekly_minimum` | — | |
 | `question_pool.json` | `chips{id:{text, segments}}` | WS-D | Also the UI chip list. |
 | `antiai_blocklist.json` | `phrases, patterns, rules` | WS-C | |
-| `store_profile_overrides.json` | `{store_id: {voice?, landmark?, nickname?}}` | — | Voice validated against segment. |
+| `store_profile_overrides.json` | `{store_id: {voice?, landmark?}}` | — | Voice validated against segment. |
 
 ### 10.5 How generation works
 
@@ -544,7 +545,7 @@ Full example: `templates/recommendation_card.example.json`. Fields:
 | `platform` | from weekly rotation |
 | `segment, segment_label, angle, calendar_theme` | targeting → writer brief |
 | `scenario` | explicit Scenario key (calendar-aware; e.g. `campus_daily`, `holiday`, `new_launch`) |
-| `hook{id,label}, voice{id,label}, landmark, nickname` | variation → writer brief |
+| `hook{id,label}, voice{id,label}, landmark` | variation → writer brief |
 | `reasons[{text, source, is_demo}]` | explanation card; `is_demo` → 模拟 badge |
 | `promo{campaign_id, name, mechanic, price_info, source}` | the **only** allowed price source |
 | `question{chip_id, text, count}` | for 顾客问答 |

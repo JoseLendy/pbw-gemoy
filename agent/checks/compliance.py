@@ -15,6 +15,7 @@ Issue codes (stage "8B"):
   invented_customer_quote  (card runs) a customer question/quote that is not the card's logged one   error
   price_*            price traceability (agent/checks/prices.py): untraceable / mismatch / conditions   error
   release_unsupported  (card runs) 新品 / 首发 / 上市日期 wording with no tagged release fact (release.py) error
+  personal_name      any personal name or sign-off in the publishable text (names.py)                  error
 """
 from __future__ import annotations
 
@@ -260,8 +261,7 @@ def _store_block(task) -> str:
     """Card runs: the store data the card gave the writer (plan §6.1). Empty for the manual flow."""
     if task is None or getattr(task, "source", "manual") != "card":
         return ""
-    rows = [("门店", getattr(task, "store_name", None)), ("门店位置", getattr(task, "landmark", None)),
-            ("店员署名", getattr(task, "nickname", None))]
+    rows = [("门店", getattr(task, "store_name", None)), ("门店位置", getattr(task, "landmark", None))]
     lines = [f"{k}：{v}" for k, v in rows if v]
     q = getattr(task, "question", None) or {}
     if q.get("text"):
@@ -295,7 +295,7 @@ def _brief_block(task) -> str:
 def _llm_layer(post: Post, ledger: Ledger, llm, task=None) -> list[CheckIssue]:
     system = ("你是广告合规审核员。检查整篇文案是否存在：虚假承诺、无依据的比较、误导性价格、贬低其他品牌、"
               "小红书编造个人使用经历，以及违反 <boundaries> 中知识库表达边界的说法。只根据给出的事实清单判断事实依据。"
-              "<store> 里是门店的真实资料：用这些位置和署名、以店员身份邀请到店，不算编造经历；"
+              "<store> 里是门店的真实资料：用这些位置、以店员身份邀请到店，不算编造经历；"
               "引用 <store> 里本店记录过的顾客问题（原意不变）也不算编造；"
               "但编造其他顾客经历、使用体验或服务承诺仍然是问题。"
               '输出 JSON：{"issues":[{"field":"","quote":"","code":"false_promise","message":""}]}')
@@ -340,6 +340,9 @@ def check_compliance(post: Post, ledger: Ledger, task: Task, llm=None) -> CheckR
     issues += _check_customer_quotes(post, task)
     from agent.checks.release import check_release   # new-release truthfulness (card runs; Phase 5)
     issues += check_release(post, ledger, task)
+    from agent.checks.names import personal_name_issues   # no personal name / sign-off anywhere (code)
+    issues += personal_name_issues([("title", post.title), ("intro", post.intro),
+                                    *[(f"body[{i}]", b) for i, b in enumerate(post.body)], ("cta", post.cta)])
     if llm is not None:
         issues += _llm_layer(post, ledger, llm, task)
     return CheckReport(issues)

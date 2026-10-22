@@ -1,0 +1,11 @@
+# Personal names that must never appear in a post or in 导购话术 (agent/checks/names.py, 8B personal_name).
+# The former staff sign-off list; posts are signed by nobody and speak in the first person (「私信我」「到店找我」).
+小王
+小李
+阿杰
+小陈
+小林
+阿雅
+小周
+小许
+小张

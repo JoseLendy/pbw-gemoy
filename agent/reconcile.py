@@ -137,7 +137,8 @@ def reconcile(task: Task, analysis: ScenarioAnalysis, ledger: Ledger, model: Mod
             seen.add(f.attribute)
             pending.append(f"待确认：{f.attribute} 知识库资料存在已知分歧，本文未使用。")
 
-    talk = [t for t in (clean_talk_line(x) for x in (data.get("talk_card") or [])) if t][:3]
+    from agent.checks.names import names_in       # 导购话术 never carries a personal name (dropped in code)
+    talk = [t for t in (clean_talk_line(x) for x in (data.get("talk_card") or [])) if t and not names_in(t)][:3]
     return Strategy(
         analysis=analysis,
         angle=str(data.get("angle") or "").strip() or analysis.content_goal,

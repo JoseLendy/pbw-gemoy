@@ -450,7 +450,7 @@ def _variety_entry(card: RecommendationCard, result) -> Optional[dict]:
         return None
     task = result.task
     keep = [f.value for f in result.ledger.facts] + [f.qualifier for f in result.ledger.facts if f.qualifier]
-    keep += [task.product_query, task.landmark, task.store_name, task.nickname, card.display_name]
+    keep += [task.product_query, task.landmark, task.store_name, card.display_name]
     try:
         from agent.writer import product_names
         keep += product_names(task)

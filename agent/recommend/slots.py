@@ -125,7 +125,7 @@ def build_cards(stores, models, signals, idx, promos, calendar, quota, angles, p
                 "calendar_theme": cal["theme"] if cal else None,
                 "hook": {"id": hook["id"], "label": hook["label"]},
                 "voice": {"id": prof["voice"], "label": prof["voice_label"]},
-                "landmark": prof["landmark"], "nickname": prof["nickname"],
+                "landmark": prof["landmark"],
                 "reasons": explain.order_reasons(poi_r, reasons, cal_r),  # where → why this → when
                 "locked": False, "locked_reason": None, "promo": None, "question": None,
                 "scores": {"fit": fit.get(model_id)} if model_id else {}, "is_default": False, "is_demo": True,

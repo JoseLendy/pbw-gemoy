@@ -1,6 +1,6 @@
 """Writer brief + 8D rules from the 2026-10-23 review (synthetic text only):
 the calendar theme is an idea (never copied verbatim), the myth hook has no fixed opener, the CTA does not
-read like legal text, the sign-off is never glued on with a comma, and the writer is told the product name."""
+read like legal text, and the writer is told the product name. (Sign-offs are gone: tests/test_personal_names.py.)"""
 from __future__ import annotations
 
 import dataclasses
@@ -8,13 +8,13 @@ import dataclasses
 from agent.schemas import Post, Task
 from agent.style.antiai import check_style
 from agent.style.profile import HOOK_OPENING, brief
-from agent.writer import _context, unglue_signoff
+from agent.writer import _context
 from tests.fakes import fake_ledger, fake_plan, fake_post, fake_strategy
 
 
 def _task(**kw) -> Task:
     base = dict(raw_text="", product_query="DemoBook 14（演示版）", model_id="demobook-14", platform="moments",
-                source="card", hook="scene", voice="techie", landmark="演示广场附近", nickname="小王",
+                source="card", hook="scene", voice="techie", landmark="演示广场附近",
                 angle="送礼怎么选", calendar_theme="购物节前做功课", scenario="holiday")
     base.update(kw)
     return Task(**base)
@@ -86,25 +86,6 @@ def test_plain_cta_passes_and_a_qualifier_in_the_body_is_not_a_cta_issue():
     p = _post(["演示广场附近的门店，Windows 版支持该功能，以官网为准，重量约 1.25 kg [F1]。"],
               cta="想上手试试，到店或私信我都行。")
     assert "ai_cta_legal" not in _codes(check_style(p, _task()))
-
-
-# ---------------------------------------------------------------- sign-off
-def test_signoff_glued_with_a_comma_is_moved_to_its_own_line():
-    p = _post(["重量约 1.25 kg [F1]。"], cta="想上手试试，可以上手试试，小王")
-    out = unglue_signoff(p, "小王")
-    assert out.cta == "想上手试试，可以上手试试。\n小王"
-
-
-def test_signoff_glued_in_the_last_body_paragraph_is_fixed_too():
-    p = _post(["重量约 1.25 kg [F1]，到店掂一掂，小王。"], cta="")
-    out = unglue_signoff(p, "小王")
-    assert out.body[-1] == "重量约 1.25 kg [F1]，到店掂一掂。\n小王"
-
-
-def test_signoff_already_on_its_own_or_mid_sentence_is_untouched():
-    for cta in ("想上手试试，到店找小王。", "到店上手试试。\n小王", "到店上手试试。小王"):
-        p = _post(["重量约 1.25 kg [F1]。"], cta=cta)
-        assert unglue_signoff(p, "小王").cta == cta
 
 
 # ---------------------------------------------------------------- product name in the writer prompt
