@@ -468,7 +468,7 @@ def on_select_other(idx: int, session: dict) -> dict:
     return render(session)
 
 
-def on_generate(session: dict, on_progress=None) -> dict:
+def on_generate(session: dict, on_progress=None, on_post=None) -> dict:
     card, cid = _current_card(session)
     if card is None or card.locked or not can_act(card, _staff(session)):
         return render(session)
@@ -477,7 +477,7 @@ def on_generate(session: dict, on_progress=None) -> dict:
     session.setdefault("published", {}).pop(cid, None)   # a new version is unpublished
     _drop_edit(session, cid)
     try:
-        result = ui_data.generate(card, _staff(session), on_progress=on_progress)
+        result = ui_data.generate(card, _staff(session), on_progress=on_progress, on_post=on_post)
     except Exception as e:  # noqa: BLE001 - a UI handler must never crash the page
         session["recovery"] = {"card_id": cid, "error": ui_data.plain_error(e)}
         return render(session)
@@ -504,7 +504,7 @@ def on_show_recovery(session: dict) -> dict:
     return render(session)
 
 
-def on_quick_edit(session: dict, instruction: str, on_progress=None) -> dict:
+def on_quick_edit(session: dict, instruction: str, on_progress=None, on_post=None) -> dict:
     card, cid = _current_card(session)
     if card is None or card.locked or not can_act(card, _staff(session)):
         return render(session)
@@ -517,7 +517,7 @@ def on_quick_edit(session: dict, instruction: str, on_progress=None) -> dict:
         session["edit_message"] = (cid, msg)
         return render(session)
     try:
-        result = ui_data.edit(prev_live, instruction, on_progress=on_progress)
+        result = ui_data.edit(prev_live, instruction, on_progress=on_progress, on_post=on_post)
     except Exception as e:  # noqa: BLE001
         session["edit_message"] = (cid, ui_data.plain_error(e))
         return render(session)

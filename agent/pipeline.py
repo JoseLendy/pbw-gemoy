@@ -32,6 +32,19 @@ log = logging.getLogger("agent.pipeline")
 
 MAX_LOOPS = 2
 Progress = Optional[Callable[[str, str], None]]
+# Streaming hook for the UI: ("draft", post) once the first draft exists, ("revision", post) after each
+# targeted rewrite. Purely for display; the result of the run never depends on it.
+PostHook = Optional[Callable[[str, "Post"], None]]
+
+
+def _emit_post(on_post: PostHook, kind: str, post: "Post") -> None:
+    """Never let a display callback break a generation run."""
+    if on_post is None:
+        return
+    try:
+        on_post(kind, post)
+    except Exception as e:  # noqa: BLE001 - streaming is display only
+        log.warning("on_post(%s) failed: %s", kind, e)
 
 
 # ---------------------------------------------------------------- Deps
@@ -230,7 +243,8 @@ def _auto_cite(post: Post, errors: list, ledger: Ledger) -> tuple[Post, list]:
 
 # ---------------------------------------------------------------- the check loop (step 8)
 def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibling_ledgers: dict,
-               plan: ImagePlan, deps: Deps, on_progress: Progress = None) -> tuple[Post, CheckReport, int]:
+               plan: ImagePlan, deps: Deps, on_progress: Progress = None, on_post: PostHook = None
+               ) -> tuple[Post, CheckReport, int]:
     """run_checks → if errors and loops < MAX_LOOPS: rewrite → run_checks again."""
     from agent.timing import stage
     loops = 0
@@ -249,6 +263,7 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
             _say(on_progress, "check", f"发现 {len(errors)} 处问题，定向改写（第 {loops + 1} 轮）…")
             with stage(f"check.rewrite{loops + 1}"):
                 post = deps.rewrite(post, errors, task, strategy, ledger, plan, deps.llm)
+            _emit_post(on_post, "revision", post)
         loops += 1
         with stage(f"check.pass{loops + 1}"):
             report = deps.run_checks(post, ledger, sibling_ledgers, task, plan, deps.llm)
@@ -263,26 +278,29 @@ def check_loop(post: Post, task: Task, strategy: Strategy, ledger: Ledger, sibli
 
 # ---------------------------------------------------------------- the stages 6 → 9 (shared by run and edit)
 def _from_plan(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
-               strategy: Strategy, deps: Deps, on_progress: Progress, timer: _Timer) -> RunResult:
+               strategy: Strategy, deps: Deps, on_progress: Progress, timer: _Timer,
+               on_post: PostHook = None) -> RunResult:
     _say(on_progress, "plan", f"规划 {PLATFORM_LABELS.get(task.platform, task.platform)} 版式…")
     # The selling-point facts steer which images fit (agent.platform_plan: no unrelated filler images).
     focus = [f"{f.category} {f.attribute} {f.value}" for sp in strategy.selling_points if (f := ledger.get(sp.fact_id))]
     plan = deps.plan_images(bundle, task.platform, strategy, focus=focus)
     timer.lap("plan")
     _say(on_progress, "plan", f"匹配到 {len(plan.items)} 张图片" + ("（不足，已标记待确认）" if plan.shortage else ""))
-    return _from_write(task, model, bundle, ledger, sibling_ledgers, strategy, plan, deps, on_progress, timer)
+    return _from_write(task, model, bundle, ledger, sibling_ledgers, strategy, plan, deps, on_progress, timer, on_post)
 
 
 def _from_write(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
                 strategy: Strategy, plan: ImagePlan, deps: Deps, on_progress: Progress,
-                timer: _Timer) -> RunResult:
+                timer: _Timer, on_post: PostHook = None) -> RunResult:
     _say(on_progress, "write", "撰写软文…")
     post = deps.write_post(task, strategy, ledger, plan, deps.llm)
     timer.lap("write")
+    _emit_post(on_post, "draft", post)      # the UI types the first draft in while checks run
     _say(on_progress, "check", f"核验 {len(post.selling_points)} 个事实点…")
-    post, report, loops = check_loop(post, task, strategy, ledger, sibling_ledgers, plan, deps, on_progress)
+    post, report, loops = check_loop(post, task, strategy, ledger, sibling_ledgers, plan, deps, on_progress, on_post)
     from agent.checks.prices import mark_demo_prices
     post = mark_demo_prices(post, task)      # a DEMO campaign price always shows [演示活动] (added in code)
+    _emit_post(on_post, "revision", post)    # the demo-price tag is added in code, after the last rewrite
     timer.lap("check")
     pending = _collect_pending(strategy, plan, report, task)
     result = RunResult(task=task, model=model, strategy=strategy, ledger=ledger, plan=plan, post=post,
@@ -292,7 +310,7 @@ def _from_write(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_
 
 
 def _from_reconcile(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
-                    analysis, deps: Deps, on_progress: Progress, timer: _Timer):
+                    analysis, deps: Deps, on_progress: Progress, timer: _Timer, on_post: PostHook = None):
     _say(on_progress, "reconcile", "对照知识库事实确定卖点…")
     strategy = deps.reconcile(task, analysis, ledger, model, deps.llm)
     timer.lap("reconcile")
@@ -300,20 +318,20 @@ def _from_reconcile(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibl
         _say(on_progress, "reconcile", "资料冲突，已停止输出，需人工确认")
         return strategy
     _say(on_progress, "reconcile", f"卖点：{'、'.join(sp.fact_id for sp in strategy.selling_points)}")
-    return _from_plan(task, model, bundle, ledger, sibling_ledgers, strategy, deps, on_progress, timer)
+    return _from_plan(task, model, bundle, ledger, sibling_ledgers, strategy, deps, on_progress, timer, on_post)
 
 
 def _from_analyze(task: Task, model, bundle: ModelBundle, ledger: Ledger, sibling_ledgers: dict,
-                  deps: Deps, on_progress: Progress, timer: _Timer):
+                  deps: Deps, on_progress: Progress, timer: _Timer, on_post: PostHook = None):
     _say(on_progress, "analyze", f"分析{SCENARIO_LABELS.get(task.scenario, task.scenario or '')}场景…")
     analysis = deps.analyze(task, deps.llm)
     timer.lap("analyze")
-    return _from_reconcile(task, model, bundle, ledger, sibling_ledgers, analysis, deps, on_progress, timer)
+    return _from_reconcile(task, model, bundle, ledger, sibling_ledgers, analysis, deps, on_progress, timer, on_post)
 
 
 # ---------------------------------------------------------------- run
 def run(text: str, form: dict | None = None, deps: Deps | None = None,
-        on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman:
+        on_progress: Progress = None, on_post: PostHook = None) -> RunResult | Clarification | NeedsHuman:
     from agent.timing import collect
     deps = deps or default_deps()
     timer = _Timer()
@@ -324,14 +342,14 @@ def run(text: str, form: dict | None = None, deps: Deps | None = None,
         if isinstance(parsed, Clarification):
             _say(on_progress, "intake", "还缺少信息，请补充")
             return parsed
-        return _from_retrieval(parsed, deps, on_progress, timer)
+        return _from_retrieval(parsed, deps, on_progress, timer, on_post)
 
 
 # ---------------------------------------------------------------- run from a recommendation card
 LOCKED_MESSAGES = {"fact_card_draft": "新品资料待总部确认，暂不可生成"}
 
 
-def _from_retrieval(task: Task, deps: Deps, on_progress: Progress, timer: _Timer):
+def _from_retrieval(task: Task, deps: Deps, on_progress: Progress, timer: _Timer, on_post: PostHook = None):
     """Stages 3 → 9 for a task whose model_id is already exact (shared by run and run_from_card)."""
     import datetime as dt
     from agent.fact_cache import get_facts
@@ -350,7 +368,7 @@ def _from_retrieval(task: Task, deps: Deps, on_progress: Progress, timer: _Timer
         _say(on_progress, "ledger", note)
     sibling_ledgers = _sibling_ledgers(deps, model, on_progress, day)
     timer.lap("ledger")         # variant check + sibling ledgers
-    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
+    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer, on_post)
 
 
 def _log_real(card, result, staff, deps, kind: str = "run_from_card") -> None:
@@ -365,7 +383,8 @@ def _log_real(card, result, staff, deps, kind: str = "run_from_card") -> None:
 
 
 def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: StaffContext | None = None,
-                  on_progress: Progress = None, fallback: bool = True, avoid: dict | None = None
+                  on_progress: Progress = None, fallback: bool = True, avoid: dict | None = None,
+                  on_post: PostHook = None
                   ) -> RunResult | LockedResult | NeedsHuman | NeedsReview:
     """Proactive entry (PROACTIVE_AGENT_PLAN §3): the card replaces the user sentence, so intake and model
     disambiguation are skipped (the card carries an exact model_id). A locked card returns LockedResult
@@ -374,17 +393,17 @@ def run_from_card(card: RecommendationCard, deps: Deps | None = None, staff: Sta
     A draft that still fails after 2 rewrites goes through the fallback policy (fallback=True): trim the
     failing sentences → the store's next unlocked card → NeedsReview. An unchecked post is never returned.
     avoid ({"facts": [...], "phrases": [...]}) is set by 8E in generate_batch: what other stores use today."""
-    result = _run_card(card, deps, staff, on_progress, avoid)
+    result = _run_card(card, deps, staff, on_progress, avoid, on_post)
     if fallback and isinstance(result, RunResult) and not result.report.passed:
         deps = deps or default_deps()
-        result = apply_fallback(card, result, deps, staff, on_progress)
+        result = apply_fallback(card, result, deps, staff, on_progress, on_post)
         if not (isinstance(result, RunResult) and result.fallback == "next_card"):   # next card logged itself
             _log_real(card, result, staff, deps, kind="fallback")
     return result
 
 
 def _run_card(card: RecommendationCard, deps: Deps | None, staff: StaffContext | None, on_progress: Progress,
-              avoid: dict | None = None):
+              avoid: dict | None = None, on_post: PostHook = None):
     if card.locked:
         reason = card.locked_reason or "locked"
         msg = LOCKED_MESSAGES.get(reason, "该推荐暂不可生成，请等待总部确认")
@@ -403,7 +422,7 @@ def _run_card(card: RecommendationCard, deps: Deps | None, staff: StaffContext |
             task.avoid_facts = list(avoid.get("facts") or [])
             task.avoid_phrases = list(avoid.get("phrases") or [])
         timer.lap("intake")
-        result = _from_retrieval(task, deps, on_progress, timer)
+        result = _from_retrieval(task, deps, on_progress, timer, on_post)
     _log_real(card, result, staff, deps)
     return result
 
@@ -697,7 +716,7 @@ def _errors_n(r) -> int:
 
 
 def apply_fallback(card: RecommendationCard, result: RunResult, deps: Deps, staff=None,
-                   on_progress: Progress = None):
+                   on_progress: Progress = None, on_post: PostHook = None):
     """T4 policy for a card run that failed after 2 rewrites. Returns a passing RunResult (fallback set)
     or NeedsReview. Every delivered post has passed all checks."""
     attempts = [card.card_id]
@@ -720,7 +739,7 @@ def apply_fallback(card: RecommendationCard, result: RunResult, deps: Deps, staf
         attempts.append(nxt.card_id)
         _say(on_progress, "card", f"改用下一条推荐：{nxt.slot_label}")
         try:
-            other = run_from_card(nxt, deps, staff, on_progress, fallback=False)
+            other = run_from_card(nxt, deps, staff, on_progress, fallback=False, on_post=on_post)
         except Exception as e:  # noqa: BLE001 - the fallback must not crash the batch
             log.warning("next-card fallback failed for %s: %s", card.store_id, e)
             other = None
@@ -951,7 +970,7 @@ def classify_edit(instruction: str, llm=None) -> tuple[str, dict]:
 
 
 def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
-         on_progress: Progress = None) -> RunResult | Clarification | NeedsHuman | EditBlocked:
+         on_progress: Progress = None, on_post: PostHook = None) -> RunResult | Clarification | NeedsHuman | EditBlocked:
     """Quick edit. Ledger and bundle are reused; never refetched. Every path ends in the check loop.
     A price / discount / subsidy / installment / stock ask with no matching active promotion record is
     blocked here, before any classifier or writer call (price traceability, plan §4.3)."""
@@ -964,10 +983,11 @@ def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
     deps = deps or default_deps()
     timer = _Timer()
     with collect(timer.timings):
-        return _edit_stages(prev, instruction, deps, on_progress, timer)
+        return _edit_stages(prev, instruction, deps, on_progress, timer, on_post)
 
 
-def _edit_stages(prev: RunResult, instruction: str, deps: Deps, on_progress: Progress, timer: _Timer):
+def _edit_stages(prev: RunResult, instruction: str, deps: Deps, on_progress: Progress, timer: _Timer,
+                 on_post: PostHook = None):
     stage, params = classify_edit(instruction, deps.llm)
     task = copy.deepcopy(prev.task)
     model = prev.model
@@ -978,17 +998,18 @@ def _edit_stages(prev: RunResult, instruction: str, deps: Deps, on_progress: Pro
     _say(on_progress, "edit", f"编辑：{instruction}（从{stage_label}重跑）")
     if stage == "platform":
         task.platform = params["platform"]
-        return _from_plan(task, model, bundle, ledger, sibling_ledgers, prev.strategy, deps, on_progress, timer)
+        return _from_plan(task, model, bundle, ledger, sibling_ledgers, prev.strategy, deps, on_progress, timer,
+                          on_post)
     task.extra_requirements = [*task.extra_requirements, params["requirement"]]
     if stage == "writer":
         return _from_write(task, model, bundle, ledger, sibling_ledgers, prev.strategy, prev.plan, deps,
-                           on_progress, timer)
+                           on_progress, timer, on_post)
     if stage == "reconcile":
         return _from_reconcile(task, model, bundle, ledger, sibling_ledgers, prev.strategy.analysis, deps,
-                               on_progress, timer)
+                               on_progress, timer, on_post)
     if params.get("scenario"):
         task.scenario = params["scenario"]
-    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer)
+    return _from_analyze(task, model, bundle, ledger, sibling_ledgers, deps, on_progress, timer, on_post)
 
 
 def _bundle_from_result(prev: RunResult) -> ModelBundle:

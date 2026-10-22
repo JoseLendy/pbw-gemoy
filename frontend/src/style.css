@@ -24,12 +24,16 @@
    instead of re-wrapping them into a ragged row. */
 .action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .action-grid .btn { padding: 0 12px; }
+/* 复制正文 is the primary action (full width); the two downloads share the row below it. */
+.action-grid .copy-btn { grid-column: 1 / -1; }
+.action-grid .img-wrap { position: relative; }
+/* .plat-menu sets left/top for the 换 menu; the image menu drops down inside the button instead. */
+.plat-menu.img-menu { left: 0; right: 0; top: calc(100% + 6px); min-width: 0; }
+.img-menu button { padding: 9px 10px; border-radius: 8px; font-size: 14px; text-align: left; background: none; border: 0; cursor: pointer; }
+.img-menu button:hover { background: var(--surface-2); }
+.img-menu .img-all { font-weight: 600; border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 2px; }
 .quick { display: flex; flex-direction: column; gap: 8px; }
 .editor { display: flex; flex-direction: column; gap: 8px; }
-.all-platforms { margin-top: 20px; }
-.hw-all-row { display: flex; gap: 16px; flex-wrap: wrap; }
-.hw-all-col { flex: 1 1 320px; max-width: 400px; }
-.hw-all-head { font-weight: 700; margin-bottom: 8px; }
 
 /* ---------- 生成 ---------- */
 .stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -68,6 +72,7 @@
 .summary-sentence { padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink-2); font-size: 14px; margin-bottom: 14px; }
 .summary .btn-block + .muted { margin-top: 12px; }
 .summary-list + .muted { margin-bottom: 14px; }
+.page-aside .goto-next { grid-column: 1 / -1; }   /* mobile: the aside becomes a grid */
 .clar { display: flex; flex-direction: column; gap: 10px; padding: 16px; margin-bottom: 16px; border-radius: var(--r-md); background: var(--surface-2); }
 .clar-text { font-weight: 600; margin-bottom: 6px; }
 
@@ -259,7 +264,8 @@
 
 /* a page rises in each time it is shown (v-show restarts the animation) */
 .page { animation: rise-in 0.42s var(--ease-out) both; }
-.page-aside > * { animation: rise-in 0.5s var(--ease-out) both; animation-delay: 0.08s; }
+/* the entrance animation would pin opacity at 1 and hide .btn:disabled's dimming on 下一步 */
+.page-aside > *:not(.goto-next) { animation: rise-in 0.5s var(--ease-out) both; animation-delay: 0.08s; }
 .result { animation: rise-in 0.45s var(--ease-out) both; }
 .rec-art .product-art { animation: float 6s ease-in-out infinite; }
 .opt { animation: rise-in 0.4s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms); }

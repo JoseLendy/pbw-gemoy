@@ -5,19 +5,23 @@ Serves /api/* (JSON and NDJSON streams) and the built frontend (frontend/dist). 
 ui/state.py (门店端), ui/compare_view.py, ui/hq_view.py, ui/baseline_view.py; the manual flow is below.
 Every backend call goes through agent.ui_data / agent.pipeline exactly as the Gradio UI did.
 
-Never returns keys, Client ID or media ids in a form the user can read. No raw KB viewer, no bulk export.
+Never returns keys, Client ID or media ids in a form the user can read. No raw KB viewer; the only bulk
+download is the current post's own images on the 生成 tab (one zip per post).
 Public-demo protections: per-session and global rate limits, plain-language errors, one bounded pool for
 slow (ima + LLM) work so page loads and store switches never wait behind a generation.
 """
 from __future__ import annotations
 
 import hmac
+import io
 import json
 import logging
 import os
 import queue
+import re
 import threading
 import time
+import zipfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -44,13 +48,15 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from agent.formatter import render_download, render_publishable, render_report  # noqa: E402
+from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags  # noqa: E402
 from agent.intake import SCENARIO_CHIPS  # noqa: E402
-from agent.pipeline import edit as pipeline_edit, run as pipeline_run, run_all_platforms  # noqa: E402
+from agent.pipeline import edit as pipeline_edit, run as pipeline_run  # noqa: E402
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult  # noqa: E402
 from agent.ui_data import DEPS, plain_error, reset_token, today as demo_today  # noqa: E402
 from ui import baseline_view, compare_view, hq_view, state  # noqa: E402
-from ui.components import banner_html, fresh_session, phone_html, stop_html, talk_card_html  # noqa: E402
+from ui.components import (  # noqa: E402
+    banner_html, cached_image_bytes, fresh_session, phone_html, stop_html, talk_card_html,
+)
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("server")
@@ -253,6 +259,46 @@ def _progress(emit: Callable[[dict], None]):
     return cb
 
 
+def _stream_payload(post) -> dict:
+    """One draft / revision event for the live phone preview: the post text and where each image sits.
+    Media ids never leave the server (the client asks for images by index)."""
+    return {
+        "platform": post.platform,
+        "post": {
+            "title": strip_fact_tags(post.title),
+            "intro": strip_fact_tags(post.intro),
+            "body": [strip_fact_tags(b) for b in post.body],
+            "cta": strip_fact_tags(post.cta),
+            "tags": [strip_fact_tags(t) for t in post.tags],
+        },
+        "images": [{"idx": i, "position": im.position, "caption": im.caption or ""}
+                   for i, im in enumerate(post.images)],
+    }
+
+
+def _post_stream(emit: Callable[[dict], None], host: dict):
+    """The pipeline's on_post hook: stream the draft after write_post and every revision after a rewrite.
+    The latest post is kept on the session so /api/stream-image can serve the preview's images."""
+    def cb(kind: str, post) -> None:
+        host["stream_post"] = post
+        emit({"event": kind, "data": _stream_payload(post)})
+    return cb
+
+
+def _image_bytes(media_id: str) -> bytes | None:
+    """Preview image bytes from the local cache, fetching once if needed; None when unavailable."""
+    data = cached_image_bytes(media_id)
+    if data:
+        return data
+    fetch = getattr(DEPS, "fetch_image_bytes", None)
+    if fetch is not None:
+        try:
+            return fetch(media_id)
+        except Exception as e:  # noqa: BLE001 - a missing preview image must never break a generation
+            log.info("stream image fetch failed: %s", e)
+    return None
+
+
 def _file(name: str, data: bytes, media_type: str) -> Response:
     from urllib.parse import quote
     return Response(content=data, media_type=media_type,
@@ -423,7 +469,7 @@ def api_store_generate(req: Sid):
 
     def worker(emit):
         with s["lock"]:
-            view = state.on_generate(s, on_progress=_progress(emit))
+            view = state.on_generate(s, on_progress=_progress(emit), on_post=_post_stream(emit, s))
         emit({"event": "view", "data": view})
 
     return _ndjson(worker)
@@ -445,7 +491,7 @@ def api_store_quick_edit(req: EditReq):
 
     def worker(emit):
         with s["lock"]:
-            view = state.on_quick_edit(s, instruction, on_progress=_progress(emit))
+            view = state.on_quick_edit(s, instruction, on_progress=_progress(emit), on_post=_post_stream(emit, s))
         emit({"event": "view", "data": view})
 
     return _ndjson(worker)
@@ -624,11 +670,81 @@ def _manual(s: dict) -> dict:
     return m
 
 
-def _manual_render(r: RunResult) -> dict:
-    return {"kind": "result", "phone_html": phone_html(r, DEPS), "talk_html": talk_card_html(r),
-            "banner_html": banner_html(r), "report_md": render_report(r), "pub_text": render_publishable(r.post),
-            "platform_label": PLATFORM_LABELS.get(r.post.platform, r.post.platform),
-            "model": r.model.canonical_name, "images": len(r.post.images)}
+# Every platform the 直接输入 / 点选 flow can write. The hidden prefetch walks this order, so 换 is instant.
+MANUAL_PLATFORM_KEYS = ("moments", "xiaohongshu", "wechat_article", "poster", "douyin")
+_MANUAL_LABEL_TO_KEY = {v: k for k, v in PLATFORM_LABELS.items()}
+
+
+def _manual_cache(m: dict) -> dict:
+    """What the client polls while 换 is disabled: is every platform cached, and how far did we get."""
+    cached = m.get("results") or {}
+    keys = [k for k in MANUAL_PLATFORM_KEYS if isinstance(cached.get(k), RunResult)]
+    job = m.get("prefetch") or {}
+    return {"ready": len(keys) == len(MANUAL_PLATFORM_KEYS),
+            "cached": [PLATFORM_LABELS[k] for k in keys],
+            "state": job.get("state") or "idle", "done": len(keys), "total": len(MANUAL_PLATFORM_KEYS),
+            "error": job.get("error") or ""}
+
+
+def _start_prefetch(m: dict, current: RunResult) -> None:
+    """换 is disabled until this finishes: generate every other platform from the current post and cache
+    each one under its own platform key. A new generation cancels the old job; edits never touch the
+    other platforms' entries (product decision 2026-10-22)."""
+    old = m.get("prefetch_cancel")
+    if old is not None:
+        old.set()
+    cancel = threading.Event()
+    m["prefetch_cancel"] = cancel
+    m["prefetch"] = {"state": "running", "error": ""}
+    have = {k for k in (m.get("results") or {}) if isinstance((m.get("results") or {}).get(k), RunResult)}
+    todo = [k for k in MANUAL_PLATFORM_KEYS if k not in have]
+
+    def one(key: str) -> None:
+        if cancel.is_set():
+            return
+        try:
+            r = pipeline_edit(current, f"换成{PLATFORM_LABELS[key]}", DEPS)
+        except Exception as e:  # noqa: BLE001 - one platform failing must not stop the others
+            log.info("manual prefetch %s failed: %s", key, e)
+            return
+        if isinstance(r, RunResult) and not cancel.is_set():
+            m.setdefault("results", {})[r.post.platform] = r
+
+    def worker() -> None:
+        ex = ThreadPoolExecutor(max_workers=max(1, min(GEN_CONCURRENCY, len(todo))))
+        try:
+            for f in [ex.submit(one, k) for k in todo]:
+                f.result()
+        except Exception as e:  # noqa: BLE001
+            log.exception("manual prefetch failed")
+            m["prefetch"] = {"state": "error", "error": plain_error(e)}
+            return
+        finally:
+            if m.get("prefetch_cancel") is cancel:      # a newer generation may own the slot by now
+                m.pop("prefetch_cancel", None)
+            ex.shutdown(wait=False, cancel_futures=True)
+        if m.get("prefetch_cancel") is not None and m.get("prefetch_cancel") is not cancel:
+            return                                      # superseded: the new job owns the status
+        if cancel.is_set():
+            m["prefetch"] = {"state": "idle", "error": ""}
+            return
+        cached = m.get("results") or {}
+        missing = [k for k in MANUAL_PLATFORM_KEYS if not isinstance(cached.get(k), RunResult)]
+        # A failed platform must not leave the client polling forever (换 would stay disabled silently).
+        m["prefetch"] = ({"state": "error", "error": "部分平台没有缓存成功"} if missing
+                         else {"state": "done", "error": ""})
+
+    threading.Thread(target=worker, daemon=True, name="manual-prefetch").start()
+
+
+def _manual_render(r: RunResult, m: dict | None = None) -> dict:
+    out = {"kind": "result", "phone_html": phone_html(r, DEPS), "talk_html": talk_card_html(r),
+           "banner_html": banner_html(r), "report_md": render_report(r), "pub_text": render_publishable(r.post),
+           "platform_label": PLATFORM_LABELS.get(r.post.platform, r.post.platform),
+           "model": r.model.canonical_name, "images": len(r.post.images)}
+    if m is not None:
+        out["cache"] = _manual_cache(m)
+    return out
 
 
 def _manual_handle(result, m: dict) -> dict:
@@ -638,9 +754,11 @@ def _manual_handle(result, m: dict) -> dict:
                 "questions": [{"slot": q.slot, "text": q.text, "options": list(q.options)} for q in result.questions]}
     if isinstance(result, NeedsHuman):
         return {"kind": "stop", "html": stop_html(result.message)}
+    if not isinstance(result, RunResult):        # EditBlocked and friends: a message, never a crash
+        return {"kind": "stop", "html": stop_html(getattr(result, "message", "无法完成这次修改。"))}
     m["result"] = result
     m.setdefault("results", {})[result.post.platform] = result
-    return _manual_render(result)
+    return _manual_render(result, m)
 
 
 @app.post("/api/manual/generate")
@@ -658,17 +776,57 @@ def api_manual_generate(req: ManualReq):
         return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html(blocked, "生成失败")}})
     form = dict(req.form or {}) if is_follow_up else {}
     m["clarification"] = None
+    # A new generation is a new post: cancel the old prefetch and drop its cache, or 换 would offer the
+    # previous product's copy. In-flight workers check the cancel flag before writing (see _start_prefetch).
+    old = m.get("prefetch_cancel")
+    if old is not None:
+        old.set()
+    m.pop("prefetch_cancel", None)
+    m["results"] = {}
+    m["prefetch"] = {"state": "idle", "error": ""}
+    m.pop("stream_post", None)
 
     def worker(emit):
         try:
-            result = pipeline_run(text, form or None, DEPS, _progress(emit))
+            result = pipeline_run(text, form or None, DEPS, _progress(emit), _post_stream(emit, m))
         except Exception as e:  # noqa: BLE001
             log.exception("manual run failed")
             emit({"event": "done", "data": {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}})
             return
-        emit({"event": "done", "data": _manual_handle(result, m)})
+        data = _manual_handle(result, m)
+        if isinstance(result, RunResult) and data.get("kind") == "result":
+            _start_prefetch(m, result)     # hidden: cache the other four platforms so 换 is instant
+            data["cache"] = _manual_cache(m)
+        emit({"event": "done", "data": data})
 
     return _ndjson(worker)
+
+
+@app.post("/api/manual/check")
+def api_manual_check(req: ManualReq) -> dict:
+    """Intake only, before the 直接输入 flow leaves the input page: ask the missing questions first, so the
+    result page is never a dead end. The clarification is remembered, so the follow-up generate call with
+    the same text + form is accepted as a continuation (api_manual_generate)."""
+    s = _session(req.session_id)
+    m = _manual(s)
+    text = (req.text or "").strip()
+    if not text:
+        return {"kind": "stop", "html": stop_html("请先输入一句顾客描述。", "生成失败")}
+    form = dict(req.form or {}) or None
+
+    def work():
+        return DEPS.parse_task(text, DEPS.catalog, form, DEPS.llm)
+
+    try:
+        parsed = GEN_POOL.submit(work).result(timeout=240)
+    except Exception as e:  # noqa: BLE001
+        log.exception("manual check failed")
+        return {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}
+    if isinstance(parsed, Clarification):
+        m["clarification"] = parsed
+        return {"kind": "clarification",
+                "questions": [{"slot": q.slot, "text": q.text, "options": list(q.options)} for q in parsed.questions]}
+    return {"kind": "ok"}
 
 
 @app.post("/api/manual/edit")
@@ -685,9 +843,44 @@ def api_manual_edit(req: ManualEditReq):
 
     def worker(emit):
         try:
-            result = pipeline_edit(prev, instruction, DEPS, _progress(emit))
+            result = pipeline_edit(prev, instruction, DEPS, _progress(emit), _post_stream(emit, m))
         except Exception as e:  # noqa: BLE001
             log.exception("manual edit failed")
+            emit({"event": "done", "data": {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}})
+            return
+        data = _manual_handle(result, m)
+        if isinstance(result, RunResult):
+            data["cache"] = _manual_cache(m)    # an edit only re-caches its own platform
+        emit({"event": "done", "data": data})
+
+    return _ndjson(worker)
+
+
+@app.post("/api/manual/platform")
+def api_manual_platform(req: PlatformReq):
+    """换平台: a cached platform switches instantly (the current one is always cached before the switch);
+    only a platform the hidden prefetch has not reached yet is generated on demand."""
+    s = _session(req.session_id)
+    m = _manual(s)
+    prev = m.get("result")
+    if prev is None:
+        return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html("请先生成一篇内容。", "提示")}})
+    key = _MANUAL_LABEL_TO_KEY.get(req.platform)
+    if key is None:
+        return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html("不认识这个平台。", "提示")}})
+    cached = (m.get("results") or {}).get(key)
+    if isinstance(cached, RunResult):
+        m["result"] = cached
+        return JSONResponse({"event": "done", "data": _manual_render(cached, m), "cached": True})
+    blocked = rate_check(s["id"])
+    if blocked:
+        return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html(blocked, "生成失败")}})
+
+    def worker(emit):
+        try:
+            result = pipeline_edit(prev, f"换成{req.platform}", DEPS, _progress(emit), _post_stream(emit, m))
+        except Exception as e:  # noqa: BLE001
+            log.exception("manual platform switch failed")
             emit({"event": "done", "data": {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}})
             return
         emit({"event": "done", "data": _manual_handle(result, m)})
@@ -695,34 +888,88 @@ def api_manual_edit(req: ManualEditReq):
     return _ndjson(worker)
 
 
-@app.post("/api/manual/all-platforms")
-def api_manual_all(req: Sid):
-    s = _session(req.session_id)
-    m = _manual(s)
-    prev = m.get("result")
-    if prev is None:
-        return JSONResponse({"event": "done", "html": stop_html("请先生成一篇内容。", "提示")})
-    blocked = rate_check(s["id"])
-    if blocked:
-        return JSONResponse({"event": "done", "html": stop_html(blocked, "提示")})
+@app.post("/api/manual/cache-status")
+def api_manual_cache_status(req: Sid) -> dict:
+    """Polled while 换 is disabled: ready once every platform is cached."""
+    return _manual_cache(_manual(_session(req.session_id)))
 
-    def worker(emit):
-        try:
-            outs = run_all_platforms(prev, deps=DEPS)
-        except Exception as e:  # noqa: BLE001
-            emit({"event": "done", "html": stop_html(plain_error(e), "生成失败")})
-            return
-        cols = []
-        for p, res in outs.items():
-            if isinstance(res, RunResult):
-                m.setdefault("results", {})[p] = res
-                cols.append(f'<div class="hw-all-col"><div class="hw-all-head">{PLATFORM_LABELS[p]}</div>'
-                            f'{banner_html(res)}{phone_html(res, DEPS)}</div>')
-            else:
-                cols.append(f'<div class="hw-all-col">{stop_html(getattr(res, "message", "需要补充信息"))}</div>')
-        emit({"event": "done", "html": '<div class="hw-all-row">' + "".join(cols) + "</div>"})
 
-    return _ndjson(worker)
+@app.get("/api/manual/download-image")
+def api_manual_download_image(session_id: str = "", idx: int = 0):
+    """保存图片: one image at a time. 下载所有图片 (below) zips the same per-post images."""
+    s = _session(session_id)
+    r = _manual(s).get("result")
+    images = list(getattr(getattr(r, "post", None), "images", None) or [])
+    if not images:
+        return JSONResponse({"error": "当前没有可下载的图片。"}, status_code=409)
+    i = max(0, min(int(idx), len(images) - 1))
+    im = images[i]
+    data = cached_image_bytes(im.media_id)
+    if not data:
+        fetch = getattr(DEPS, "fetch_image_bytes", None)
+        if fetch is not None:
+            try:
+                data = fetch(im.media_id)
+            except Exception as e:  # noqa: BLE001
+                log.info("manual image fetch failed: %s", e)
+    if not data:
+        return JSONResponse({"error": "图片还在准备中，请稍后再试。"}, status_code=409)
+    ext = "png" if data[:4] == b"\x89PNG" else ("svg" if data[:4] == b"<svg" else "jpg")
+    mime = {"png": "image/png", "svg": "image/svg+xml", "jpg": "image/jpeg"}[ext]
+    label = PLATFORM_LABELS.get(getattr(r.post, "platform", ""), "")
+    name = re.sub(r"[^\w一-鿿-]+", "_", f"{r.model.canonical_name}_{label}_图{i + 1}")[:60] + f".{ext}"
+    return _file(name, data, mime)
+
+
+@app.get("/api/manual/download-images")
+def api_manual_download_images(session_id: str = ""):
+    """下载所有图片: the current post's images as one zip, numbered like the per-image saves (1.png, 2.jpg …).
+    Product decision 2026-10-22: the 生成 tab offers the zip the lead asked for; still per post, never the KB.
+    Images that are not cached yet are fetched once; ones that fail are left out instead of failing the zip."""
+    s = _session(session_id)
+    r = _manual(s).get("result")
+    images = list(getattr(getattr(r, "post", None), "images", None) or [])
+    if not images:
+        return JSONResponse({"error": "当前没有可下载的图片。"}, status_code=409)
+    fetch = getattr(DEPS, "fetch_image_bytes", None)
+    buf = io.BytesIO()
+    added = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for i, im in enumerate(images):
+            data = cached_image_bytes(im.media_id)
+            if not data and fetch is not None:
+                try:
+                    data = fetch(im.media_id)
+                except Exception as e:  # noqa: BLE001
+                    log.info("manual image fetch failed: %s", e)
+            if not data:
+                continue
+            ext = "png" if data[:4] == b"\x89PNG" else ("svg" if data[:4] == b"<svg" else "jpg")
+            z.writestr(f"{i + 1}.{ext}", data)      # same numbering as 第 N 张
+            added += 1
+    if not added:
+        return JSONResponse({"error": "图片还在准备中，请稍后再试。"}, status_code=409)
+    label = PLATFORM_LABELS.get(getattr(r.post, "platform", ""), "")
+    name = re.sub(r"[^\w一-鿿-]+", "_", f"{r.model.canonical_name}_{label}_图片")[:60] + ".zip"
+    return _file(name, buf.getvalue(), "application/zip")
+
+
+@app.get("/api/stream-image")
+def api_stream_image(session_id: str = "", scope: str = "manual", idx: int = 0):
+    """The live preview's own image, addressed by index so no media id is ever sent to the browser.
+    Served inline for the streaming phone (draft / revision events); 404 when not available yet."""
+    s = _store_session(session_id) if scope == "store" else _session(session_id)
+    host = s if scope == "store" else _manual(s)
+    post = host.get("stream_post")
+    images = list(getattr(post, "images", None) or [])
+    if not (0 <= int(idx) < len(images)):
+        return Response(status_code=404)
+    data = _image_bytes(images[int(idx)].media_id)
+    if not data:
+        return Response(status_code=404)
+    mime = ("image/png" if data[:4] == b"\x89PNG"
+            else "image/svg+xml" if data[:4] == b"<svg" else "image/jpeg")
+    return Response(content=data, media_type=mime, headers={"Cache-Control": "private, max-age=600"})
 
 
 @app.get("/api/manual/download-md")
@@ -731,7 +978,6 @@ def api_manual_download(session_id: str = ""):
     r = _manual(s).get("result")
     if r is None:
         return JSONResponse({"error": "当前没有可下载的内容。"}, status_code=409)
-    import re
     name = re.sub(r"[^\w一-鿿-]+", "_", f"{r.model.canonical_name}_{PLATFORM_LABELS[r.post.platform]}")[:60]
     return _file(f"{name}.md", render_download(r).encode("utf-8"), "text/markdown; charset=utf-8")
 

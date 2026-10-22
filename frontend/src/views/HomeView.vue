@@ -7,6 +7,8 @@ import { account, cleanHtml, copyText, downloadUrl, meta, postJson, stream } fro
 import PhoneStage from '../components/PhoneStage.vue'
 import ProductArt from '../components/ProductArt.vue'
 import ReportFold from '../components/ReportFold.vue'
+import LivePhone from '../components/LivePhone.vue'
+import { useLiveDraft } from '../components/liveDraft.js'
 import { tintFor } from '../components/tints.js'
 import { typewrite } from '../components/typewriter.js'
 
@@ -20,6 +22,7 @@ const text = ref('')
 const copied = ref(false)
 const typing = ref(false)
 const resultEl = ref(null)
+const { live, applyDraft, applyRevision, reset: resetLive } = useLiveDraft()
 let cancelType = null
 let imageTimer = null
 let suppressInput = false
@@ -54,13 +57,17 @@ async function slow(url, body = {}) {
   if (busy.value) return
   busy.value = true
   progress.value = ''
+  resetLive()
   try {
     await stream(url, body, (evt) => {
       if (evt.event === 'progress') progress.value = evt.message
-      else if (evt.event === 'view') { progress.value = ''; setView(evt.data, { live: true }) }
-      else if (evt.event === 'error') progress.value = '出错：' + evt.message
+      else if (evt.event === 'draft') applyDraft(evt.data)
+      else if (evt.event === 'revision') applyRevision(evt.data)
+      else if (evt.event === 'view') { progress.value = ''; resetLive(); setView(evt.data, { live: true }) }
+      else if (evt.event === 'error') { resetLive(); progress.value = '出错：' + evt.message }
     })
   } catch (e) {
+    resetLive()
     progress.value = '出错：' + (e.message || '请求失败')
   } finally {
     busy.value = false
@@ -196,7 +203,10 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
         <div v-if="busy || progress" class="progress-line" role="status" aria-live="polite">{{ progress || '正在准备…' }}</div>
 
         <div class="result-grid">
-          <PhoneStage :html="v.phone_html" :busy="busy" />
+          <!-- live: the copy types into the phone while the pipeline writes it; the final view replaces it -->
+          <PhoneStage :html="v.phone_html" :busy="busy" :live="!!(live && busy)">
+            <template v-if="live && busy" #live><LivePhone :live="live" scope="store" /></template>
+          </PhoneStage>
           <div class="result-side">
             <template v-if="!busy">
               <div v-if="v.editable" class="quick">

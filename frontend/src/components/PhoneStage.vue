@@ -1,8 +1,9 @@
 <script setup>
 // The phone preview: server-rendered phone HTML (skins, fact popovers, flagged spans) inside a zoomable
-// stage with Davin's round tools. `html` is trusted server output (ui.components.phone_html).
+// stage with Davin's round tools. `html` is trusted server output (ui.components.phone_html). While the
+// pipeline writes, `live` swaps the screen for the caller's streaming slot (the copy typing itself in).
 import { ref } from 'vue'
-const props = defineProps({ html: { type: String, default: '' }, busy: Boolean, busyText: { type: String, default: '正在生成，请稍候' }, tools: { type: Boolean, default: true }, scale: { type: Number, default: 1 } })
+const props = defineProps({ html: { type: String, default: '' }, busy: Boolean, live: Boolean, busyText: { type: String, default: '正在生成，请稍候' }, tools: { type: Boolean, default: true }, scale: { type: Number, default: 1 } })
 const zoom = ref(1.0)
 function zoomBy(f) { zoom.value = Math.round(Math.min(1.4, Math.max(0.7, zoom.value * f)) * 100) / 100 }
 </script>
@@ -23,12 +24,13 @@ function zoomBy(f) { zoom.value = Math.round(Math.min(1.4, Math.max(0.7, zoom.va
     </div>
     <div class="hw-phone-stage">
       <div class="hw-phone-wrap" :style="{ zoom: zoom * scale }">
-        <div v-if="html" class="hw-phone-host" v-html="html"></div>
+        <slot v-if="live" name="live"></slot>
+        <div v-else-if="html" class="hw-phone-host" v-html="html"></div>
         <div v-else class="hw-phone">
           <div class="notch"></div>
           <div class="screen hw-empty"><img class="hw-logo-img" src="/logo.png" alt="HUAWEI" /></div>
         </div>
-        <div v-if="busy" class="hw-loading-overlay" role="img" :aria-label="busyText">
+        <div v-if="busy && !live" class="hw-loading-overlay" role="img" :aria-label="busyText">
           <div class="skel" aria-hidden="true">
             <span class="skel-img"></span>
             <span class="skel-line w90"></span>

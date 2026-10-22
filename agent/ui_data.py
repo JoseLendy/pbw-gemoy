@@ -139,10 +139,11 @@ def question_pool() -> dict:
 
 # ---------------------------------------------------------------- generate / edit / baseline / compare
 def generate(card: RecommendationCard, staff: Optional[StaffContext] = None, deps: Optional[Deps] = None,
-             on_progress=None):
-    """on_progress(stage, message) is forwarded to the pipeline so the UI can stream progress lines."""
-    if on_progress is not None:
-        return _run_from_card(card, deps or DEPS, staff, on_progress=on_progress)
+             on_progress=None, on_post=None):
+    """on_progress(stage, message) streams progress lines; on_post(kind, post) streams the live draft
+    ("draft" after the first write, "revision" after each rewrite) so the UI can type it in."""
+    if on_progress is not None or on_post is not None:
+        return _run_from_card(card, deps or DEPS, staff, on_progress=on_progress, on_post=on_post)
     return _run_from_card(card, deps or DEPS, staff)
 
 
@@ -150,9 +151,9 @@ def baseline(card: RecommendationCard, deps: Optional[Deps] = None):
     return _generate_baseline(card, deps=deps or DEPS)
 
 
-def edit(result, instruction: str, deps: Optional[Deps] = None, on_progress=None):
-    if on_progress is not None:
-        return _pipeline_edit(result, instruction, deps or DEPS, on_progress=on_progress)
+def edit(result, instruction: str, deps: Optional[Deps] = None, on_progress=None, on_post=None):
+    if on_progress is not None or on_post is not None:
+        return _pipeline_edit(result, instruction, deps or DEPS, on_progress=on_progress, on_post=on_post)
     return _pipeline_edit(result, instruction, deps or DEPS)
 
 

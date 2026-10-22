@@ -2,16 +2,19 @@
 // 生成 (was 点击输入): two ways in. 点选 picks 产品 → 顾客 → 场景 → 平台 with pictures (the picks become one plain sentence for
 // intake and answer any clarification themselves); 直接输入 takes one sentence typed by the clerk. Both share the
 // result view: phone preview, quick edits, copy / download, report.
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import {
   ArrowLeft, ArrowRight, BookOpen, Briefcase, Check, Clapperboard, Copy, FileDown, Gift, GraduationCap,
-  HeartHandshake, MessageSquareText, MousePointerClick, Palette, Pencil, RotateCcw, Shuffle, Sofa, Users,
+  HeartHandshake, Image as ImageIcon, MessageSquareText, MousePointerClick, Palette, Pencil, RotateCcw,
+  Shuffle, Sofa, Users,
 } from 'lucide-vue-next'
-import { cleanHtml, copyText, downloadUrl, meta, postJson, stream } from '../api.js'
+import { cleanHtml, copyText, downloadUrl, meta, postJson, sessionId, stream } from '../api.js'
 import PhoneStage from '../components/PhoneStage.vue'
 import PlatformThumb from '../components/PlatformThumb.vue'
 import ProductArt from '../components/ProductArt.vue'
 import ReportFold from '../components/ReportFold.vue'
+import LivePhone from '../components/LivePhone.vue'
+import { useLiveDraft } from '../components/liveDraft.js'
 import { tintFor } from '../components/tints.js'
 import { typewrite } from '../components/typewriter.js'
 
@@ -84,7 +87,9 @@ function shuffleExample() {
 
 // ---- generation + result (the original manual pipeline)
 const busy = ref(false)
-const progress = ref([])
+const checking = ref(false)       // 直接输入: the intake check runs before the result page
+const switching = ref(false)
+const progress = ref('')          // one line at a time: the latest step only
 const result = ref(null)
 const stopHtml = ref('')
 const clarification = ref(null)
@@ -92,10 +97,14 @@ const clarAnswers = reactive({})
 const copyBox = ref('')
 const copied = ref(false)
 const platOpen = ref(false)
-const allHtml = ref('')
+const imgOpen = ref(false)
+const cache = reactive({ ready: false, done: 0, total: 0, state: 'idle', error: '' })
 const lastText = ref('')          // the sentence sent to intake; a clarification follow-up must resend it unchanged
+// streaming: the phone types the copy in as the pipeline writes it (draft) and rewrites it (revision)
+const { live, applyDraft, applyRevision, reset: resetLive } = useLiveDraft()
 let cancelType = null
 let followUp = null               // a clarification the picks already answer: resent once the stream ends
+let cacheTimer = null
 
 function formFromPicks() {
   return { product: pick.product.name, audience: pick.audience.key, scenario: pick.scenario, platform: pick.platform }
@@ -103,7 +112,9 @@ function formFromPicks() {
 
 function handle(data) {
   if (!data) return
+  resetLive()                     // the final result replaces the live phone
   if (data.kind === 'clarification') {
+    progress.value = ''
     const form = inputMode.value === 'pick' && complete.value ? formFromPicks() : {}
     const open = data.questions.filter((q) => !q.options.includes(form[q.slot]))
     if (inputMode.value === 'pick' && !open.length && !clarification.value) { clarification.value = { auto: true }; followUp = form; return }
@@ -111,25 +122,54 @@ function handle(data) {
     for (const q of data.questions) clarAnswers[q.slot] = q.options.includes(form[q.slot]) ? form[q.slot] : q.options[0]
     return
   }
-  if (data.kind === 'stop') { stopHtml.value = data.html; return }
+  if (data.kind === 'stop') { progress.value = ''; stopHtml.value = data.html; return }
   clarification.value = null
+  progress.value = ''
   result.value = data
   stopHtml.value = ''
-  allHtml.value = ''
   platOpen.value = false
+  imgOpen.value = false
+  applyCache(data.cache)
+  if (!cache.ready && cache.state !== 'error') pollCache()   // the hidden prefetch keeps filling the other platforms
   if (cancelType) cancelType()
   cancelType = typewrite(data.pub_text || '', (t) => { copyBox.value = t }, { onDone: () => { cancelType = null } })
 }
 
+// ---- the hidden other-platform cache: 换 stays disabled until every platform is ready
+function stopPoll() { if (cacheTimer) { clearInterval(cacheTimer); cacheTimer = null } }
+function applyCache(c) {
+  if (!c) return
+  cache.ready = !!c.ready
+  cache.done = c.done || 0
+  cache.total = c.total || 0
+  cache.state = c.state || 'idle'
+  cache.error = c.error || ''
+  if (cache.ready || cache.state === 'error') stopPoll()
+}
+function pollCache() {
+  stopPoll()
+  if (cache.ready) return
+  cacheTimer = setInterval(async () => {
+    try {
+      const c = await postJson('/api/manual/cache-status')
+      applyCache(c)
+      if (c.ready || c.state === 'error' || c.state === 'done') stopPoll()
+    } catch { /* retry next tick */ }
+  }, 1500)
+}
+
 function onEvent(evt) {
-  if (evt.event === 'progress') progress.value = [...progress.value, evt.message]
+  if (evt.event === 'progress') progress.value = evt.message
+  else if (evt.event === 'draft') applyDraft(evt.data)
+  else if (evt.event === 'revision') applyRevision(evt.data)
   else if (evt.event === 'done') handle(evt.data)
-  else if (evt.event === 'error') stopHtml.value = `<div class="hw-stop">出错：${evt.message}</div>`
+  else if (evt.event === 'error') { resetLive(); stopHtml.value = `<div class="hw-stop">出错：${evt.message}</div>` }
 }
 async function runPipeline(url, body) {
   busy.value = true
-  progress.value = []
+  progress.value = ''
   stopHtml.value = ''
+  resetLive()
   try {
     await stream(url, body, onEvent)
     if (followUp) {
@@ -138,6 +178,7 @@ async function runPipeline(url, body) {
       await stream('/api/manual/generate', { text: lastText.value, form }, onEvent)
     }
   } catch (e) {
+    resetLive()
     stopHtml.value = `<div class="hw-stop">出错：${e.message || '请求失败'}</div>`
   } finally {
     followUp = null
@@ -145,7 +186,7 @@ async function runPipeline(url, body) {
   }
 }
 
-async function start(text) {
+async function start(text, form) {
   if (!text || busy.value) return
   lastText.value = text
   stage.value = 'result'
@@ -153,10 +194,42 @@ async function start(text) {
   clarification.value = null
   copyBox.value = ''
   window.scrollTo({ top: 0 })
-  await runPipeline('/api/manual/generate', { text })
+  await runPipeline('/api/manual/generate', form ? { text, form } : { text })
 }
 const generate = () => { if (complete.value) start(sentence.value) }
-const generateTyped = () => start(typed.value.trim())
+
+// 直接输入: intake first, so the missing questions are asked here instead of after the page changes.
+async function generateTyped() {
+  const text = typed.value.trim()
+  if (!text || busy.value || checking.value) return
+  lastText.value = text
+  stopHtml.value = ''
+  clarification.value = null
+  checking.value = true
+  let r
+  try {
+    r = await postJson('/api/manual/check', { text })
+  } catch (e) {
+    stopHtml.value = `<div class="hw-stop">出错：${e.message || '请求失败'}</div>`
+    return
+  } finally {
+    checking.value = false
+  }
+  if (r.kind === 'stop') { stopHtml.value = r.html; return }
+  if (r.kind === 'clarification') {
+    clarification.value = { ...r, onInput: true }
+    for (const q of r.questions) clarAnswers[q.slot] = q.options[0]
+    return
+  }
+  start(text)
+}
+
+function continueTyped() {
+  const form = {}
+  for (const q of clarification.value.questions) form[q.slot] = clarAnswers[q.slot]
+  clarification.value = null
+  start(lastText.value, form)
+}
 
 function continueClarification() {
   const form = inputMode.value === 'pick' && complete.value ? formFromPicks() : {}
@@ -164,22 +237,26 @@ function continueClarification() {
   clarification.value = { auto: true }
   runPipeline('/api/manual/generate', { text: lastText.value, form })
 }
-const editAction = (ins) => { if (!busy.value) runPipeline('/api/manual/edit', { instruction: ins }) }
-function pickPlatform(label) {
+const editAction = (ins) => { if (!busy.value && !switching.value) runPipeline('/api/manual/edit', { instruction: ins }) }
+
+// 换平台: cached platforms swap instantly; the cached copy of the platform you leave is kept as-is.
+async function pickPlatform(label) {
   platOpen.value = false
+  if (!result.value || busy.value || switching.value || !cache.ready) return
+  if (result.value.platform_label === label) return
   if (inputMode.value === 'pick') pick.platform = label
-  editAction('换成' + label)
-}
-async function allPlatforms() {
-  if (busy.value) return
-  busy.value = true
-  progress.value = []
+  switching.value = true
+  progress.value = ''
+  stopHtml.value = ''
+  resetLive()
   try {
-    await stream('/api/manual/all-platforms', {}, (evt) => {
-      if (evt.event === 'progress') progress.value = [...progress.value, evt.message]
-      else if (evt.event === 'done') allHtml.value = evt.html || ''
-    })
-  } finally { busy.value = false }
+    await stream('/api/manual/platform', { platform: label }, onEvent)
+  } catch (e) {
+    resetLive()
+    stopHtml.value = `<div class="hw-stop">出错：${e.message || '请求失败'}</div>`
+  } finally {
+    switching.value = false
+  }
 }
 async function copy() {
   if (!result.value) return
@@ -188,15 +265,30 @@ async function copy() {
   setTimeout(() => (copied.value = false), 1500)
 }
 function download() { const a = document.createElement('a'); a.href = downloadUrl('/api/manual/download-md'); a.click() }
+// 下载图片 saves one image at a time (WORKFLOW v4 rule 11), so a post with several asks which one.
+function downloadImg(i) {
+  const a = document.createElement('a')
+  a.href = `/api/manual/download-image?idx=${i}&session_id=${encodeURIComponent(sessionId.value)}&t=${Date.now()}`
+  a.click()
+}
+// 下载所有图片: one zip of this post's images from the server (numbered 1, 2 … like 第 N 张).
+function downloadAllImg() {
+  const a = document.createElement('a')
+  a.href = downloadUrl('/api/manual/download-images')
+  a.click()
+}
 function edit(i) { if (busy.value) return; inputMode.value = 'pick'; stage.value = 'input'; dir.value = 'back'; step.value = i }
 function backToInput() { if (!busy.value) stage.value = 'input' }
 async function restart() {
   if (busy.value) return
   try { await postJson('/api/manual/reset') } catch { /* ignore */ }
+  stopPoll()
   for (const k of Object.keys(pick)) pick[k] = null
-  result.value = null; stopHtml.value = ''; clarification.value = null; copyBox.value = ''; allHtml.value = ''
+  result.value = null; stopHtml.value = ''; clarification.value = null; copyBox.value = ''; progress.value = ''
+  applyCache({ ready: false, done: 0, total: 0, state: 'idle' })
   stage.value = 'input'; step.value = 0; dir.value = 'back'
 }
+onBeforeUnmount(stopPoll)
 </script>
 
 <template>
@@ -302,21 +394,38 @@ async function restart() {
               </Transition>
               <button v-if="EXAMPLES.length > 1" class="round round-sm" title="换一个例子" aria-label="换一个例子" @click="shuffleExample"><Shuffle :size="15" aria-hidden="true" /></button>
             </div>
-            <button class="btn btn-dark btn-go" :disabled="!typed.trim() || busy" @click="generateTyped">生成软文<ArrowRight :size="16" aria-hidden="true" /></button>
+            <button class="btn btn-dark btn-go" :disabled="!typed.trim() || busy || checking" @click="generateTyped">
+              {{ checking ? '理解需求…' : '生成软文' }}<ArrowRight v-if="!checking" :size="16" aria-hidden="true" />
+            </button>
           </div>
-          <p class="muted small">按 Enter 生成，Shift + Enter 换行。缺少的信息会再请你点选补充。</p>
+
+          <!-- intake first: the missing questions are asked here, before the result page opens -->
+          <div v-if="clarification && clarification.onInput" class="clar">
+            <b>还需要确认一点：</b>
+            <div v-for="q in clarification.questions" :key="q.slot" class="clar-q">
+              <div class="clar-text">{{ q.text }}</div>
+              <div class="chip-row">
+                <button v-for="o in q.options" :key="o" class="chip" :class="{ on: clarAnswers[q.slot] === o }" @click="clarAnswers[q.slot] = o">{{ o }}</button>
+              </div>
+            </div>
+            <div class="row end"><button class="btn btn-dark" @click="continueTyped">继续生成</button></div>
+          </div>
+          <div v-if="stopHtml" class="server-html" v-html="cleanHtml(stopHtml)"></div>
+          <p class="muted small">按 Enter 生成，Shift + Enter 换行。缺少的信息会先请你确认。</p>
         </section>
 
         <!-- ============ result ============ -->
         <section v-else key="result" class="card result" aria-labelledby="click-result-title">
           <div class="card-head">
             <h2 id="click-result-title">文案预览</h2>
-            <span v-if="inputMode === 'pick'" class="muted small">{{ valueLabel('product') }} · {{ pick.platform }}</span>
-            <span v-else-if="result" class="muted small">{{ result.platform_label }}</span>
+            <span v-if="result" class="muted small">{{ inputMode === 'pick' ? valueLabel('product') : result.model }} · {{ result.platform_label }}</span>
+            <!-- the hidden prefetch: 换 unlocks once all five platforms are cached -->
+            <span v-if="result && !cache.ready" class="muted small">
+              {{ cache.state === 'error' ? '部分平台缓存失败，重新生成一次即可补齐' : `正在缓存其他平台 ${cache.done}/${cache.total}` }}
+            </span>
           </div>
-          <div v-if="busy || progress.length" class="progress-list" role="status" aria-live="polite">
-            <div v-for="(l, i) in progress" :key="i">{{ l }}</div>
-            <div v-if="busy && !progress.length">正在理解需求…</div>
+          <div v-if="busy || switching || progress" class="progress-line" role="status" aria-live="polite">
+            {{ progress || '正在准备…' }}
           </div>
 
           <div v-if="clarification && !clarification.auto" class="clar">
@@ -332,10 +441,14 @@ async function restart() {
           <div v-if="stopHtml" class="server-html" v-html="cleanHtml(stopHtml)"></div>
 
           <div class="result-grid">
-            <PhoneStage :html="result ? result.phone_html : ''" :busy="busy && !result">
+            <!-- while the pipeline writes, the live phone types the copy in; the final result replaces it -->
+            <PhoneStage :html="result ? result.phone_html : ''" :busy="busy && !result" :live="!!live">
+              <template v-if="live" #live><LivePhone :live="live" scope="manual" /></template>
               <template #tools>
                 <div class="plat-wrap">
-                  <button class="round" title="换平台" aria-label="换平台" aria-haspopup="true" :aria-expanded="platOpen" :disabled="busy || !result" @click="platOpen = !platOpen">换</button>
+                  <button class="round" :title="cache.ready ? '换平台' : '正在缓存其他平台…'" aria-label="换平台"
+                          aria-haspopup="true" :aria-expanded="platOpen" :disabled="busy || switching || !result || !cache.ready"
+                          @click="platOpen = !platOpen">换</button>
                   <div v-if="platOpen" class="plat-menu">
                     <label v-for="p in platforms" :key="p">
                       <input type="radio" name="click-platform" :checked="result && result.platform_label === p" @change="pickPlatform(p)" />{{ p }}
@@ -348,10 +461,9 @@ async function restart() {
               <div class="quick">
                 <span class="field-label">快速调整</span>
                 <div class="chip-row">
-                  <button class="chip" :disabled="busy" @click="editAction('短一点')">短一点</button>
-                  <button class="chip" :disabled="busy" @click="editAction('换卖点')">换卖点</button>
-                  <button class="chip" :disabled="busy" @click="editAction('换个角度')">换个角度</button>
-                  <button class="chip" :disabled="busy" @click="allPlatforms">全平台</button>
+                  <button class="chip" :disabled="busy || switching" @click="editAction('短一点')">短一点</button>
+                  <button class="chip" :disabled="busy || switching" @click="editAction('换卖点')">换卖点</button>
+                  <button class="chip" :disabled="busy || switching" @click="editAction('换个角度')">换个角度</button>
                 </div>
               </div>
               <div v-if="result.banner_html" class="server-html" v-html="cleanHtml(result.banner_html)"></div>
@@ -360,12 +472,22 @@ async function restart() {
                 <textarea id="click-copy" class="textarea" :value="copyBox" readonly rows="10" spellcheck="false"></textarea>
               </div>
               <div class="action-grid">
-                <button class="btn btn-dark" @click="copy"><component :is="copied ? Check : Copy" :size="16" aria-hidden="true" />{{ copied ? '已复制' : '复制正文' }}</button>
+                <button class="btn btn-dark copy-btn" @click="copy"><component :is="copied ? Check : Copy" :size="16" aria-hidden="true" />{{ copied ? '已复制' : '复制正文' }}</button>
                 <button class="btn btn-light" @click="download"><FileDown :size="16" aria-hidden="true" />下载 .md</button>
+                <div class="img-wrap">
+                  <button class="btn btn-light btn-block" :disabled="!result.images"
+                          :aria-haspopup="result.images > 1" :aria-expanded="imgOpen"
+                          @click="result.images > 1 ? (imgOpen = !imgOpen) : downloadImg(0)">
+                    <ImageIcon :size="16" aria-hidden="true" />下载图片
+                  </button>
+                  <div v-if="imgOpen && result.images > 1" class="plat-menu img-menu">
+                    <button class="img-all" @click="imgOpen = false; downloadAllImg()">下载所有图片</button>
+                    <button v-for="n in result.images" :key="n" @click="imgOpen = false; downloadImg(n - 1)">第 {{ n }} 张</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-          <div v-if="allHtml" class="all-platforms" v-html="cleanHtml(allHtml)"></div>
           <ReportFold v-if="result" :md="result.report_md" />
         </section>
       </Transition>
@@ -387,6 +509,13 @@ async function restart() {
         <button v-else class="btn btn-light btn-block" :disabled="busy" @click="restart"><RotateCcw :size="16" aria-hidden="true" />重新选择</button>
         <p class="muted small">内容只取自知识库，生成后自动核验产品事实与图片。</p>
       </section>
+
+      <!-- 下一步 sits right below the 你的选择 panel: the option grids are long, so the button at the
+           card foot is out of reach. -->
+      <button v-if="inputMode === 'pick' && stage === 'input' && step < STEPS.length - 1"
+              class="btn btn-dark btn-block btn-go goto-next" :disabled="!pick[current.key] || busy" @click="next">
+        下一步 · {{ STEPS[step + 1].label }}<ArrowRight :size="16" aria-hidden="true" />
+      </button>
 
       <section v-else class="card summary">
         <h3 class="aside-title">{{ stage === 'result' ? '你的输入' : '怎么写更准' }}</h3>

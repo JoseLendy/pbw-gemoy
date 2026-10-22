@@ -270,3 +270,30 @@ def test_unknown_variant_becomes_pending_note(deps):
 def test_known_variant_kept(deps):
     r = run(TEXT, form={"variant": "触控版"}, deps=deps)
     assert isinstance(r, RunResult) and r.task.variant == "触控版" and r.pending == []
+
+
+# ---------------------------------------------------------------- streaming (the live draft phone)
+def test_run_streams_the_draft_then_each_revision(deps):
+    events = []
+    r = run(TEXT, deps=deps, on_post=lambda kind, post: events.append((kind, post)))
+    assert isinstance(r, RunResult)
+    assert events and events[0][0] == "draft"
+    draft = events[0][1]
+    assert draft.platform == r.post.platform and draft.title            # the first draft is a whole post
+    assert all(kind in ("draft", "revision") for kind, _ in events)
+    assert events[-1][1].body == r.post.body                            # the last event is the delivered copy
+
+
+def test_edit_streams_its_draft_too(deps):
+    r = run(TEXT, deps=deps)
+    events = []
+    r2 = edit(r, "短一点", deps=deps, on_post=lambda kind, post: events.append(kind))
+    assert isinstance(r2, RunResult)
+    assert events and events[0] == "draft"
+
+
+def test_a_failing_stream_hook_never_breaks_the_run(deps):
+    def boom(kind, post):
+        raise RuntimeError("display only")
+    r = run(TEXT, deps=deps, on_post=boom)
+    assert isinstance(r, RunResult) and r.report.passed
