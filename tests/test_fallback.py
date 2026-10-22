@@ -79,6 +79,13 @@ def test_next_card_order_is_potential_promo_question_release():
     assert all(not c.locked for c in [pl._next_card(c) for c in cards.values()] if c)   # draft 新品 never chosen
 
 
+def test_next_card_keeps_the_platform_of_the_version_that_failed():
+    potential = next(c for c in cards_for("S01", TODAY) if c.slot == "potential")
+    for platform in ("小红书", "公众号"):
+        nxt = pl._next_card(dataclasses.replace(potential, platform=platform))
+        assert nxt.slot == "promo" and nxt.platform == platform
+
+
 def test_needs_review_when_everything_fails(monkeypatch):
     nxt = demo(next(c for c in cards_for("S01", TODAY) if c.slot == "promo"))
     monkeypatch.setattr(pl, "_next_card", lambda card: nxt)

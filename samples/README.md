@@ -10,6 +10,8 @@
 | [S04-potential-moments.md](S04-potential-moments.md) | 地域定向：写字楼（CBD）店 → 上班族客群；核验可追溯（四、核验结果：事实编号 → 字段 → 文中取值） |
 | [S08-potential-moments.md](S08-potential-moments.md) | 地域定向：社区店 → 家庭客群；核验可追溯（四、核验结果：事实编号 → 字段 → 文中取值） |
 | [S10-promo-moments.md](S10-promo-moments.md) | 同一型号、不同角度：与 S01 同型号，商圈店换成送礼/到店体验角度；核验可追溯（四、核验结果：事实编号 → 字段 → 文中取值） |
+| [S08-potential-xiaohongshu.md](S08-potential-xiaohongshu.md) | 同一条推荐的小红书版本：口语化标题、短段落、话题标签，篇幅与配图按平台规范（与 S08 朋友圈样例同一张推荐卡）；核验可追溯 |
+| [S12-promo-wechat_article.md](S12-promo-wechat_article.md) | 公众号版本：标题 + 导语 + 分段正文 + 结尾引导，长文按平台规范；核验可追溯 |
 | [S01-new_release-locked.md](S01-new_release-locked.md) | 新品闸门：资料未经总部确认时直接锁定，不生成 |
 | [S03-needs-review.md](S03-needs-review.md) | 兜底：两轮改写、删句、换卡后仍未通过 → 需人工确认，不交付 |
 

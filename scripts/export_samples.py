@@ -5,7 +5,8 @@ Build samples/ from REAL run records in runs/ (never hand-written, never edited 
     python scripts/export_samples.py --today 2026-10-23
 
 Selection: the prepared posts of S01 + S02 (same store type), S04 (CBD), S08 (residential), S10 (mall,
-same product as S01, different angle); one 新品款 locked card (the lock message only); one EditBlocked for
+same product as S01, different angle); the stored platform versions in VERSION_PICKS (S08 小红书 = the same
+card as its 朋友圈 post; S12 公众号), only when the post really is on that platform; one 新品款 locked card (the lock message only); one EditBlocked for
 「加上立减500」 if a real record exists; one NeedsReview with its failing sentences.
 
 Each sample shows the store type, audience, 为什么推这条 (simulated reasons marked 模拟数据), the
@@ -259,12 +260,20 @@ def _media_ids(result: dict) -> set[str]:
 
 # ---------------------------------------------------------------- selection
 POST_STORES = ("S01", "S02", "S04", "S08", "S10")
+VERSION_PICKS = (("S08", "xiaohongshu"), ("S12", "wechat_article"))
 
 
 def select(records: list[dict], review: str | None = None) -> dict:
     """review: the run-record file name of the NeedsReview to show (default: the latest one)."""
     prepared = {r["store_id"]: r for r in records if r.get("kind") == "prepared"}
     picks = {"posts": [prepared[s] for s in POST_STORES if s in prepared and prepared[s].get("status") == "RunResult"]}
+    # a version whose post is on another platform (an old next_card fallback) is not a sample of that platform
+    for sid, platform in VERSION_PICKS:
+        rec = next((r for r in records if r.get("kind") == "version" and r.get("store_id") == sid
+                    and r.get("status") == "RunResult"
+                    and ((r.get("result") or {}).get("post") or {}).get("platform") == platform), None)
+        if rec:
+            picks["posts"].append(rec)
     locked = [r for r in records if (r.get("result") or {}).get("reason") == "fact_card_draft"]
     picks["locked"] = locked[-1] if locked else None
     blocked = [r for r in records if r.get("kind") == "edit_blocked" and "立减500" in (r.get("result") or {}).get("instruction", "")]
@@ -312,7 +321,8 @@ def build(day: str, runs_dir: Path, out: Path, allow_dev: bool = False,
 
 def render_readme(picks: dict, day: str) -> str:
     rows = []
-    posts = {r["store_id"]: r for r in picks["posts"]}
+    posts = {r["store_id"]: r for r in picks["posts"] if r.get("kind") != "version"}
+    versions = [r for r in picks["posts"] if r.get("kind") == "version"]
 
     def link(rec, fn):
         return f"[{fn(rec)[0]}]({fn(rec)[0]})"
@@ -328,6 +338,16 @@ def render_readme(picks: dict, day: str) -> str:
     for sid in POST_STORES:
         if sid in posts:
             rows.append(f"| {link(posts[sid], render_post_sample)} | {what[sid]}；核验可追溯（四、核验结果：事实编号 → 字段 → 文中取值） |")
+    version_what = {
+        "xiaohongshu": "同一条推荐的小红书版本：口语化标题、短段落、话题标签，篇幅与配图按平台规范",
+        "wechat_article": "公众号版本：标题 + 导语 + 分段正文 + 结尾引导，长文按平台规范",
+    }
+    for rec in versions:
+        platform = ((rec.get("result") or {}).get("post") or {}).get("platform", "")
+        what_v = version_what.get(platform, PLATFORM_CN.get(platform, platform))
+        if platform == "xiaohongshu" and rec["store_id"] in posts:
+            what_v += f"（与 {rec['store_id']} 朋友圈样例同一张推荐卡）"
+        rows.append(f"| {link(rec, render_post_sample)} | {what_v}；核验可追溯 |")
     if picks["locked"]:
         rows.append(f"| {link(picks['locked'], render_locked_sample)} | 新品闸门：资料未经总部确认时直接锁定，不生成 |")
     if picks["blocked"]:

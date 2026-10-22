@@ -31,10 +31,10 @@ Confusable groups: MateBook 14 鸿蒙版 vs 14 酷睿 Ultra (highest risk), Pro 
 | WS | Owner | Files |
 |---|---|---|
 | **P1 Data** | person with the ima account | `agent/ima_wrapper.py`, `agent/catalog.py`, `agent/retrieval.py`, `agent/platform_plan.py`, `config/model_aliases.yaml`, `ima-skill/` (restore, unmodified), `scripts/smoke_official.md`, `scripts/build_index.py`, `scripts/export_dev_cache.py`, `tests/test_catalog.py`, `tests/test_retrieval.py`, `tests/test_platform_plan.py`; deletes `agent/ima_client.py`; updates `scripts/explore_kb.py` import |
-| **P2 Ledger** | | `agent/ledger.py`, `agent/units.py`, `config/units.yaml`, `tests/test_ledger.py`, `tests/test_units.py` |
+| **P2 Ledger** | | `agent/ledger.py`, `agent/units.py`, `tests/test_ledger.py`, `tests/test_units.py` |
 | **P3 Checks** | | `agent/platform_rules.py`, `agent/checks/__init__.py`, `agent/checks/facts.py`, `agent/checks/compliance.py`, `agent/checks/conformance.py`, `config/banned_words.txt`, `config/claim_patterns.yaml`, `config/competitors.txt`, `config/number_whitelist.yaml`, `tests/test_checks_*.py`, `tests/test_platform_rules.py` |
 | **P4 LLM stages** | | `agent/llm.py`, `agent/intake.py`, `agent/scenario.py`, `agent/reconcile.py`, `agent/writer.py`, `config/scenarios.yaml`, `prompts/*.md`, `tests/test_intake.py`, `tests/test_reconcile.py`, `tests/test_writer.py` |
-| **P5 Integrator + UI** | lead | `agent/schemas.py`, `tests/fakes.py`, `docs/CONTRACTS.md`, `CLAUDE.md`, `agent/pipeline.py`, `agent/formatter.py`, `app.py`, `static/*`, `requirements.txt`, `README.md`, `docs/项目说明.md`, `tests/test_pipeline.py`, `tests/test_formatter.py`, `tests/test_e2e.py` |
+| **P5 Integrator + UI** | lead | `agent/schemas.py`, `tests/fakes.py`, `docs/CONTRACTS.md`, `CLAUDE.md`, `agent/pipeline.py`, `agent/formatter.py`, `server.py`, `ui/*`, `frontend/*`, `requirements.txt`, `README.md`, `docs/项目说明.md`, `tests/test_pipeline.py`, `tests/test_formatter.py`, `tests/test_e2e.py` |
 
 Also:
 - Each workstream may add its own synthetic fixtures under `tests/fixtures/<p1|p2|p3|p4|p5>/`. The shared DemoBook fixtures in `tests/fixtures/demobook-14*/` belong to P5.
