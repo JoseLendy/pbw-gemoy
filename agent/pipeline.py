@@ -822,6 +822,38 @@ def prepare_today(date, deps: Deps | None = None, runs_dir=None, on_progress: Pr
                        versions=versions, wechat_skipped=skipped)
 
 
+def prepare_versions(date, only, deps: Deps | None = None, runs_dir=None, on_progress: Progress = None,
+                     card_map: Optional[Callable[[RecommendationCard], RecommendationCard]] = None) -> PreparedDay:
+    """Regenerate only the named stored versions: `only` is [(store_id, platform label)], e.g.
+    [("S01", "小红书")]. Each store's default card is run on that platform and stored with log_version,
+    replacing that one file; every other prepared post and version is left alone, and the 朋友圈 prepared post
+    (log_prepared) is never touched. 8E compares the rerun posts with each other only, not with the versions
+    already on disk. A crash stores nothing (the old file stays) and is listed in `errors`."""
+    from agent.recommend.store_data import default_card, load_store_data
+    deps = deps or default_deps()
+    data = load_store_data()
+    plan: dict[str, list] = {}
+    locked: dict[str, str] = {}
+    for sid, platform in only:
+        card = default_card(sid, date, data)
+        if card is None:
+            locked[sid] = "今日无可生成的卡片"
+        elif card.locked:
+            locked[sid] = LOCKED_MESSAGES.get(card.locked_reason or "", "该推荐暂不可生成，请等待总部确认")
+        else:
+            plan.setdefault(platform, []).append(dataclasses.replace(card_map(card) if card_map else card,
+                                                                     platform=platform))
+    errors, batches, versions = {}, {}, {}
+    for platform, pcards in plan.items():
+        _say(on_progress, "card", f"{platform}：{len(pcards)} 家门店")
+        batch = generate_batch(pcards, deps, on_progress=on_progress, keep_angle=True)
+        batches[platform] = batch
+        versions[platform] = _store_versions(pcards, batch, deps, runs_dir, errors)
+    main = next(iter(batches.values()), BatchResult(results={}, similarity=[]))
+    return PreparedDay(date=str(date), batch=main, paths={}, locked=locked, errors=errors, batches=batches,
+                       versions=versions)
+
+
 COMPARE_STORES = ("S01", "S04", "S08", "S02")
 
 

@@ -49,6 +49,7 @@ python server.py                              # http://localhost:7861
   python scripts/prepare_today.py --today 2026-10-23          # 每家门店的今日一条，朋友圈 + 小红书（必要时 + 公众号）
   python scripts/prepare_today.py --today 2026-10-23 --demo   # 另外生成其他推荐、四店对比、对照组
   python scripts/prepare_today.py --today 2026-10-23 --fake   # 不调用 ima / LLM 的彩排，写到 runs/_rehearsal/
+  python scripts/prepare_today.py --today 2026-10-23 --only S01:小红书,S08:公众号   # 只重做指定门店 + 平台的版本
   ```
 
   未预生成时应用照常可用，只是门店端打开后要现场生成（演示日实测每条约 1 分钟，慢时数分钟）。

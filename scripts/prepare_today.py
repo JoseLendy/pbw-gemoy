@@ -5,7 +5,8 @@ Morning run (push model): prepare every store's default card for a date, one ver
 
     python scripts/prepare_today.py --today 2026-10-23          # real deps (ima + LLM)
     python scripts/prepare_today.py --today 2026-10-23 --fake   # rehearsal on tests/fakes -> runs/_rehearsal/
-    python scripts/prepare_today.py --today 2026-10-23 --demo   # also every other slot, 三店对比, 对照组
+    python scripts/prepare_today.py --today 2026-10-23 --demo   # also every other slot, 四店对比, 对照组
+    python scripts/prepare_today.py --today 2026-10-23 --only S01:小红书,S08:公众号   # redo just these versions
 
 Prints per store: status, rewrites, seconds taken, its closest post of the day (8E compares every pair, not
 only peers) and any 8E breach (similar / phrase / stock / selling_point) with whether the rerun replaced it. Refuses to run when any dependency
@@ -44,8 +45,19 @@ def main(argv=None) -> int:
     ap.add_argument("--today", default=dt.date.today().isoformat())
     ap.add_argument("--fake", action="store_true", help="rehearsal on tests/fakes (synthetic facts)")
     ap.add_argument("--demo", action="store_true", help="prepare_demo: everything the UI can show for the date")
+    ap.add_argument("--only", help="regenerate only these stored versions, e.g. S01:小红书,S08:公众号 "
+                                   "(every other prepared post is left alone)")
     args = ap.parse_args(argv)
-    from agent.pipeline import Deps, prepare_demo, prepare_today
+    only = None
+    if args.only:
+        try:
+            only = [tuple(x.strip() for x in item.split(":", 1)) for item in args.only.split(",") if item.strip()]
+            assert only and all(len(pair) == 2 and all(pair) for pair in only)
+        except AssertionError:
+            ap.error("--only takes STORE:平台 pairs separated by commas, e.g. S01:小红书,S08:公众号")
+        if args.demo:
+            ap.error("--only and --demo cannot be combined")
+    from agent.pipeline import Deps, prepare_demo, prepare_today, prepare_versions
     from agent.runs import REHEARSAL_DIR
     from agent.style.similarity import similarity_threshold
 
@@ -67,6 +79,22 @@ def main(argv=None) -> int:
     import time
     t0 = time.perf_counter()
     calls0 = len(getattr(deps.llm, "calls", []) or [])
+    if only:
+        day = prepare_versions(args.today, only, deps, runs_dir=runs_dir, card_map=card_map)
+        print(f"prepare_today {day.date} --only · {'rehearsal (fakes)' if args.fake else 'real deps'}")
+        print(f"{'store':6} {'platform':8} {'status':22} {'rewrites':>8} {'seconds':>8}")
+        for platform, batch in day.batches.items():
+            for sid, r in batch.results.items():
+                print(f"{sid:6} {platform:8} {_status(r):22} {getattr(r, 'loops', '-')!s:>8} "
+                      f"{batch.seconds.get(sid, 0):>8.1f}")
+        for sid, why in sorted(day.locked.items()):
+            print(f"{sid:6} {'-':8} {'SKIPPED':22} {'-':>8} {'-':>8}  {why}")
+        if day.errors:
+            print(f"NOT stored (crashed; the old file is kept): {sorted(day.errors)}")
+        print(f"stored: {sum(len(v) for v in day.versions.values())} version(s) under "
+              f"{runs_dir or 'runs'}/{day.date}/prepared/versions/")
+        print(f"total: {time.perf_counter() - t0:.1f}s · LLM calls {len(getattr(deps.llm, 'calls', []) or []) - calls0}")
+        return 0
     demo = prepare_demo(args.today, deps, runs_dir=runs_dir, card_map=card_map) if args.demo else None
     day = demo.day if demo else prepare_today(args.today, deps, runs_dir=runs_dir, card_map=card_map)
     threshold = similarity_threshold()

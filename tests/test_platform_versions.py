@@ -92,6 +92,24 @@ def test_wechat_is_skipped_when_this_weeks_wechat_is_done(tmp_path):
     assert stored_version(dataclasses.replace(card, platform="公众号"), runs_dir=tmp_path) is None
 
 
+def test_prepare_versions_redoes_only_the_named_versions(tmp_path):
+    from agent.pipeline import prepare_versions
+    prepare_today(DAY, Deps.fake(), runs_dir=tmp_path, card_map=demo_map)
+    vdir = tmp_path / DAY / "prepared" / "versions"
+    before = {p.name: p.read_text("utf-8") for p in vdir.glob("*.json")}
+    prepared = (tmp_path / DAY / "prepared" / "S01.json").read_text("utf-8")
+    day = prepare_versions(DAY, [("S01", "小红书"), ("S03", "公众号")], Deps.fake(), runs_dir=tmp_path,
+                           card_map=demo_map)
+    assert set(day.versions) == {"小红书", "公众号"} and not day.errors
+    after = {p.name: p.read_text("utf-8") for p in vdir.glob("*.json")}
+    changed = {n for n in after if after[n] != before.get(n)}
+    s01, s03 = default_card("S01", DAY).card_id, default_card("S03", DAY).card_id
+    assert changed == {f"{s01}__xiaohongshu.json", f"{s03}__wechat_article.json"}
+    assert (tmp_path / DAY / "prepared" / "S01.json").read_text("utf-8") == prepared   # 朋友圈 post untouched
+    rec = stored_version(dataclasses.replace(demo_map(default_card("S01", DAY)), platform="小红书"), runs_dir=tmp_path)
+    assert rec["result"]["post"]["platform"] == "xiaohongshu"
+
+
 def test_moments_version_is_still_the_stores_prepared_post(tmp_path):
     from agent.runs import prepared_post
     prepare_today(DAY, Deps.fake(), runs_dir=tmp_path, card_map=demo_map)
