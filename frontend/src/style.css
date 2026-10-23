@@ -135,10 +135,16 @@
   .landing-panel { padding-top: 40px; border-left: 0; border-top: 1px solid #EFE8DD; }
 }
 /* ---------- 四店对比 / 对照组 (server html is light already) ---------- */
-.compare-body > div { gap: 16px !important; }
+.hw-compare-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
 .compare-body.is-busy { opacity: .6; }
 .hw-compare-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px 16px; box-shadow: var(--shadow); color: var(--ink); }
 .hw-compare-card .hw-phone { margin: 6px auto 10px; }
+.hw-compare-empty { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--line-2); background: transparent; box-shadow: none; min-height: 360px; }
+.hw-compare-empty-inner { color: var(--ink-3); font-size: 14px; }
+.store-pick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.store-pick { display: flex; gap: 6px; align-items: center; }
+.store-pick .select { flex: 1; min-width: 0; }
+@media (max-width: 900px) { .hw-compare-grid { grid-template-columns: 1fr; } .hw-compare-empty { display: none; } .store-pick-grid { grid-template-columns: 1fr; } }
 .compare-body table { border-radius: 10px; overflow: hidden; }
 .baseline-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .hw-baseline-card { background: #FFF7EC; border: 1px solid #F3D3A6; border-radius: var(--r-lg); padding: 18px 20px; color: #3B2A14; }

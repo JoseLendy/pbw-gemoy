@@ -153,7 +153,7 @@ def test_compare_summary_counts_failures(monkeypatch):
     monkeypatch.setattr(compare_view.ui_data, "compare", lambda cs, on_progress=None: batch)
     body, summary = compare_view.on_compare("matebook-14-harmonyos", "朋友圈")
     assert "3/4 店完成" in summary and "1 店失败" in summary
-    assert "0.550" in body
+    assert "跨店相似度" in body and "阈值" not in body
 
 
 def test_baseline_renders_fallback_note():

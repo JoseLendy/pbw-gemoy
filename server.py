@@ -450,6 +450,7 @@ class ChipReq(Sid):
 class CompareReq(Sid):
     model_id: str = ""
     platform: str = "朋友圈"
+    store_ids: Optional[list] = None
 
 
 class ManualReq(Sid):
@@ -479,6 +480,7 @@ def api_meta() -> dict:
         "platforms": list(state.PLATFORM_TABS),
         "compare_products": products,
         "compare_platforms": list(compare_view.PLATFORMS),
+        "compare_stores": [sid for sid, _ in compare_view.COMPARE_STORES],
         "manual_platforms": [PLATFORM_LABELS[p] for p in ("xiaohongshu", "moments", "wechat_article", "poster", "douyin")],
         "manual_examples": MANUAL_EXAMPLES,
         "manual_products": manual_products(),
@@ -767,7 +769,7 @@ def api_store_save_image(session_id: str = ""):
 @app.post("/api/compare/stored")
 def api_compare_stored(req: CompareReq) -> dict:
     _require_demo(req.session_id)
-    body, summary = compare_view.on_show_stored(req.model_id, req.platform)
+    body, summary = compare_view.on_show_stored(req.model_id, req.platform, req.store_ids)
     return {"html": body, "summary": summary}
 
 
@@ -780,7 +782,7 @@ def api_compare_run(req: CompareReq):
         return JSONResponse({"event": "result", "html": f'<div class="hw-banner err">{blocked}</div>', "summary": ""})
 
     def worker(emit):
-        body, summary = compare_view.on_compare(req.model_id, req.platform, on_progress=_progress(emit))
+        body, summary = compare_view.on_compare(req.model_id, req.platform, req.store_ids, on_progress=_progress(emit))
         emit({"event": "result", "html": body, "summary": summary})
 
     return _ndjson(worker)

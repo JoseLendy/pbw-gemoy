@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Building2, Columns3, FlaskConical, LogIn, Scale, Sparkles, Store } from 'lucide-vue-next'
-import { account, loadMeta, meta, refreshAccount, refreshStatus, status } from './api.js'
+import { account, loadMeta, refreshAccount, refreshStatus, status } from './api.js'
 import WelcomeView from './views/WelcomeView.vue'
 import HomeView from './views/HomeView.vue'
 import ClickView from './views/ClickView.vue'
@@ -17,7 +17,7 @@ const NAV = [
   { key: 'login', label: '登录', icon: LogIn },
 ]
 const DEMO = [
-  { key: 'compare', label: '四店对比', icon: Columns3 },
+  { key: 'compare', label: '多店对比', icon: Columns3 },
   { key: 'baseline', label: '对照组', icon: Scale },
 ]
 const ALIASES = { store: 'home', manual: 'click' }   // old #tab= links keep working
@@ -100,7 +100,6 @@ onBeforeUnmount(() => clearInterval(statusTimer))
         <img class="brand-logo" src="/logo.png" alt="HUAWEI" />
         <div>
           <div class="brand-name">PC 软文助手</div>
-          <div class="brand-sub">演示日期 {{ meta.today || status.today || '…' }}</div>
         </div>
       </div>
 
