@@ -55,6 +55,38 @@ def test_role_must_be_known(tmp_path):
         accounts.create_user("x", "pw", "owner", path=_db(tmp_path))
 
 
+def test_role_hierarchy_for_account_creation():
+    # a higher role may create a lower one; the developer may also create another developer.
+    # equal (manager/manager) or upper (manager→developer) is refused.
+    assert accounts.can_create("developer", "manager")
+    assert accounts.can_create("developer", "staff")
+    assert accounts.can_create("developer", "developer")
+    assert accounts.can_create("manager", "staff")
+    assert not accounts.can_create("manager", "manager")
+    assert not accounts.can_create("manager", "developer")
+    assert not accounts.can_create("staff", "staff")
+    assert not accounts.can_create("staff", "manager")
+    assert not accounts.can_create("staff", "developer")
+
+
+def test_change_password_verifies_old_and_updates(tmp_path):
+    db = _db(tmp_path)
+    accounts.seed_demo_accounts(STORES, password="pw-test", path=db)
+    assert accounts.change_password("staff-s01", "pw-test", "new-pw", path=db) is True
+    assert accounts.authenticate("staff-s01", "new-pw", path=db)["role"] == "staff"
+    assert accounts.authenticate("staff-s01", "pw-test", path=db) is None
+    # wrong old password is refused
+    assert accounts.change_password("staff-s01", "wrong", "x2", path=db) is False
+
+
+def test_delete_user_removes_the_account(tmp_path):
+    db = _db(tmp_path)
+    accounts.seed_demo_accounts(STORES, password="pw-test", path=db)
+    assert accounts.delete_user("staff-s01", path=db) is True
+    assert accounts.get_user("staff-s01", path=db) is None
+    assert accounts.delete_user("staff-s01", path=db) is False   # already gone
+
+
 # ---------------------------------------------------------------- approvals (persisted, per store)
 def test_approvals_are_per_store_and_clearable(tmp_path):
     db = _db(tmp_path)

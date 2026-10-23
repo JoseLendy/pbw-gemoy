@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Building2, Columns3, FlaskConical, LogIn, Scale, Sparkles, Store } from 'lucide-vue-next'
-import { account, loadMeta, refreshAccount, refreshStatus, status } from './api.js'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { Building2, Columns3, FlaskConical, LogIn, Scale, Settings, Sparkles, Store, X } from 'lucide-vue-next'
+import { account, getSettings, loadMeta, refreshAccount, refreshStatus, saveSettings, status } from './api.js'
 import WelcomeView from './views/WelcomeView.vue'
 import HomeView from './views/HomeView.vue'
 import ClickView from './views/ClickView.vue'
@@ -68,7 +68,9 @@ watch(() => account.role, () => {
 })
 
 const showLanding = computed(() => !account.role && tab.value === 'welcome')
-const navItems = computed(() => NAV.filter((n) => allowed(n.key)))
+const navItems = computed(() => NAV.filter((n) => allowed(n.key)).map((n) =>
+  n.key === 'login' ? { ...n, label: (account.role === 'developer' || account.role === 'manager') ? '登录/注册' : '登录' } : n
+))
 const who = computed(() => {
   if (account.role === 'developer') return { name: '开发者', sub: '全部页面 · 演示功能', mark: '开' }
   if (account.role) {
@@ -79,6 +81,37 @@ const who = computed(() => {
   return { name: '未登录', sub: '请先登录', mark: '访' }
 })
 const kbTone = computed(() => (status.checking ? 'amber' : status.kb_ok ? 'ok' : 'bad'))
+
+// ---- API settings (developer only); the key is never echoed back, only replaced
+const settingsOpen = ref(false)
+const settingsForm = reactive({ base_url: '', model: '', api_key: '', ima_client_id: '', ima_api_key: '' })
+const keyConfigured = ref(false)
+const imaConfigured = ref(false)
+const settingsBusy = ref(false)
+const settingsMsg = ref('')
+async function openSettings() {
+  settingsOpen.value = true
+  settingsMsg.value = ''
+  const s = await getSettings()
+  settingsForm.base_url = s.base_url || ''
+  settingsForm.model = s.model || ''
+  settingsForm.api_key = ''
+  settingsForm.ima_client_id = ''
+  settingsForm.ima_api_key = ''
+  keyConfigured.value = !!s.key_configured
+  imaConfigured.value = !!s.ima_configured
+}
+async function saveApiSettings() {
+  if (settingsBusy.value) return
+  settingsBusy.value = true
+  settingsMsg.value = ''
+  try {
+    const r = await saveSettings({ ...settingsForm })
+    if (r.ok) { settingsMsg.value = '已保存'; refreshStatus() }
+    else settingsMsg.value = r.reason || '保存失败'
+  } catch (e) { settingsMsg.value = e.message || '暂时无法保存，请稍后再试' }
+  settingsBusy.value = false
+}
 
 onMounted(async () => {
   window.addEventListener('hashchange', () => { const k = fromHash(); if (k !== tab.value) tab.value = k })
@@ -120,6 +153,9 @@ onBeforeUnmount(() => clearInterval(statusTimer))
       </nav>
 
       <div class="side-foot">
+        <button v-if="account.role === 'developer'" class="side-set" @click="openSettings">
+          <Settings :size="16" aria-hidden="true" />设置
+        </button>
         <button class="who" @click="go('login')">
           <span class="who-mark">{{ who.mark }}</span>
           <span class="who-text"><b>{{ who.name }}</b><small>{{ who.sub }}</small></span>
@@ -155,5 +191,33 @@ onBeforeUnmount(() => clearInterval(statusTimer))
         <span>{{ n.label }}</span>
       </button>
     </nav>
+  </div>
+
+  <div v-if="settingsOpen" class="modal-backdrop" @click.self="settingsOpen = false">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="API 设置">
+      <div class="modal-head">
+        <h2>API 设置</h2>
+        <button class="round round-sm" aria-label="关闭" @click="settingsOpen = false"><X :size="15" aria-hidden="true" /></button>
+      </div>
+      <form class="login-form" @submit.prevent="saveApiSettings">
+        <label class="field-label" for="set-base">Base URL</label>
+        <input id="set-base" v-model="settingsForm.base_url" class="input" type="text" placeholder="https://…" spellcheck="false" />
+        <label class="field-label" for="set-model">模型</label>
+        <input id="set-model" v-model="settingsForm.model" class="input" type="text" spellcheck="false" />
+        <label class="field-label" for="set-key">LLM API Key</label>
+        <input id="set-key" v-model="settingsForm.api_key" class="input" type="password" autocomplete="new-password"
+               :placeholder="keyConfigured ? '已配置，留空则不变' : '未配置'" />
+        <label class="field-label" for="set-imac">IMA Client ID</label>
+        <input id="set-imac" v-model="settingsForm.ima_client_id" class="input" type="password" autocomplete="off"
+               :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+        <label class="field-label" for="set-imak">IMA API Key</label>
+        <input id="set-imak" v-model="settingsForm.ima_api_key" class="input" type="password" autocomplete="new-password"
+               :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+        <div class="row end">
+          <button class="btn btn-dark" :disabled="settingsBusy">{{ settingsBusy ? '正在保存…' : '保存' }}</button>
+        </div>
+        <p v-if="settingsMsg" class="field-msg" role="alert">{{ settingsMsg }}</p>
+      </form>
+    </div>
   </div>
 </template>

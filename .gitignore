@@ -23,6 +23,8 @@ runs/
 # local account / approval database (never commit)
 data/*.db
 data/*.db-*
+# persisted API settings (may hold the LLM key)
+data/api_settings.json
 .DS_Store
 __MACOSX/
 

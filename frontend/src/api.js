@@ -62,6 +62,26 @@ export async function refreshAccount() {
 export async function demoAccounts() {
   try { return await getJson('/api/auth/demo-accounts') } catch { return { accounts: [], password: '' } }
 }
+/** Create an account for a lower role (developer → manager/staff, manager → staff). */
+export async function createAccount(payload) {
+  return postJson('/api/auth/create', payload)
+}
+/** Change your own password. */
+export async function changePassword(payload) {
+  return postJson('/api/auth/change-password', payload)
+}
+/** Remove a lower-role account (developer → manager/staff any store, manager → staff own store). */
+export async function removeUser(payload) {
+  return postJson('/api/auth/remove', payload)
+}
+/** Current API config (developer only; secrets are never returned, only their configured flags). */
+export async function getSettings() {
+  try { return await getJson('/api/settings') } catch { return { base_url: '', model: '', key_configured: false, ima_configured: false } }
+}
+/** Update the API config (developer only; a blank api_key keeps the current one). */
+export async function saveSettings(payload) {
+  return postJson('/api/settings', payload)
+}
 
 /** Server banners still carry emoji status marks; the UI draws its own tone, so drop them. */
 const EMOJI_MARKS = /(?:✅|❌|⚠️|⚠|ℹ️|ℹ|💬|🔒|⛔|⏱️|⏱|✏️|✏)️?\s?/g

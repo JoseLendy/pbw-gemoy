@@ -48,6 +48,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 from agent import accounts  # noqa: E402
+from agent import api_settings  # noqa: E402
 from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags  # noqa: E402
 from agent.intake import SCENARIO_CHIPS  # noqa: E402
 from agent.pipeline import edit as pipeline_edit, run as pipeline_run  # noqa: E402
@@ -453,6 +454,23 @@ class CompareReq(Sid):
     store_ids: Optional[list] = None
 
 
+class CreateAccountReq(Sid):
+    username: str = ""
+    password: str = ""
+    role: str = "staff"
+    store_id: str = ""
+    display_name: str = ""
+
+
+class ChangePasswordReq(Sid):
+    old_password: str = ""
+    new_password: str = ""
+
+
+class RemoveUserReq(Sid):
+    username: str = ""
+
+
 class ManualReq(Sid):
     text: str = ""
     form: Optional[dict] = None
@@ -567,6 +585,111 @@ def api_auth_demo_accounts() -> dict:
         out.append({k: p[k] for k in ("username", "role", "role_label", "store_id", "store_name", "display_name")})
     out.sort(key=lambda x: (order.get(x["role"], 9), x["store_id"], x["username"]))
     return {"accounts": out, "password": accounts.demo_password()}
+
+
+@app.post("/api/auth/create")
+def api_auth_create(req: CreateAccountReq) -> dict:
+    """A logged-in account creates accounts for strictly lower roles: developer → manager/staff,
+    manager → staff. A manager's new staff are bound to the manager's own store."""
+    creator = _require(req.session_id)
+    creator_role = creator.get("role") or "staff"
+    target = (req.role or "").strip().lower()
+    if target not in accounts.ROLES:
+        return {"ok": False, "reason": "无效的身份"}
+    if not accounts.can_create(creator_role, target):
+        return {"ok": False, "reason": "无权创建这个身份"}
+
+    store_id = ""
+    if target in ("staff", "manager"):
+        store_id = (req.store_id or "").strip().upper()
+        if creator_role == "manager":
+            store_id = creator.get("store_id") or ""   # a manager only adds staff to their own store
+        if not store_id:
+            return {"ok": False, "reason": "请选择门店"}
+        if store_id not in {s["store_id"] for s in state.STORES}:
+            return {"ok": False, "reason": "门店不存在"}
+
+    username = (req.username or "").strip()
+    if not username or not req.password:
+        return {"ok": False, "reason": "请输入账号和密码"}
+    if len(req.password) < 4:
+        return {"ok": False, "reason": "密码至少 4 位"}
+
+    display_name = (req.display_name or "").strip()
+    if not display_name:
+        store = next((s for s in state.STORES if s["store_id"] == store_id), {})
+        name = store.get("store_name") or store_id or ""
+        display_name = f"{name} {accounts.ROLE_LABELS[target]}" if name else accounts.ROLE_LABELS[target]
+
+    try:
+        ok = accounts.create_user(username, req.password, target, store_id, display_name)
+    except ValueError as e:  # noqa: BLE001
+        return {"ok": False, "reason": str(e)}
+    if not ok:
+        return {"ok": False, "reason": "账号已存在"}
+    return {"ok": True, "reason": ""}
+
+
+@app.post("/api/auth/change-password")
+def api_auth_change_password(req: ChangePasswordReq) -> dict:
+    """Each user changes their own password (old password is verified first)."""
+    acct = _require(req.session_id)
+    if not req.old_password or not req.new_password:
+        return {"ok": False, "reason": "请输入旧密码和新密码"}
+    if len(req.new_password) < 4:
+        return {"ok": False, "reason": "新密码至少 4 位"}
+    if not accounts.change_password(acct["username"], req.old_password, req.new_password):
+        return {"ok": False, "reason": "旧密码不正确"}
+    return {"ok": True, "reason": ""}
+
+
+@app.post("/api/auth/remove")
+def api_auth_remove(req: RemoveUserReq) -> dict:
+    """Remove a lower-role account: developer → manager/staff (any store), manager → staff (own store)."""
+    creator = _require(req.session_id)
+    creator_role = creator.get("role") or "staff"
+    username = (req.username or "").strip().lower()
+    if not username:
+        return {"ok": False, "reason": "请输入账号"}
+    target = accounts.get_user(username)
+    if target is None:
+        return {"ok": False, "reason": "账号不存在"}
+    if not accounts.can_create(creator_role, target["role"]):
+        return {"ok": False, "reason": "无权删除这个身份"}
+    if creator_role == "manager" and target.get("store_id") != creator.get("store_id"):
+        return {"ok": False, "reason": "只能删除本店的账号"}
+    if username == (creator.get("username") or "").lower():
+        return {"ok": False, "reason": "不能删除自己的账号"}
+    accounts.delete_user(username)
+    return {"ok": True, "reason": ""}
+
+
+@app.get("/api/settings")
+def api_settings_get(session_id: str = "") -> dict:
+    """Current API config (developer only). Secrets are never returned — only whether they are set."""
+    _require(session_id, ("developer",))
+    return api_settings.public()
+
+
+class SettingsReq(Sid):
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    ima_client_id: str = ""
+    ima_api_key: str = ""
+
+
+@app.post("/api/settings")
+def api_settings_save(req: SettingsReq) -> dict:
+    """Update the API config (developer only); a blank secret keeps the current value."""
+    _require(req.session_id, ("developer",))
+    try:
+        api_settings.save({"base_url": req.base_url, "api_key": req.api_key, "model": req.model,
+                           "ima_client_id": req.ima_client_id, "ima_api_key": req.ima_api_key})
+    except Exception as e:  # noqa: BLE001
+        log.warning("api settings save failed: %s", e)
+        return {"ok": False, "reason": plain_error(e)}
+    return {"ok": True, "reason": ""}
 
 
 def compare_view_products() -> list[dict]:

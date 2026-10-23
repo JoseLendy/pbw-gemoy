@@ -4,9 +4,9 @@
 // login goes straight to 门店端; reopening the 登录 tab shows the 账号信息 page (门店 / 账号 / 退出登录).
 // The role decides which pages show: staff → 门店端 + 生成; manager → those + 总部端 (and confirming new
 // products for their own store); developer → everything, including the demo-only 四店对比 / 对照组.
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Check, KeyRound, LogOut, Search, Store } from 'lucide-vue-next'
-import { account, demoAccounts, loadMeta, login, logout, meta } from '../api.js'
+import { account, changePassword, createAccount, demoAccounts, loadMeta, login, logout, meta, removeUser } from '../api.js'
 import { tintFor } from '../components/tints.js'
 
 const props = defineProps({ active: Boolean })
@@ -55,6 +55,8 @@ const devAccounts = computed(() => demo.value.accounts.filter((a) => a.role === 
 async function loadDemo() {
   if (!meta.stores.length) await loadMeta()
   demo.value = await demoAccounts()
+  initCreateForm()
+  initRemoveForm()
 }
 onMounted(loadDemo)
 watch(() => props.active, (on) => { if (on && !account.role) loadDemo() })
@@ -103,6 +105,106 @@ const roleLine = computed(() => {
   if (account.role === 'staff') return '门店端 · 生成'
   return ''
 })
+
+// ---- create account: a strictly higher role adds lower-role accounts
+const createRoles = computed(() => {
+  if (account.role === 'developer') return [
+    { key: 'developer', label: '开发者' },
+    { key: 'manager', label: '店长' },
+    { key: 'staff', label: '店员' },
+  ]
+  if (account.role === 'manager') return [{ key: 'staff', label: '店员' }]
+  return []
+})
+const canCreate = computed(() => createRoles.value.length > 0)
+const createStores = computed(() => (account.role === 'manager'
+  ? meta.stores.filter((s) => s.store_id === account.store_id)
+  : meta.stores))
+const createForm = reactive({ role: 'staff', store_id: '', username: '', password: '' })
+const createBusy = ref(false)
+const createMsg = ref('')
+
+function initCreateForm() {
+  if (createRoles.value.length) createForm.role = createRoles.value[0].key
+  // Always reset to the first available store: a previous account's store must not linger in a
+  // dropdown that no longer lists it (e.g. switching between managers of different shops).
+  createForm.store_id = createStores.value.length ? createStores.value[0].store_id : ''
+}
+watch(() => account.role, initCreateForm)
+
+async function create() {
+  if (!createForm.username.trim() || !createForm.password || createBusy.value) return
+  createBusy.value = true
+  createMsg.value = ''
+  try {
+    const r = await createAccount({ ...createForm })
+    if (r.ok) {
+      createForm.username = ''
+      createForm.password = ''
+      createMsg.value = '已创建'
+      await loadDemo()   // the new account shows up in the demo list
+    } else {
+      createMsg.value = r.reason || '创建失败'
+    }
+  } catch (e) {
+    createMsg.value = e.message || '暂时无法创建，请稍后再试'
+  }
+  createBusy.value = false
+}
+
+// ---- change own password (self-service, every role)
+const pwForm = reactive({ old: '', next: '' })
+const pwBusy = ref(false)
+const pwMsg = ref('')
+async function changePw() {
+  if (!pwForm.old || !pwForm.next || pwBusy.value) return
+  pwBusy.value = true
+  pwMsg.value = ''
+  try {
+    const r = await changePassword({ old_password: pwForm.old, new_password: pwForm.next })
+    if (r.ok) { pwForm.old = ''; pwForm.next = ''; pwMsg.value = '已修改' }
+    else pwMsg.value = r.reason || '修改失败'
+  } catch (e) { pwMsg.value = e.message || '暂时无法修改，请稍后再试' }
+  pwBusy.value = false
+}
+
+// ---- remove a lower-role account (same hierarchy as create; manager own store only)
+const removableAccounts = computed(() => {
+  const rank = { staff: 1, manager: 2, developer: 3 }
+  const my = rank[account.role] || 0
+  return demo.value.accounts.filter((a) => {
+    if (a.username === account.username) return false
+    const allowed = (account.role === 'developer' && a.role === 'developer')
+      || (my > (rank[a.role] || 0))
+    if (!allowed) return false
+    if (account.role === 'manager' && a.store_id !== account.store_id) return false
+    return true
+  })
+})
+const removeForm = ref('')
+const removeBusy = ref(false)
+const removeMsg = ref('')
+function initRemoveForm() {
+  if (!removeForm.value && removableAccounts.value.length) removeForm.value = removableAccounts.value[0].username
+}
+watch(removableAccounts, initRemoveForm)
+
+async function remove() {
+  if (!removeForm.value || removeBusy.value) return
+  removeBusy.value = true
+  removeMsg.value = ''
+  try {
+    const r = await removeUser({ username: removeForm.value })
+    if (r.ok) {
+      removeForm.value = ''
+      removeMsg.value = '已删除'
+      await loadDemo()
+    } else {
+      removeMsg.value = r.reason || '删除失败'
+    }
+  } catch (e) { removeMsg.value = e.message || '暂时无法删除，请稍后再试' }
+  removeBusy.value = false
+}
 </script>
 
 <template>
@@ -134,6 +236,71 @@ const roleLine = computed(() => {
           <dt>账号</dt><dd>{{ account.username }}</dd>
         </dl>
         <button class="btn btn-light btn-block" @click="signOut"><LogOut :size="16" aria-hidden="true" />退出登录</button>
+      </section>
+
+      <section v-if="canCreate" class="card" aria-labelledby="create-acct">
+        <div class="card-head">
+          <h2 id="create-acct">创建账号</h2>
+          <span class="muted small">只能创建比你低一级的身份</span>
+        </div>
+        <form class="login-form" @submit.prevent="create">
+          <label class="field-label" for="create-role">身份</label>
+          <select id="create-role" v-model="createForm.role" class="select">
+            <option v-for="r in createRoles" :key="r.key" :value="r.key">{{ r.label }}</option>
+          </select>
+          <label v-if="createForm.role !== 'developer'" class="field-label" for="create-store">门店</label>
+          <select v-if="createForm.role !== 'developer'" id="create-store" v-model="createForm.store_id" class="select" :disabled="createStores.length <= 1">
+            <option v-for="s in createStores" :key="s.store_id" :value="s.store_id">{{ s.store_name }}</option>
+          </select>
+          <label class="field-label" for="create-user">账号</label>
+          <input id="create-user" v-model="createForm.username" class="input" type="text" autocomplete="off"
+                 placeholder="例如 staff-s01" spellcheck="false" />
+          <label class="field-label" for="create-pass">密码</label>
+          <input id="create-pass" v-model="createForm.password" class="input" type="password" autocomplete="new-password" />
+          <div class="row end">
+            <button class="btn btn-dark" :disabled="!createForm.username.trim() || !createForm.password || createBusy">
+              {{ createBusy ? '正在创建…' : '创建' }}
+            </button>
+          </div>
+          <p v-if="createMsg" class="field-msg" role="alert">{{ createMsg }}</p>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="pw-title">
+        <div class="card-head"><h2 id="pw-title">修改密码</h2></div>
+        <form class="login-form" @submit.prevent="changePw">
+          <label class="field-label" for="pw-old">旧密码</label>
+          <input id="pw-old" v-model="pwForm.old" class="input" type="password" autocomplete="current-password" />
+          <label class="field-label" for="pw-new">新密码</label>
+          <input id="pw-new" v-model="pwForm.next" class="input" type="password" autocomplete="new-password" />
+          <div class="row end">
+            <button class="btn btn-dark" :disabled="!pwForm.old || !pwForm.next || pwBusy">
+              {{ pwBusy ? '正在修改…' : '修改密码' }}
+            </button>
+          </div>
+          <p v-if="pwMsg" class="field-msg" role="alert">{{ pwMsg }}</p>
+        </form>
+      </section>
+
+      <section v-if="canCreate && removableAccounts.length" class="card" aria-labelledby="remove-title">
+        <div class="card-head">
+          <h2 id="remove-title">删除账号</h2>
+          <span class="muted small">只能删除比你低一级的身份</span>
+        </div>
+        <form class="login-form" @submit.prevent="remove">
+          <label class="field-label" for="remove-user">账号</label>
+          <select id="remove-user" v-model="removeForm" class="select">
+            <option v-for="a in removableAccounts" :key="a.username" :value="a.username">
+              {{ a.username }} · {{ a.role_label }}<template v-if="a.store_name"> · {{ a.store_name }}</template>
+            </option>
+          </select>
+          <div class="row end">
+            <button class="btn btn-danger" :disabled="!removeForm || removeBusy">
+              {{ removeBusy ? '正在删除…' : '删除' }}
+            </button>
+          </div>
+          <p v-if="removeMsg" class="field-msg" role="alert">{{ removeMsg }}</p>
+        </form>
       </section>
     </div>
 

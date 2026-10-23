@@ -59,6 +59,8 @@ def today() -> str:
 
 
 # ---------------------------------------------------------------- shared Deps (one instance for the whole app)
+from agent import api_settings  # noqa: E402
+api_settings.apply_env_from_file()   # persisted API settings override .env before the LLM client is built
 DEPS: Deps = Deps.auto()
 
 

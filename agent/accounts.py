@@ -25,6 +25,7 @@ from typing import Iterable, Optional
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ("staff", "manager", "developer")
 ROLE_LABELS = {"staff": "店员", "manager": "店长", "developer": "开发者"}
+ROLE_RANK = {"staff": 1, "manager": 2, "developer": 3}
 DEMO_PASSWORD_DEFAULT = "hwpc2026"
 _PBKDF2_ITERATIONS = 120_000
 
@@ -139,6 +140,43 @@ def list_users(path: Optional[str | Path] = None) -> list[dict]:
         rows = c.execute("SELECT id, username, role, store_id, display_name FROM users"
                          " ORDER BY id").fetchall()
     return [_row_to_user(r) for r in rows]
+
+
+def can_create(creator_role: str, target_role: str) -> bool:
+    """A higher role may create a lower one; the developer may also create another developer."""
+    if creator_role == "developer" and target_role == "developer":
+        return True
+    return ROLE_RANK.get(creator_role, 0) > ROLE_RANK.get(target_role, 0)
+
+
+def change_password(username: str, old_password: str, new_password: str,
+                    path: Optional[str | Path] = None) -> bool:
+    """Change a user's own password after verifying the old one. False on wrong old password / no user."""
+    username = (username or "").strip().lower()
+    if not new_password:
+        return False
+    init_db(path)
+    with _connect(path) as c:
+        row = c.execute("SELECT password_hash, salt FROM users WHERE username = ?",
+                        (username,)).fetchone()
+    if row is None:
+        return False
+    if not hmac.compare_digest(_hash_password(old_password, row["salt"]), row["password_hash"]):
+        return False
+    salt = os.urandom(16).hex()
+    with _connect(path) as c:
+        c.execute("UPDATE users SET password_hash = ?, salt = ? WHERE username = ?",
+                  (_hash_password(new_password, salt), salt, username))
+    return True
+
+
+def delete_user(username: str, path: Optional[str | Path] = None) -> bool:
+    """Remove an account. False when the username does not exist."""
+    username = (username or "").strip().lower()
+    init_db(path)
+    with _connect(path) as c:
+        cur = c.execute("DELETE FROM users WHERE username = ?", (username,))
+        return cur.rowcount > 0
 
 
 # ---------------------------------------------------------------- demo accounts
