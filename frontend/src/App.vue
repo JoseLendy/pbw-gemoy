@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { Building2, Columns3, FlaskConical, LogIn, Scale, Settings, Sparkles, Store, X } from 'lucide-vue-next'
+import { Building2, Columns3, Eye, EyeOff, FlaskConical, LogIn, Scale, Settings, Sparkles, Store, X } from 'lucide-vue-next'
 import { account, getSettings, loadMeta, refreshAccount, refreshStatus, saveSettings, status } from './api.js'
 import WelcomeView from './views/WelcomeView.vue'
 import HomeView from './views/HomeView.vue'
@@ -84,6 +84,7 @@ const kbTone = computed(() => (status.checking ? 'amber' : status.kb_ok ? 'ok' :
 
 // ---- API settings (developer only); the key is never echoed back, only replaced
 const settingsOpen = ref(false)
+const showSecrets = reactive({ api_key: false, ima_client_id: false, ima_api_key: false })
 const settingsForm = reactive({ base_url: '', model: '', api_key: '', ima_client_id: '', ima_api_key: '' })
 const keyConfigured = ref(false)
 const imaConfigured = ref(false)
@@ -91,6 +92,9 @@ const settingsBusy = ref(false)
 const settingsMsg = ref('')
 async function openSettings() {
   settingsOpen.value = true
+  showSecrets.api_key = false
+  showSecrets.ima_client_id = false
+  showSecrets.ima_api_key = false
   settingsMsg.value = ''
   const s = await getSettings()
   settingsForm.base_url = s.base_url || ''
@@ -205,14 +209,29 @@ onBeforeUnmount(() => clearInterval(statusTimer))
         <label class="field-label" for="set-model">模型</label>
         <input id="set-model" v-model="settingsForm.model" class="input" type="text" spellcheck="false" />
         <label class="field-label" for="set-key">LLM API Key</label>
-        <input id="set-key" v-model="settingsForm.api_key" class="input" type="password" autocomplete="new-password"
-               :placeholder="keyConfigured ? '已配置，留空则不变' : '未配置'" />
+        <div class="row">
+          <input id="set-key" v-model="settingsForm.api_key" class="input" :type="showSecrets.api_key ? 'text' : 'password'" autocomplete="new-password"
+                 :placeholder="keyConfigured ? '已配置，留空则不变' : '未配置'" />
+          <button type="button" class="round round-sm" :title="showSecrets.api_key ? '隐藏' : '显示'" @click="showSecrets.api_key = !showSecrets.api_key">
+            <component :is="showSecrets.api_key ? EyeOff : Eye" :size="15" aria-hidden="true" />
+          </button>
+        </div>
         <label class="field-label" for="set-imac">IMA Client ID</label>
-        <input id="set-imac" v-model="settingsForm.ima_client_id" class="input" type="password" autocomplete="off"
-               :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+        <div class="row">
+          <input id="set-imac" v-model="settingsForm.ima_client_id" class="input" :type="showSecrets.ima_client_id ? 'text' : 'password'" autocomplete="off"
+                 :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+          <button type="button" class="round round-sm" :title="showSecrets.ima_client_id ? '隐藏' : '显示'" @click="showSecrets.ima_client_id = !showSecrets.ima_client_id">
+            <component :is="showSecrets.ima_client_id ? EyeOff : Eye" :size="15" aria-hidden="true" />
+          </button>
+        </div>
         <label class="field-label" for="set-imak">IMA API Key</label>
-        <input id="set-imak" v-model="settingsForm.ima_api_key" class="input" type="password" autocomplete="new-password"
-               :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+        <div class="row">
+          <input id="set-imak" v-model="settingsForm.ima_api_key" class="input" :type="showSecrets.ima_api_key ? 'text' : 'password'" autocomplete="new-password"
+                 :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+          <button type="button" class="round round-sm" :title="showSecrets.ima_api_key ? '隐藏' : '显示'" @click="showSecrets.ima_api_key = !showSecrets.ima_api_key">
+            <component :is="showSecrets.ima_api_key ? EyeOff : Eye" :size="15" aria-hidden="true" />
+          </button>
+        </div>
         <div class="row end">
           <button class="btn btn-dark" :disabled="settingsBusy">{{ settingsBusy ? '正在保存…' : '保存' }}</button>
         </div>
