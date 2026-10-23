@@ -123,7 +123,7 @@ def test_compare_renders_four_phones_and_similarity(monkeypatch):
     by_store = {c.store_id: c for c in cards}
     monkeypatch.setattr(compare_tab, "COMPARE_STORES", [(sid, sid) for sid in STORES])
     monkeypatch.setattr(compare_tab.ui_data, "product_card", lambda sid, mid: by_store[sid])
-    monkeypatch.setattr(compare_tab.ui_data, "compare", lambda cards, on_progress=None: batch)
+    monkeypatch.setattr(compare_tab.ui_data, "compare", lambda cards, on_progress=None, max_workers=None: batch)
     monkeypatch.setattr(compare_tab.ui_data, "DEPS", Deps.fake())
 
     body, summary = compare_tab.on_compare(MODEL, "小红书")

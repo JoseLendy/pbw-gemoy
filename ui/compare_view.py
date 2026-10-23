@@ -166,7 +166,7 @@ def on_compare(model_id: str, platform: str, store_ids=None, on_progress=None):
         return (f"<div class='hw-banner warn'>以下门店当前没有该产品的活动款，无法对比："
                 f"{_esc('、'.join(missing))}</div>", "")
     try:
-        batch = ui_data.compare(cards, on_progress=on_progress)
+        batch = ui_data.compare(cards, on_progress=on_progress, max_workers=len(cards))
     except Exception as e:  # noqa: BLE001 - a UI handler must never crash the page
         return f"<div class='hw-banner err'>{_esc(ui_data.plain_error(e))}</div>", ""
 

@@ -10,6 +10,7 @@ import { account, demoAccounts, loadMeta, login, logout, meta } from '../api.js'
 import { tintFor } from '../components/tints.js'
 
 const props = defineProps({ active: Boolean })
+const emit = defineEmits(['go'])
 
 const storeId = ref('')
 const username = ref('')

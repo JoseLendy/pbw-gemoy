@@ -150,7 +150,7 @@ def test_compare_summary_counts_failures(monkeypatch):
                         similarity=[SimilarityPair("student", "S01", "S02", 0.8, 0.4, True)],
                         regenerated=["S02"], wall_seconds=1.0)
     monkeypatch.setattr(compare_view.ui_data, "product_card", lambda sid, mid: by_store[sid])
-    monkeypatch.setattr(compare_view.ui_data, "compare", lambda cs, on_progress=None: batch)
+    monkeypatch.setattr(compare_view.ui_data, "compare", lambda cs, on_progress=None, max_workers=None: batch)
     body, summary = compare_view.on_compare("matebook-14-harmonyos", "朋友圈")
     assert "3/4 店完成" in summary and "1 店失败" in summary
     assert "跨店相似度" in body and "阈值" not in body

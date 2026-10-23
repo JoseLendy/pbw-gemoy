@@ -59,7 +59,7 @@ def test_every_role_can_generate_every_platform(session):
     assert not out["panel"]["notice"] and out["action"]["visible"] is True
 
 
-def test_a_stored_version_is_shown_with_its_generation_time(session, monkeypatch):
+def test_a_stored_version_is_shown_without_its_generation_time(session, monkeypatch):
     card, key = state._current_card(session)
     demo = dataclasses.replace(card, model_id="demobook-14", display_name=NAME)
     r = run_from_card(demo, Deps.fake())
@@ -67,7 +67,7 @@ def test_a_stored_version_is_shown_with_its_generation_time(session, monkeypatch
     monkeypatch.setattr(ui_data, "stored_version", lambda c, p=None: payload if c.platform == "小红书" else None)
     state.on_role("店长", session)
     out = state.on_platform("小红书", session)
-    assert "生成于 10-23 08:12" in out["panel"]["head"] and out["action"]["label"] == "重新生成"
+    assert "生成于" not in out["panel"]["head"] and out["action"]["label"] == "重新生成"
 
 
 def test_edit_flow_blocks_export_until_checked_and_shows_failures(session):

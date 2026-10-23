@@ -158,10 +158,12 @@ def edit(result, instruction: str, deps: Optional[Deps] = None, on_progress=None
     return _pipeline_edit(result, instruction, deps or DEPS)
 
 
-def compare(cards, staff_map: Optional[dict] = None, deps: Optional[Deps] = None, on_progress=None) -> BatchResult:
+def compare(cards, staff_map: Optional[dict] = None, deps: Optional[Deps] = None, on_progress=None,
+            max_workers: Optional[int] = None) -> BatchResult:
     if on_progress is not None:
-        return _generate_batch(cards, deps or DEPS, staff_map, on_progress=on_progress)
-    return _generate_batch(cards, deps or DEPS, staff_map)
+        return _generate_batch(cards, deps or DEPS, staff_map, on_progress=on_progress,
+                               max_workers=max_workers)
+    return _generate_batch(cards, deps or DEPS, staff_map, max_workers=max_workers)
 
 
 def verify_new_product(model_id: str) -> None:

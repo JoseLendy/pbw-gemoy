@@ -323,8 +323,7 @@ def render(session: dict, allow_fetch: bool = False) -> dict:
     prepared_slot = (SLOT_LABELS.get(getattr(actual_card, "slot", None), "")
                      if prepared and actual_card is not card else None)
     review = prepared and (display.payload or {}).get("status") == "NeedsReview"
-    panel = _card_panel(actual_card, prepared and not locked, staff, prepared_slot, review,
-                        _generated_at(display.payload) if prepared else "")
+    panel = _card_panel(actual_card, prepared and not locked, staff, prepared_slot, review, "")
     label = ("重新生成" if display is not None else
              "生成公众号文章" if card.platform == "公众号" else "生成")
     action = {"label": label, "visible": not locked and can_act(card, staff)}

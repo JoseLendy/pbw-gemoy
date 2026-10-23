@@ -482,7 +482,8 @@ def _variety_entry(card: RecommendationCard, result) -> Optional[dict]:
 
 
 def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = None,
-                   on_progress: Progress = None, keep_angle: bool = False) -> BatchResult:
+                   on_progress: Progress = None, keep_angle: bool = False,
+                   max_workers: int | None = None) -> BatchResult:
     """Run several recommendation cards and enforce 8E cross-store variety.
 
     8E compares every post with every other post of the day (agent.style.similarity.variety_breaches): too
@@ -532,8 +533,10 @@ def generate_batch(cards, deps: Deps | None = None, staff_map: dict | None = Non
             log.warning("batch: store %s failed: %s: %s", card.store_id, type(e).__name__, e)
             return e
 
-    # Stores run concurrently (BATCH_MAX_WORKERS, default 4); results keep the input order.
-    workers = max(1, min(batch_max_workers(), len(items) or 1))
+    # Stores run concurrently; the caller may pass max_workers to match the selected store count
+    # (the compare view does), else BATCH_MAX_WORKERS (default 4) applies.
+    cap = max_workers if max_workers is not None else batch_max_workers()
+    workers = max(1, min(cap, len(items) or 1))
     if workers == 1:
         outs = [safe_run(card) for card in items]
     else:

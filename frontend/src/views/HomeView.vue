@@ -30,6 +30,7 @@ let suppressInput = false
 const v = computed(() => view.value || {})
 const panel = computed(() => v.value.panel || {})
 const storeName = computed(() => (meta.stores.find((x) => x.store_id === v.value.store_id) || {}).store_name || '')
+const roleLabel = computed(() => ({ developer: '开发者', manager: '店长', staff: '店员' }[account.role] || '店员'))
 const tint = computed(() => tintFor(panel.value.product))
 const hasResult = computed(() => busy.value || !!progress.value || (!!v.value.phone_html && !v.value.phone_html.includes('hw-phone-empty')))
 
@@ -77,6 +78,7 @@ async function slow(url, body = {}) {
 const setPlatform = (p) => call('/api/store/platform', { platform: p })
 const toggleOther = () => call('/api/store/toggle-other')
 const selectOther = (idx) => call('/api/store/select-other', { idx })
+const selectStore = (sid) => call('/api/store/select', { store_id: sid })
 async function generate() {
   const run = slow('/api/store/generate')
   await nextTick()
@@ -145,7 +147,13 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
   <div class="page page-with-head">
     <header class="page-head">
       <h1>你好，{{ storeName || '门店' }}</h1>
-      <p>{{ meta.today }} · {{ v.role || '店员' }} · 今天为你准备了一条推荐</p>
+      <p>{{ meta.today }} · {{ roleLabel }} · 今天为你准备了一条推荐</p>
+      <div v-if="account.role === 'developer'" class="dev-store-pick">
+        <label class="field-label" for="dev-store">切换门店</label>
+        <select id="dev-store" class="select" :value="v.store_id" @change="selectStore($event.target.value)">
+          <option v-for="s in meta.stores" :key="s.store_id" :value="s.store_id">{{ s.store_name }}</option>
+        </select>
+      </div>
     </header>
 
     <div class="page-main">
