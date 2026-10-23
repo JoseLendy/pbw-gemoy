@@ -8,7 +8,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Python app; the node binary is kept because ima-skill/ima_api.cjs runs on Node
-FROM python:3.11-slim
+FROM python:3.13-slim
 COPY --from=web /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
 COPY requirements.txt .
