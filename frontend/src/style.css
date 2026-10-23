@@ -24,12 +24,16 @@
    instead of re-wrapping them into a ragged row. */
 .action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .action-grid .btn { padding: 0 12px; }
+/* 复制正文 is the primary action (full width); the two downloads share the row below it. */
+.action-grid .copy-btn { grid-column: 1 / -1; }
+.action-grid .img-wrap { position: relative; }
+/* .plat-menu sets left/top for the 换 menu; the image menu drops down inside the button instead. */
+.plat-menu.img-menu { left: 0; right: 0; top: calc(100% + 6px); min-width: 0; }
+.img-menu button { padding: 9px 10px; border-radius: 8px; font-size: 14px; text-align: left; background: none; border: 0; cursor: pointer; }
+.img-menu button:hover { background: var(--surface-2); }
+.img-menu .img-all { font-weight: 600; border-bottom: 1px solid var(--line); border-radius: 0; margin-bottom: 2px; }
 .quick { display: flex; flex-direction: column; gap: 8px; }
 .editor { display: flex; flex-direction: column; gap: 8px; }
-.all-platforms { margin-top: 20px; }
-.hw-all-row { display: flex; gap: 16px; flex-wrap: wrap; }
-.hw-all-col { flex: 1 1 320px; max-width: 400px; }
-.hw-all-head { font-weight: 700; margin-bottom: 8px; }
 
 /* ---------- 生成 ---------- */
 .stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -68,11 +72,18 @@
 .summary-sentence { padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink-2); font-size: 14px; margin-bottom: 14px; }
 .summary .btn-block + .muted { margin-top: 12px; }
 .summary-list + .muted { margin-bottom: 14px; }
+.page-aside .goto-next { grid-column: 1 / -1; }   /* mobile: the aside becomes a grid */
 .clar { display: flex; flex-direction: column; gap: 10px; padding: 16px; margin-bottom: 16px; border-radius: var(--r-md); background: var(--surface-2); }
 .clar-text { font-weight: 600; margin-bottom: 6px; }
 
 /* ---------- 登录 ---------- */
 .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+/* The picker is sized for the 12 demo stores; a longer chain scrolls instead of stretching the page. */
+.store-scroll { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.login-search { position: relative; margin-bottom: 12px; }
+.login-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.login-search .input { width: 100%; padding-left: 38px; }
+.store-empty { margin: 6px 0 0; }
 .store-opt { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 40px 12px 12px; border: 1.5px solid var(--line); border-radius: var(--r-md); background: var(--surface); text-align: left; transition: border-color .15s ease; }
 .store-opt:hover { border-color: var(--line-2); }
 .store-opt.on { border-color: var(--ink); }
@@ -90,12 +101,59 @@
 .hq-login { display: flex; align-items: center; gap: 18px; }
 .hq-login h2 { font-size: 18px; margin-bottom: 4px; }
 .code-form .row { margin-top: 6px; }
+.login-form { display: flex; flex-direction: column; gap: 6px; }
+.login-form .select { width: 100%; }
+.login-form .row { align-items: stretch; }
+.login-form .row .input { flex: 1; min-width: 0; }
+.demo-store { margin-top: 16px; }
+.demo-store-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; color: var(--ink-2); }
+.login-who { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.acct-info { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px 12px; margin: 0 0 16px; font-size: 14px; }
+.acct-info dt { color: var(--ink-3); }
+.acct-info dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 
+/* ---------- 开始页 (signed out, split-screen landing) ---------- */
+.landing { min-height: 100vh; display: grid; grid-template-columns: 3fr 2fr; background: #FAF7F2; color: #242321; }
+.landing-hero { display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 6vw, 96px); min-width: 0; }
+.landing-logo { width: 36px; height: 36px; object-fit: contain; }
+
+.landing-slogan { margin: 0; font-family: "华文行楷", "STXingkai", "Ma Shan Zheng", "KaiTi", "楷体", "Kaiti SC", "STKaiti", var(--font);
+  font-weight: 400; font-size: clamp(2.4rem, 5vw, 4.6rem); line-height: 1.4; letter-spacing: 0.02em; color: #242321; max-width: 12em; }
+.landing-slogan em { font-style: normal; color: #BE9D60; font-size: 1.28em; white-space: nowrap; }
+.landing-slogan .line-2 { display: inline-block; margin-left: 2em; }
+
+.landing-panel { display: flex; align-items: center; justify-content: center; padding: clamp(32px, 6vw, 96px); border-left: 1px solid #EFE8DD; }
+.landing-panel-inner { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; max-width: 340px; width: 100%; }
+.landing-logo-sm { width: 30px; height: 30px; }
+.landing-panel-name { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; }
+.landing-panel-sub { margin: 0 0 10px; font-size: 14px; color: #8E857D; line-height: 1.6; }
+.landing-panel .btn { min-width: 200px; justify-content: center; }
+
+@media (max-width: 900px) {
+  .landing { grid-template-columns: 1fr; }
+  .landing-hero { justify-content: center; }
+  .landing-slogan { font-size: clamp(2rem, 8vw, 3.2rem); }
+  .landing-panel { padding-top: 40px; border-left: 0; border-top: 1px solid #EFE8DD; }
+}
 /* ---------- 四店对比 / 对照组 (server html is light already) ---------- */
-.compare-body > div { gap: 16px !important; }
+.hw-compare-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
 .compare-body.is-busy { opacity: .6; }
 .hw-compare-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px 16px; box-shadow: var(--shadow); color: var(--ink); }
 .hw-compare-card .hw-phone { margin: 6px auto 10px; }
+.hw-compare-empty { display: flex; align-items: center; justify-content: center; border: 1.5px dashed var(--line-2); background: transparent; box-shadow: none; min-height: 360px; }
+.hw-compare-empty-inner { color: var(--ink-3); font-size: 14px; }
+.store-pick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.store-pick { display: flex; gap: 6px; align-items: center; }
+.store-pick .select { flex: 1; min-width: 0; }
+.dev-store-pick { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.dev-store-pick .select { min-width: 200px; }
+.side-set { display: flex; align-items: center; gap: 8px; width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink-2); font-size: 14px; font-weight: 600; }
+.side-set:hover { border-color: var(--line-2); color: var(--ink); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(28, 26, 25, 0.4); }
+.modal { width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto; background: var(--surface); border-radius: var(--r-lg); padding: 22px 24px; box-shadow: 0 24px 64px rgba(0,0,0,0.25); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-head h2 { font-size: 18px; font-weight: 700; }
+@media (max-width: 900px) { .hw-compare-grid { grid-template-columns: 1fr; } .hw-compare-empty { display: none; } .store-pick-grid { grid-template-columns: 1fr; } }
 .compare-body table { border-radius: 10px; overflow: hidden; }
 .baseline-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .hw-baseline-card { background: #FFF7EC; border: 1px solid #F3D3A6; border-radius: var(--r-lg); padding: 18px 20px; color: #3B2A14; }
@@ -259,7 +317,8 @@
 
 /* a page rises in each time it is shown (v-show restarts the animation) */
 .page { animation: rise-in 0.42s var(--ease-out) both; }
-.page-aside > * { animation: rise-in 0.5s var(--ease-out) both; animation-delay: 0.08s; }
+/* the entrance animation would pin opacity at 1 and hide .btn:disabled's dimming on 下一步 */
+.page-aside > *:not(.goto-next) { animation: rise-in 0.5s var(--ease-out) both; animation-delay: 0.08s; }
 .result { animation: rise-in 0.45s var(--ease-out) both; }
 .rec-art .product-art { animation: float 6s ease-in-out infinite; }
 .opt { animation: rise-in 0.4s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms); }

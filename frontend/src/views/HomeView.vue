@@ -7,6 +7,8 @@ import { account, cleanHtml, copyText, downloadUrl, meta, postJson, stream } fro
 import PhoneStage from '../components/PhoneStage.vue'
 import ProductArt from '../components/ProductArt.vue'
 import ReportFold from '../components/ReportFold.vue'
+import LivePhone from '../components/LivePhone.vue'
+import { useLiveDraft } from '../components/liveDraft.js'
 import { tintFor } from '../components/tints.js'
 import { typewrite } from '../components/typewriter.js'
 
@@ -20,6 +22,7 @@ const text = ref('')
 const copied = ref(false)
 const typing = ref(false)
 const resultEl = ref(null)
+const { live, applyDraft, applyRevision, reset: resetLive } = useLiveDraft()
 let cancelType = null
 let imageTimer = null
 let suppressInput = false
@@ -27,6 +30,7 @@ let suppressInput = false
 const v = computed(() => view.value || {})
 const panel = computed(() => v.value.panel || {})
 const storeName = computed(() => (meta.stores.find((x) => x.store_id === v.value.store_id) || {}).store_name || '')
+const roleLabel = computed(() => ({ developer: '开发者', manager: '店长', staff: '店员' }[account.role] || '店员'))
 const tint = computed(() => tintFor(panel.value.product))
 const hasResult = computed(() => busy.value || !!progress.value || (!!v.value.phone_html && !v.value.phone_html.includes('hw-phone-empty')))
 
@@ -54,13 +58,17 @@ async function slow(url, body = {}) {
   if (busy.value) return
   busy.value = true
   progress.value = ''
+  resetLive()
   try {
     await stream(url, body, (evt) => {
       if (evt.event === 'progress') progress.value = evt.message
-      else if (evt.event === 'view') { progress.value = ''; setView(evt.data, { live: true }) }
-      else if (evt.event === 'error') progress.value = '出错：' + evt.message
+      else if (evt.event === 'draft') applyDraft(evt.data)
+      else if (evt.event === 'revision') applyRevision(evt.data)
+      else if (evt.event === 'view') { progress.value = ''; resetLive(); setView(evt.data, { live: true }) }
+      else if (evt.event === 'error') { resetLive(); progress.value = '出错：' + evt.message }
     })
   } catch (e) {
+    resetLive()
     progress.value = '出错：' + (e.message || '请求失败')
   } finally {
     busy.value = false
@@ -70,6 +78,7 @@ async function slow(url, body = {}) {
 const setPlatform = (p) => call('/api/store/platform', { platform: p })
 const toggleOther = () => call('/api/store/toggle-other')
 const selectOther = (idx) => call('/api/store/select-other', { idx })
+const selectStore = (sid) => call('/api/store/select', { store_id: sid })
 async function generate() {
   const run = slow('/api/store/generate')
   await nextTick()
@@ -122,12 +131,12 @@ function scheduleImagePoll() {
 }
 
 async function open() {
+  // The server binds a staff/manager login to its own store and role; this only follows a #store= demo
+  // deep link for a developer, and never touches the role of a store account.
   await call('/api/store/view')
-  // the 登录 account wins over the server default; a #store= deep link wins over both
   const m = /[#&]store=(S\d+)/.exec(location.hash || '')
-  const want = m ? m[1] : (account.kind === 'store' ? account.store_id : '')
+  const want = m ? m[1] : ''
   if (want && view.value && view.value.store_id !== want) await call('/api/store/select', { store_id: want })
-  if (account.kind === 'store' && view.value && view.value.role !== account.role) await call('/api/store/role', { role: account.role })
 }
 watch(() => props.active, (on) => { if (on) open() })
 onMounted(() => { if (props.active) open() })
@@ -138,7 +147,13 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
   <div class="page page-with-head">
     <header class="page-head">
       <h1>你好，{{ storeName || '门店' }}</h1>
-      <p>{{ meta.today }} · {{ v.role || '店员' }} · 今天为你准备了一条推荐</p>
+      <p>{{ meta.today }} · {{ roleLabel }} · 今天为你准备了一条推荐</p>
+      <div v-if="account.role === 'developer'" class="dev-store-pick">
+        <label class="field-label" for="dev-store">切换门店</label>
+        <select id="dev-store" class="select" :value="v.store_id" @change="selectStore($event.target.value)">
+          <option v-for="s in meta.stores" :key="s.store_id" :value="s.store_id">{{ s.store_name }}</option>
+        </select>
+      </div>
     </header>
 
     <div class="page-main">
@@ -158,7 +173,10 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
             <!-- a locked 新品款 can only be generated once 总部端 确认发布, so point at it instead of dead-ending -->
             <div v-if="panel.locked" class="note warn locked-note">
               <span>{{ panel.locked }}</span>
-              <button class="btn btn-light btn-sm" @click="goHq">去总部端「确认发布」</button>
+              <button v-if="account.role === 'manager' || account.role === 'developer'" class="btn btn-light btn-sm" @click="goHq">
+                去总部端「确认发布」
+              </button>
+              <span v-else class="small">等待店长在总部端确认本店发布后，即可生成。</span>
             </div>
             <div v-if="panel.notice" class="note info">{{ panel.notice }}</div>
             <ul v-if="panel.reasons && panel.reasons.length" class="reasons" aria-label="为什么推这条">
@@ -196,7 +214,10 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
         <div v-if="busy || progress" class="progress-line" role="status" aria-live="polite">{{ progress || '正在准备…' }}</div>
 
         <div class="result-grid">
-          <PhoneStage :html="v.phone_html" :busy="busy" />
+          <!-- live: the copy types into the phone while the pipeline writes it; the final view replaces it -->
+          <PhoneStage :html="v.phone_html" :busy="busy" :live="!!(live && busy)">
+            <template v-if="live && busy" #live><LivePhone :live="live" scope="store" /></template>
+          </PhoneStage>
           <div class="result-side">
             <template v-if="!busy">
               <div v-if="v.editable" class="quick">

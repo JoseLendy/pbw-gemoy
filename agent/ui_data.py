@@ -39,6 +39,7 @@ from agent.recommend.store_data import (
     all_cards as _all_cards, cards_for as _cards_for, default_card as _default_card,
     fact_card_overrides as _fact_card_overrides, load_store_data,
     product_card as _product_card, reset_demo_state, set_fact_card_status,
+    set_store_approval, store_approvals,
 )
 from agent.runs import latest_run
 from agent.schemas import (
@@ -58,6 +59,8 @@ def today() -> str:
 
 
 # ---------------------------------------------------------------- shared Deps (one instance for the whole app)
+from agent import api_settings  # noqa: E402
+api_settings.apply_env_from_file()   # persisted API settings override .env before the LLM client is built
 DEPS: Deps = Deps.auto()
 
 
@@ -139,10 +142,11 @@ def question_pool() -> dict:
 
 # ---------------------------------------------------------------- generate / edit / baseline / compare
 def generate(card: RecommendationCard, staff: Optional[StaffContext] = None, deps: Optional[Deps] = None,
-             on_progress=None):
-    """on_progress(stage, message) is forwarded to the pipeline so the UI can stream progress lines."""
-    if on_progress is not None:
-        return _run_from_card(card, deps or DEPS, staff, on_progress=on_progress)
+             on_progress=None, on_post=None):
+    """on_progress(stage, message) streams progress lines; on_post(kind, post) streams the live draft
+    ("draft" after the first write, "revision" after each rewrite) so the UI can type it in."""
+    if on_progress is not None or on_post is not None:
+        return _run_from_card(card, deps or DEPS, staff, on_progress=on_progress, on_post=on_post)
     return _run_from_card(card, deps or DEPS, staff)
 
 
@@ -150,21 +154,28 @@ def baseline(card: RecommendationCard, deps: Optional[Deps] = None):
     return _generate_baseline(card, deps=deps or DEPS)
 
 
-def edit(result, instruction: str, deps: Optional[Deps] = None, on_progress=None):
-    if on_progress is not None:
-        return _pipeline_edit(result, instruction, deps or DEPS, on_progress=on_progress)
+def edit(result, instruction: str, deps: Optional[Deps] = None, on_progress=None, on_post=None):
+    if on_progress is not None or on_post is not None:
+        return _pipeline_edit(result, instruction, deps or DEPS, on_progress=on_progress, on_post=on_post)
     return _pipeline_edit(result, instruction, deps or DEPS)
 
 
-def compare(cards, staff_map: Optional[dict] = None, deps: Optional[Deps] = None, on_progress=None) -> BatchResult:
+def compare(cards, staff_map: Optional[dict] = None, deps: Optional[Deps] = None, on_progress=None,
+            max_workers: Optional[int] = None) -> BatchResult:
     if on_progress is not None:
-        return _generate_batch(cards, deps or DEPS, staff_map, on_progress=on_progress)
-    return _generate_batch(cards, deps or DEPS, staff_map)
+        return _generate_batch(cards, deps or DEPS, staff_map, on_progress=on_progress,
+                               max_workers=max_workers)
+    return _generate_batch(cards, deps or DEPS, staff_map, max_workers=max_workers)
 
 
 def verify_new_product(model_id: str) -> None:
-    """HQ "确认发布" (plan §7): drafts are never used for store posts until this runs."""
+    """HQ "确认发布" (plan §7), every store: drafts are never used for store posts until this runs."""
     set_fact_card_status(model_id, "verified")
+
+
+def verify_new_product_for_store(model_id: str, store_id: str) -> None:
+    """A manager confirms a new product for their own store: only that store's staff unlock it."""
+    set_store_approval(model_id, store_id)
 
 
 _RESET_TOKEN = 0
@@ -299,11 +310,14 @@ def publish_stats(days: int = 14) -> dict:
     return {"window": [dates[0], dates[-1]] if dates else ["", ""], "days": len(dates), "stats": stats}
 
 
-def question_stats(limit: int = 8) -> list[dict]:
-    """Aggregated customer questions (chip text), most frequent first."""
+def question_stats(limit: int = 8, store_id: Optional[str] = None) -> list[dict]:
+    """Aggregated customer questions (chip text), most frequent first. `store_id` scopes it to one store
+    (the manager's 总部端); the default aggregates every store."""
     data = load_store_data()
     agg: dict[str, dict] = {}
     for q in data.questions:
+        if store_id and q.get("store_id") != store_id:
+            continue
         key = q.get("chip_id") or q.get("text") or "?"
         row = agg.setdefault(key, {"chip_id": key, "text": q.get("text") or key,
                                    "count": 0, "stores": set()})
@@ -441,10 +455,14 @@ def recommendation_distribution(date: Optional[str] = None) -> list[dict]:
     return out
 
 
-def new_release_drafts() -> list[dict]:
+def new_release_drafts(store_id: Optional[str] = None) -> list[dict]:
     """Draft new-release fact cards (models.csv): field groups + source titles, never KB values.
-    Values are pending HQ review; only the field names and the source documents are shown."""
+    Values are pending HQ review; only the field names and the source documents are shown.
+
+    `store_id` scopes the approval state to one store (a manager's view); without it a product counts as
+    verified when HQ verified it process-wide. `approved_stores` is always the full per-store list."""
     data = load_store_data()
+    approved = store_approvals()
     out = []
     for m in data.models:
         if str(m.get("is_new_release", "")).lower() != "true":
@@ -461,9 +479,14 @@ def new_release_drafts() -> list[dict]:
             refs.append({"ref_id": f"R{len(refs) + 1}", "fields": fields,
                          "source_title": source.rsplit("/", 1)[-1], "source_path": source})
         status = m.get("fact_card_status") or "draft"
+        stores = approved.get(m["model_id"], [])
+        approved_here = bool(store_id) and store_id in stores
+        verified = status == "verified" or approved_here
         out.append({"model_id": m["model_id"], "display_name": m["display_name"],
-                    "launch_date": m.get("launch_date") or "", "status": status,
-                    "verified": status == "verified", "refs": refs})
+                    "launch_date": m.get("launch_date") or "",
+                    "status": "verified" if verified else status,
+                    "verified": verified, "approved_here": approved_here,
+                    "approved_stores": stores, "refs": refs})
     return out
 
 

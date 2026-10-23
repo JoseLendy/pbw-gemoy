@@ -5,19 +5,22 @@ Serves /api/* (JSON and NDJSON streams) and the built frontend (frontend/dist). 
 ui/state.py (门店端), ui/compare_view.py, ui/hq_view.py, ui/baseline_view.py; the manual flow is below.
 Every backend call goes through agent.ui_data / agent.pipeline exactly as the Gradio UI did.
 
-Never returns keys, Client ID or media ids in a form the user can read. No raw KB viewer, no bulk export.
+Never returns keys, Client ID or media ids in a form the user can read. No raw KB viewer; the only bulk
+download is the current post's own images on the 生成 tab (one zip per post).
 Public-demo protections: per-session and global rate limits, plain-language errors, one bounded pool for
 slow (ima + LLM) work so page loads and store switches never wait behind a generation.
 """
 from __future__ import annotations
 
-import hmac
+import io
 import json
 import logging
 import os
 import queue
+import re
 import threading
 import time
+import zipfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -39,21 +42,48 @@ for _proxy_var in ("NO_PROXY", "no_proxy"):
     _hosts = [h.strip() for h in os.environ.get(_proxy_var, "").split(",") if h.strip()]
     os.environ[_proxy_var] = ",".join(dict.fromkeys([*_hosts, "127.0.0.1", "localhost", "::1"]))
 
-from fastapi import FastAPI, Request  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from agent.formatter import render_download, render_publishable, render_report  # noqa: E402
+from agent import accounts  # noqa: E402
+from agent import api_settings  # noqa: E402
+from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags  # noqa: E402
 from agent.intake import SCENARIO_CHIPS  # noqa: E402
-from agent.pipeline import edit as pipeline_edit, run as pipeline_run, run_all_platforms  # noqa: E402
+from agent.pipeline import edit as pipeline_edit, run as pipeline_run  # noqa: E402
+from agent.recommend import store_data  # noqa: E402
 from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult  # noqa: E402
 from agent.ui_data import DEPS, plain_error, reset_token, today as demo_today  # noqa: E402
 from ui import baseline_view, compare_view, hq_view, state  # noqa: E402
-from ui.components import banner_html, fresh_session, phone_html, stop_html, talk_card_html  # noqa: E402
+from ui.components import (  # noqa: E402
+    banner_html, cached_image_bytes, fresh_session, phone_html, stop_html, talk_card_html,
+)
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("server")
+
+# ---------------------------------------------------------------- accounts + role sessions
+# Accounts live in SQLite (agent/accounts.py); a login binds a role to the browser tab's session id.
+# The database is seeded once with staff-<store> / manager-<store> / dev demo accounts. Approvals written
+# by a manager are store-scoped, so only that store's staff unlock the new product.
+ROLE_LABELS = accounts.ROLE_LABELS
+_AUTH: dict[str, dict] = {}
+_AUTH_LOCK = threading.Lock()
+
+
+def _bootstrap_accounts() -> None:
+    """Create the schema, seed demo accounts and restore persisted approvals into the recommender."""
+    try:
+        accounts.init_db()
+        accounts.seed_demo_accounts(state.STORES)
+        for model_id, store_id in accounts.all_approvals():
+            store_data.set_store_approval(model_id, store_id)
+    except Exception as e:  # noqa: BLE001 - a missing database must not take the app down
+        log.warning("账号数据库不可用，登录与新品审核可能无法使用: %s", e)
+
+
+_bootstrap_accounts()
 
 KB_NAME = "任德耀新建华为PC知识库"
 DIST = ROOT / "frontend" / "dist"
@@ -209,11 +239,91 @@ def _session(sid: str) -> dict:
 
 def _store_session(sid: str) -> dict:
     s = _session(sid)
-    if not s.get("cards"):
+    acct = _account_of(sid)
+    if acct and acct.get("store_id") and acct.get("role") in ("staff", "manager"):
+        # A store login owns the store and the role: a deep link or an old session cannot switch it.
+        if (s.get("store_id") != acct["store_id"] or not s.get("cards")
+                or s.get("staff") != state.staff_for(acct)):
+            with s["lock"]:
+                state.bind_account(s, acct)
+    elif not s.get("cards"):
         with s["lock"]:
             if not s.get("cards"):
                 state.load_store(s, state.STORES[0]["store_id"])
     return s
+
+
+# ---------------------------------------------------------------- auth helpers
+def _sid(value: str) -> str:
+    return (value or "").strip()[:64]
+
+
+def _account_of(sid: str) -> dict | None:
+    with _AUTH_LOCK:
+        acct = _AUTH.get(_sid(sid))
+        return dict(acct) if acct else None
+
+
+def _require(sid: str, roles: tuple[str, ...] = ("staff", "manager", "developer")) -> dict:
+    """Resolve the session's account, or stop with 401/403. Every store / generate endpoint is gated."""
+    sid = _sid(sid)
+    if not sid:
+        raise HTTPException(status_code=401, detail="会话已过期，请刷新页面后重新登录")
+    acct = _account_of(sid)
+    if acct is None:
+        raise HTTPException(status_code=401, detail="请先登录")
+    if roles and acct.get("role") not in roles:
+        raise HTTPException(status_code=403, detail="当前账号无权访问这个页面")
+    return acct
+
+
+def _require_demo(sid: str) -> None:
+    """四店对比 / 对照组: developer accounts only (the demo views are not part of the store flow)."""
+    _require(sid, ("developer",))
+
+
+def _account_payload(user: dict) -> dict:
+    """The login account the client stores: no hash, no salt, no password."""
+    role = user.get("role") or "staff"
+    store_id = user.get("store_id") or ""
+    store = next((s for s in state.STORES if s["store_id"] == store_id), {})
+    return {
+        "username": user.get("username") or "",
+        "role": role,
+        "role_label": ROLE_LABELS.get(role, role),
+        "store_id": store_id,
+        "store_name": store.get("store_name") or "",
+        "display_name": user.get("display_name") or store.get("store_name") or ROLE_LABELS.get(role, role),
+        "kind": "store" if role in ("staff", "manager") else "dev",
+    }
+
+
+def _public_account(acct: dict | None) -> dict | None:
+    if not acct:
+        return None
+    keys = ("username", "role", "role_label", "store_id", "store_name", "display_name", "kind")
+    return {k: acct.get(k, "") for k in keys}
+
+
+def _reset_session(sid: str) -> dict:
+    """A fresh session for login / logout. We swap in a brand-new dict (with a new lock) instead of
+    clearing the old one in place, so a logout is not blocked by an in-flight generation that holds the
+    old lock — the old worker keeps its orphaned copy and finishes harmlessly. The old account's hidden
+    platform prefetch is cancelled before the swap."""
+    sid = _sid(sid)
+    fresh = fresh_session()
+    fresh["id"] = sid
+    fresh["manual"] = {"id": sid, "reset_seen": reset_token()}
+    fresh["lock"] = threading.Lock()
+    fresh["_touched"] = time.time()
+    with _SESSIONS_LOCK:
+        old = _SESSIONS.get(sid)
+        if old is not None:
+            cancel = (old.get("manual") or {}).get("prefetch_cancel")
+            if cancel is not None:
+                cancel.set()
+        _SESSIONS[sid] = fresh
+    return fresh
 
 
 # ---------------------------------------------------------------- NDJSON streaming helper
@@ -253,6 +363,46 @@ def _progress(emit: Callable[[dict], None]):
     return cb
 
 
+def _stream_payload(post) -> dict:
+    """One draft / revision event for the live phone preview: the post text and where each image sits.
+    Media ids never leave the server (the client asks for images by index)."""
+    return {
+        "platform": post.platform,
+        "post": {
+            "title": strip_fact_tags(post.title),
+            "intro": strip_fact_tags(post.intro),
+            "body": [strip_fact_tags(b) for b in post.body],
+            "cta": strip_fact_tags(post.cta),
+            "tags": [strip_fact_tags(t) for t in post.tags],
+        },
+        "images": [{"idx": i, "position": im.position, "caption": im.caption or ""}
+                   for i, im in enumerate(post.images)],
+    }
+
+
+def _post_stream(emit: Callable[[dict], None], host: dict):
+    """The pipeline's on_post hook: stream the draft after write_post and every revision after a rewrite.
+    The latest post is kept on the session so /api/stream-image can serve the preview's images."""
+    def cb(kind: str, post) -> None:
+        host["stream_post"] = post
+        emit({"event": kind, "data": _stream_payload(post)})
+    return cb
+
+
+def _image_bytes(media_id: str) -> bytes | None:
+    """Preview image bytes from the local cache, fetching once if needed; None when unavailable."""
+    data = cached_image_bytes(media_id)
+    if data:
+        return data
+    fetch = getattr(DEPS, "fetch_image_bytes", None)
+    if fetch is not None:
+        try:
+            return fetch(media_id)
+        except Exception as e:  # noqa: BLE001 - a missing preview image must never break a generation
+            log.info("stream image fetch failed: %s", e)
+    return None
+
+
 def _file(name: str, data: bytes, media_type: str) -> Response:
     from urllib.parse import quote
     return Response(content=data, media_type=media_type,
@@ -262,6 +412,12 @@ def _file(name: str, data: bytes, media_type: str) -> Response:
 # ---------------------------------------------------------------- request bodies
 class Sid(BaseModel):
     session_id: str = ""
+
+
+class LoginReq(Sid):
+    username: str = ""
+    password: str = ""
+    store_id: str = ""   # the store picked on the login screen; staff/manager must match it
 
 
 class StoreReq(Sid):
@@ -295,6 +451,24 @@ class ChipReq(Sid):
 class CompareReq(Sid):
     model_id: str = ""
     platform: str = "朋友圈"
+    store_ids: Optional[list] = None
+
+
+class CreateAccountReq(Sid):
+    username: str = ""
+    password: str = ""
+    role: str = "staff"
+    store_id: str = ""
+    display_name: str = ""
+
+
+class ChangePasswordReq(Sid):
+    old_password: str = ""
+    new_password: str = ""
+
+
+class RemoveUserReq(Sid):
+    username: str = ""
 
 
 class ManualReq(Sid):
@@ -324,6 +498,7 @@ def api_meta() -> dict:
         "platforms": list(state.PLATFORM_TABS),
         "compare_products": products,
         "compare_platforms": list(compare_view.PLATFORMS),
+        "compare_stores": [sid for sid, _ in compare_view.COMPARE_STORES],
         "manual_platforms": [PLATFORM_LABELS[p] for p in ("xiaohongshu", "moments", "wechat_article", "poster", "douyin")],
         "manual_examples": MANUAL_EXAMPLES,
         "manual_products": manual_products(),
@@ -342,21 +517,179 @@ def manual_products() -> list[dict]:
         return []
 
 
-# ---------------------------------------------------------------- engineer gate (演示功能)
-class UnlockReq(BaseModel):
-    code: str = ""
+# ---------------------------------------------------------------- login / logout
+@app.post("/api/auth/login")
+def api_auth_login(req: LoginReq) -> dict:
+    sid = _sid(req.session_id)
+    username = (req.username or "").strip().lower()
+    store_id = (req.store_id or "").strip().upper()
+    if not sid:
+        return {"ok": False, "reason": "会话已过期，请刷新页面后重试", "account": None}
+    if not username or not req.password:
+        return {"ok": False, "reason": "请输入账号和密码", "account": None}
+    try:
+        user = accounts.authenticate(username, req.password)
+    except Exception as e:  # noqa: BLE001
+        log.warning("login database unavailable: %s", e)
+        return {"ok": False, "reason": "登录服务暂时不可用，请稍后再试", "account": None}
+    if user is None:
+        time.sleep(0.35)   # slows guessing a little
+        return {"ok": False, "reason": "账号或密码不正确", "account": None}
+    acct = _account_payload(user)
+    # The shop picked on the login screen is part of the credential for a store account: it cannot sign
+    # in under another store (the developer account is company-wide and ignores the picker).
+    if acct["role"] != "developer":
+        if not store_id:
+            return {"ok": False, "reason": "请先选择门店", "account": None}
+        if store_id != acct["store_id"]:
+            where = acct["store_name"] or acct["store_id"] or "门店"
+            return {"ok": False, "reason": f"该账号属于{where}，请选择对应门店", "account": None}
+    with _AUTH_LOCK:
+        _AUTH[sid] = acct
+    s = _reset_session(sid)
+    with s["lock"]:
+        if acct["store_id"]:
+            state.bind_account(s, acct)
+            state.render(s)
+    return {"ok": True, "reason": "", "account": _public_account(acct)}
 
 
-@app.post("/api/engineer/unlock")
-def api_engineer_unlock(req: UnlockReq) -> dict:
-    """Soft gate for the engineer-only demo views (四店对比 / 对照组). The passcode lives in .env as
-    ENGINEER_PASSCODE; it is never returned or logged. This hides the views, it is not access control."""
-    expected = os.getenv("ENGINEER_PASSCODE", "")
-    if not expected:
-        return {"ok": False, "reason": "未配置工程师口令（.env 中的 ENGINEER_PASSCODE）"}
-    time.sleep(0.4)   # slows guessing a little
-    ok = hmac.compare_digest(req.code.encode("utf-8"), expected.encode("utf-8"))
-    return {"ok": ok, "reason": "" if ok else "口令不正确"}
+@app.post("/api/auth/logout")
+def api_auth_logout(req: Sid) -> dict:
+    sid = _sid(req.session_id)
+    with _AUTH_LOCK:
+        _AUTH.pop(sid, None)
+    if sid:
+        _reset_session(sid)
+    return {"ok": True}
+
+
+@app.post("/api/auth/me")
+def api_auth_me(req: Sid) -> dict:
+    return {"account": _public_account(_account_of(req.session_id))}
+
+
+@app.get("/api/auth/demo-accounts")
+def api_auth_demo_accounts() -> dict:
+    """Demo shortcuts for the login screen: usernames and roles, never a hash. The password is only
+    included when the operator has not set DEMO_PASSWORD."""
+    try:
+        users = accounts.list_users()
+    except Exception as e:  # noqa: BLE001
+        log.warning("demo accounts unavailable: %s", e)
+        users = []
+    order = {"staff": 0, "manager": 1, "developer": 2}
+    out = []
+    for u in users:
+        p = _account_payload(u)
+        out.append({k: p[k] for k in ("username", "role", "role_label", "store_id", "store_name", "display_name")})
+    out.sort(key=lambda x: (order.get(x["role"], 9), x["store_id"], x["username"]))
+    return {"accounts": out, "password": accounts.demo_password()}
+
+
+@app.post("/api/auth/create")
+def api_auth_create(req: CreateAccountReq) -> dict:
+    """A logged-in account creates accounts for strictly lower roles: developer → manager/staff,
+    manager → staff. A manager's new staff are bound to the manager's own store."""
+    creator = _require(req.session_id)
+    creator_role = creator.get("role") or "staff"
+    target = (req.role or "").strip().lower()
+    if target not in accounts.ROLES:
+        return {"ok": False, "reason": "无效的身份"}
+    if not accounts.can_create(creator_role, target):
+        return {"ok": False, "reason": "无权创建这个身份"}
+
+    store_id = ""
+    if target in ("staff", "manager"):
+        store_id = (req.store_id or "").strip().upper()
+        if creator_role == "manager":
+            store_id = creator.get("store_id") or ""   # a manager only adds staff to their own store
+        if not store_id:
+            return {"ok": False, "reason": "请选择门店"}
+        if store_id not in {s["store_id"] for s in state.STORES}:
+            return {"ok": False, "reason": "门店不存在"}
+
+    username = (req.username or "").strip()
+    if not username or not req.password:
+        return {"ok": False, "reason": "请输入账号和密码"}
+    if len(req.password) < 4:
+        return {"ok": False, "reason": "密码至少 4 位"}
+
+    display_name = (req.display_name or "").strip()
+    if not display_name:
+        store = next((s for s in state.STORES if s["store_id"] == store_id), {})
+        name = store.get("store_name") or store_id or ""
+        display_name = f"{name} {accounts.ROLE_LABELS[target]}" if name else accounts.ROLE_LABELS[target]
+
+    try:
+        ok = accounts.create_user(username, req.password, target, store_id, display_name)
+    except ValueError as e:  # noqa: BLE001
+        return {"ok": False, "reason": str(e)}
+    if not ok:
+        return {"ok": False, "reason": "账号已存在"}
+    return {"ok": True, "reason": ""}
+
+
+@app.post("/api/auth/change-password")
+def api_auth_change_password(req: ChangePasswordReq) -> dict:
+    """Each user changes their own password (old password is verified first)."""
+    acct = _require(req.session_id)
+    if not req.old_password or not req.new_password:
+        return {"ok": False, "reason": "请输入旧密码和新密码"}
+    if len(req.new_password) < 4:
+        return {"ok": False, "reason": "新密码至少 4 位"}
+    if not accounts.change_password(acct["username"], req.old_password, req.new_password):
+        return {"ok": False, "reason": "旧密码不正确"}
+    return {"ok": True, "reason": ""}
+
+
+@app.post("/api/auth/remove")
+def api_auth_remove(req: RemoveUserReq) -> dict:
+    """Remove a lower-role account: developer → manager/staff (any store), manager → staff (own store)."""
+    creator = _require(req.session_id)
+    creator_role = creator.get("role") or "staff"
+    username = (req.username or "").strip().lower()
+    if not username:
+        return {"ok": False, "reason": "请输入账号"}
+    target = accounts.get_user(username)
+    if target is None:
+        return {"ok": False, "reason": "账号不存在"}
+    if not accounts.can_create(creator_role, target["role"]):
+        return {"ok": False, "reason": "无权删除这个身份"}
+    if creator_role == "manager" and target.get("store_id") != creator.get("store_id"):
+        return {"ok": False, "reason": "只能删除本店的账号"}
+    if username == (creator.get("username") or "").lower():
+        return {"ok": False, "reason": "不能删除自己的账号"}
+    accounts.delete_user(username)
+    return {"ok": True, "reason": ""}
+
+
+@app.get("/api/settings")
+def api_settings_get(session_id: str = "") -> dict:
+    """Current API config (developer only). Secrets are never returned — only whether they are set."""
+    _require(session_id, ("developer",))
+    return api_settings.public()
+
+
+class SettingsReq(Sid):
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    ima_client_id: str = ""
+    ima_api_key: str = ""
+
+
+@app.post("/api/settings")
+def api_settings_save(req: SettingsReq) -> dict:
+    """Update the API config (developer only); a blank secret keeps the current value."""
+    _require(req.session_id, ("developer",))
+    try:
+        api_settings.save({"base_url": req.base_url, "api_key": req.api_key, "model": req.model,
+                           "ima_client_id": req.ima_client_id, "ima_api_key": req.ima_api_key})
+    except Exception as e:  # noqa: BLE001
+        log.warning("api settings save failed: %s", e)
+        return {"ok": False, "reason": plain_error(e)}
+    return {"ok": True, "reason": ""}
 
 
 def compare_view_products() -> list[dict]:
@@ -371,6 +704,7 @@ def compare_view_products() -> list[dict]:
 @app.post("/api/store/view")
 def api_store_view(req: Sid) -> dict:
     """Opening / returning to the tab: reset and 确认发布 are picked up here (ui/state.on_tab_select)."""
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_tab_select(s)
@@ -378,13 +712,17 @@ def api_store_view(req: Sid) -> dict:
 
 @app.post("/api/store/select")
 def api_store_select(req: StoreReq) -> dict:
+    acct = _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
+        if acct["role"] in ("staff", "manager") and req.store_id != acct["store_id"]:
+            return state.render(s)          # a store login cannot switch to another store
         return state.on_store_change(req.store_id, s)
 
 
 @app.post("/api/store/platform")
 def api_store_platform(req: PlatformReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_platform(req.platform, s)
@@ -392,13 +730,17 @@ def api_store_platform(req: PlatformReq) -> dict:
 
 @app.post("/api/store/role")
 def api_store_role(req: RoleReq) -> dict:
+    acct = _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
+        if acct["role"] in ("staff", "manager"):
+            return state.render(s)          # the role comes from the login, not from a client toggle
         return state.on_role(req.role, s)
 
 
 @app.post("/api/store/toggle-other")
 def api_store_toggle(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_switch_toggle(s)
@@ -406,6 +748,7 @@ def api_store_toggle(req: Sid) -> dict:
 
 @app.post("/api/store/select-other")
 def api_store_select_other(req: IdxReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_select_other(int(req.idx), s)
@@ -413,6 +756,7 @@ def api_store_select_other(req: IdxReq) -> dict:
 
 @app.post("/api/store/generate")
 def api_store_generate(req: Sid):
+    _require(req.session_id)
     s = _store_session(req.session_id)
     blocked = rate_check(s["id"])
     if blocked:
@@ -423,7 +767,7 @@ def api_store_generate(req: Sid):
 
     def worker(emit):
         with s["lock"]:
-            view = state.on_generate(s, on_progress=_progress(emit))
+            view = state.on_generate(s, on_progress=_progress(emit), on_post=_post_stream(emit, s))
         emit({"event": "view", "data": view})
 
     return _ndjson(worker)
@@ -431,6 +775,7 @@ def api_store_generate(req: Sid):
 
 @app.post("/api/store/quick-edit")
 def api_store_quick_edit(req: EditReq):
+    _require(req.session_id)
     s = _store_session(req.session_id)
     instruction = req.instruction if req.instruction in state.QUICK_EDITS else ""
     if not instruction:
@@ -445,7 +790,7 @@ def api_store_quick_edit(req: EditReq):
 
     def worker(emit):
         with s["lock"]:
-            view = state.on_quick_edit(s, instruction, on_progress=_progress(emit))
+            view = state.on_quick_edit(s, instruction, on_progress=_progress(emit), on_post=_post_stream(emit, s))
         emit({"event": "view", "data": view})
 
     return _ndjson(worker)
@@ -453,6 +798,7 @@ def api_store_quick_edit(req: EditReq):
 
 @app.post("/api/store/recovery")
 def api_store_recovery(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_show_recovery(s)
@@ -460,6 +806,7 @@ def api_store_recovery(req: Sid) -> dict:
 
 @app.post("/api/store/publish")
 def api_store_publish(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_publish(s)
@@ -467,6 +814,7 @@ def api_store_publish(req: Sid) -> dict:
 
 @app.post("/api/store/text-input")
 def api_store_text_input(req: TextReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_text_input(req.text, s)
@@ -474,6 +822,7 @@ def api_store_text_input(req: TextReq) -> dict:
 
 @app.post("/api/store/check-save")
 def api_store_check_save(req: TextReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_check_save(req.text, s)
@@ -481,6 +830,7 @@ def api_store_check_save(req: TextReq) -> dict:
 
 @app.post("/api/store/revert")
 def api_store_revert(req: Sid) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_revert(s)
@@ -488,6 +838,7 @@ def api_store_revert(req: Sid) -> dict:
 
 @app.post("/api/store/chip")
 def api_store_chip(req: ChipReq) -> dict:
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         return state.on_chip(req.chip_id, s)
@@ -496,6 +847,7 @@ def api_store_chip(req: ChipReq) -> dict:
 @app.post("/api/store/image-tick")
 def api_store_image_tick(req: Sid) -> dict:
     """The client polls this while image_pending: returns {"changed": bool, "data": view?}."""
+    _require(req.session_id)
     s = _store_session(req.session_id)
     with s["lock"]:
         view = state.on_image_tick(s)
@@ -504,6 +856,7 @@ def api_store_image_tick(req: Sid) -> dict:
 
 @app.get("/api/store/export-zip")
 def api_store_export_zip(session_id: str = ""):
+    _require(session_id)
     s = _store_session(session_id)
     with s["lock"]:
         out = state.export_zip(s)
@@ -514,6 +867,7 @@ def api_store_export_zip(session_id: str = ""):
 
 @app.get("/api/store/download-md")
 def api_store_download_md(session_id: str = ""):
+    _require(session_id)
     s = _store_session(session_id)
     with s["lock"]:
         out = state.download_text(s)
@@ -524,6 +878,7 @@ def api_store_download_md(session_id: str = ""):
 
 @app.get("/api/store/save-image")
 def api_store_save_image(session_id: str = ""):
+    _require(session_id)
     s = _store_session(session_id)
     with s["lock"]:
         out = state.save_image(s)
@@ -536,19 +891,21 @@ def api_store_save_image(session_id: str = ""):
 # ---------------------------------------------------------------- 三店对比
 @app.post("/api/compare/stored")
 def api_compare_stored(req: CompareReq) -> dict:
-    body, summary = compare_view.on_show_stored(req.model_id, req.platform)
+    _require_demo(req.session_id)
+    body, summary = compare_view.on_show_stored(req.model_id, req.platform, req.store_ids)
     return {"html": body, "summary": summary}
 
 
 @app.post("/api/compare/run")
 def api_compare_run(req: CompareReq):
+    _require_demo(req.session_id)
     s = _session(req.session_id)
     blocked = rate_check(s["id"])
     if blocked:
         return JSONResponse({"event": "result", "html": f'<div class="hw-banner err">{blocked}</div>', "summary": ""})
 
     def worker(emit):
-        body, summary = compare_view.on_compare(req.model_id, req.platform, on_progress=_progress(emit))
+        body, summary = compare_view.on_compare(req.model_id, req.platform, req.store_ids, on_progress=_progress(emit))
         emit({"event": "result", "html": body, "summary": summary})
 
     return _ndjson(worker)
@@ -556,19 +913,51 @@ def api_compare_run(req: CompareReq):
 
 # ---------------------------------------------------------------- 总部端
 @app.get("/api/hq/view")
-def api_hq_view() -> dict:
-    return hq_view.view()
+def api_hq_view(session_id: str = "") -> dict:
+    acct = _require(session_id, ("manager", "developer"))
+    if acct["role"] == "manager" and not acct["store_id"]:
+        raise HTTPException(status_code=403, detail="这个店长账号还没有绑定门店")
+    store_id = acct["store_id"] if acct["role"] == "manager" else ""
+    out = hq_view.view(store_id=store_id, store_name=acct.get("store_name", ""))
+    out["scope"] = "store" if store_id else "all"
+    out["can_reset"] = acct["role"] == "developer"
+    return out
 
 
 @app.post("/api/hq/verify")
-def api_hq_verify() -> dict:
-    return hq_view.on_verify()
+def api_hq_verify(req: Sid) -> dict:
+    """A manager confirms for their own store; a developer confirms for every store. The approval is
+    persisted so it survives a restart, and the recommender is updated in the same request."""
+    acct = _require(req.session_id, ("manager", "developer"))
+    if acct["role"] == "manager" and not acct["store_id"]:
+        raise HTTPException(status_code=403, detail="这个店长账号还没有绑定门店")
+    store_id = acct["store_id"] if acct["role"] == "manager" else ""
+    out = hq_view.on_verify(store_id=store_id, store_name=acct.get("store_name", ""))
+    model_id = out.get("verified_model") or ""
+    if model_id:
+        try:
+            if store_id:
+                accounts.approve_product(model_id, store_id, acct.get("username", ""))
+            else:
+                for st in state.STORES:
+                    accounts.approve_product(model_id, st["store_id"], acct.get("username", ""))
+        except Exception as e:  # noqa: BLE001 - the in-memory unlock still happened
+            log.warning("approval could not be written to the database: %s", e)
+    out["scope"] = "store" if store_id else "all"
+    out["can_reset"] = acct["role"] == "developer"
+    return out
 
 
 @app.post("/api/hq/reset")
-def api_hq_reset() -> dict:
-    """重置演示: backend state + every UI session (已发布 marks, chips, shown results). Prepared posts stay."""
+def api_hq_reset(req: Sid) -> dict:
+    """重置演示 (developer only): backend state + every UI session (已发布 marks, chips, shown results).
+    Prepared posts and accounts stay; persisted approvals are cleared."""
+    _require(req.session_id, ("developer",))
     out = hq_view.on_reset()
+    try:
+        accounts.clear_approvals()
+    except Exception as e:  # noqa: BLE001
+        log.warning("approvals could not be cleared from the database: %s", e)
     with _SESSIONS_LOCK:
         for s in _SESSIONS.values():
             sid, lock = s.get("id"), s.get("lock")
@@ -583,12 +972,14 @@ def api_hq_reset() -> dict:
 # ---------------------------------------------------------------- 对照组
 @app.post("/api/baseline/stored")
 def api_baseline_stored(req: StoreReq) -> dict:
+    _require_demo(req.session_id)
     left, right, meta = baseline_view.on_show_stored(req.store_id or state.STORES[0]["store_id"])
     return {"left": left, "right": right, "meta": meta}
 
 
 @app.post("/api/baseline/run")
 def api_baseline_run(req: StoreReq):
+    _require_demo(req.session_id)
     s = _session(req.session_id)
     blocked = rate_check(s["id"])
     if blocked:
@@ -624,11 +1015,81 @@ def _manual(s: dict) -> dict:
     return m
 
 
-def _manual_render(r: RunResult) -> dict:
-    return {"kind": "result", "phone_html": phone_html(r, DEPS), "talk_html": talk_card_html(r),
-            "banner_html": banner_html(r), "report_md": render_report(r), "pub_text": render_publishable(r.post),
-            "platform_label": PLATFORM_LABELS.get(r.post.platform, r.post.platform),
-            "model": r.model.canonical_name, "images": len(r.post.images)}
+# Every platform the 直接输入 / 点选 flow can write. The hidden prefetch walks this order, so 换 is instant.
+MANUAL_PLATFORM_KEYS = ("moments", "xiaohongshu", "wechat_article", "poster", "douyin")
+_MANUAL_LABEL_TO_KEY = {v: k for k, v in PLATFORM_LABELS.items()}
+
+
+def _manual_cache(m: dict) -> dict:
+    """What the client polls while 换 is disabled: is every platform cached, and how far did we get."""
+    cached = m.get("results") or {}
+    keys = [k for k in MANUAL_PLATFORM_KEYS if isinstance(cached.get(k), RunResult)]
+    job = m.get("prefetch") or {}
+    return {"ready": len(keys) == len(MANUAL_PLATFORM_KEYS),
+            "cached": [PLATFORM_LABELS[k] for k in keys],
+            "state": job.get("state") or "idle", "done": len(keys), "total": len(MANUAL_PLATFORM_KEYS),
+            "error": job.get("error") or ""}
+
+
+def _start_prefetch(m: dict, current: RunResult) -> None:
+    """换 is disabled until this finishes: generate every other platform from the current post and cache
+    each one under its own platform key. A new generation cancels the old job; edits never touch the
+    other platforms' entries (product decision 2026-10-22)."""
+    old = m.get("prefetch_cancel")
+    if old is not None:
+        old.set()
+    cancel = threading.Event()
+    m["prefetch_cancel"] = cancel
+    m["prefetch"] = {"state": "running", "error": ""}
+    have = {k for k in (m.get("results") or {}) if isinstance((m.get("results") or {}).get(k), RunResult)}
+    todo = [k for k in MANUAL_PLATFORM_KEYS if k not in have]
+
+    def one(key: str) -> None:
+        if cancel.is_set():
+            return
+        try:
+            r = pipeline_edit(current, f"换成{PLATFORM_LABELS[key]}", DEPS)
+        except Exception as e:  # noqa: BLE001 - one platform failing must not stop the others
+            log.info("manual prefetch %s failed: %s", key, e)
+            return
+        if isinstance(r, RunResult) and not cancel.is_set():
+            m.setdefault("results", {})[r.post.platform] = r
+
+    def worker() -> None:
+        ex = ThreadPoolExecutor(max_workers=max(1, min(GEN_CONCURRENCY, len(todo))))
+        try:
+            for f in [ex.submit(one, k) for k in todo]:
+                f.result()
+        except Exception as e:  # noqa: BLE001
+            log.exception("manual prefetch failed")
+            m["prefetch"] = {"state": "error", "error": plain_error(e)}
+            return
+        finally:
+            if m.get("prefetch_cancel") is cancel:      # a newer generation may own the slot by now
+                m.pop("prefetch_cancel", None)
+            ex.shutdown(wait=False, cancel_futures=True)
+        if m.get("prefetch_cancel") is not None and m.get("prefetch_cancel") is not cancel:
+            return                                      # superseded: the new job owns the status
+        if cancel.is_set():
+            m["prefetch"] = {"state": "idle", "error": ""}
+            return
+        cached = m.get("results") or {}
+        missing = [k for k in MANUAL_PLATFORM_KEYS if not isinstance(cached.get(k), RunResult)]
+        # A failed platform must not leave the client polling forever (换 would stay disabled silently).
+        m["prefetch"] = ({"state": "error", "error": "部分平台没有缓存成功"} if missing
+                         else {"state": "done", "error": ""})
+
+    threading.Thread(target=worker, daemon=True, name="manual-prefetch").start()
+
+
+def _manual_render(r: RunResult, m: dict | None = None) -> dict:
+    out = {"kind": "result", "phone_html": phone_html(r, DEPS), "talk_html": talk_card_html(r),
+           "banner_html": banner_html(r), "report_md": render_report(r), "pub_text": render_publishable(r.post),
+           "platform_label": PLATFORM_LABELS.get(r.post.platform, r.post.platform),
+           "model": r.model.canonical_name, "images": len(r.post.images)}
+    if m is not None:
+        out["cache"] = _manual_cache(m)
+    return out
 
 
 def _manual_handle(result, m: dict) -> dict:
@@ -638,13 +1099,16 @@ def _manual_handle(result, m: dict) -> dict:
                 "questions": [{"slot": q.slot, "text": q.text, "options": list(q.options)} for q in result.questions]}
     if isinstance(result, NeedsHuman):
         return {"kind": "stop", "html": stop_html(result.message)}
+    if not isinstance(result, RunResult):        # EditBlocked and friends: a message, never a crash
+        return {"kind": "stop", "html": stop_html(getattr(result, "message", "无法完成这次修改。"))}
     m["result"] = result
     m.setdefault("results", {})[result.post.platform] = result
-    return _manual_render(result)
+    return _manual_render(result, m)
 
 
 @app.post("/api/manual/generate")
 def api_manual_generate(req: ManualReq):
+    _require(req.session_id)
     s = _session(req.session_id)
     m = _manual(s)
     text = (req.text or "").strip()
@@ -658,21 +1122,63 @@ def api_manual_generate(req: ManualReq):
         return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html(blocked, "生成失败")}})
     form = dict(req.form or {}) if is_follow_up else {}
     m["clarification"] = None
+    # A new generation is a new post: cancel the old prefetch and drop its cache, or 换 would offer the
+    # previous product's copy. In-flight workers check the cancel flag before writing (see _start_prefetch).
+    old = m.get("prefetch_cancel")
+    if old is not None:
+        old.set()
+    m.pop("prefetch_cancel", None)
+    m["results"] = {}
+    m["prefetch"] = {"state": "idle", "error": ""}
+    m.pop("stream_post", None)
 
     def worker(emit):
         try:
-            result = pipeline_run(text, form or None, DEPS, _progress(emit))
+            result = pipeline_run(text, form or None, DEPS, _progress(emit), _post_stream(emit, m))
         except Exception as e:  # noqa: BLE001
             log.exception("manual run failed")
             emit({"event": "done", "data": {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}})
             return
-        emit({"event": "done", "data": _manual_handle(result, m)})
+        data = _manual_handle(result, m)
+        if isinstance(result, RunResult) and data.get("kind") == "result":
+            _start_prefetch(m, result)     # hidden: cache the other four platforms so 换 is instant
+            data["cache"] = _manual_cache(m)
+        emit({"event": "done", "data": data})
 
     return _ndjson(worker)
 
 
+@app.post("/api/manual/check")
+def api_manual_check(req: ManualReq) -> dict:
+    """Intake only, before the 直接输入 flow leaves the input page: ask the missing questions first, so the
+    result page is never a dead end. The clarification is remembered, so the follow-up generate call with
+    the same text + form is accepted as a continuation (api_manual_generate)."""
+    _require(req.session_id)
+    s = _session(req.session_id)
+    m = _manual(s)
+    text = (req.text or "").strip()
+    if not text:
+        return {"kind": "stop", "html": stop_html("请先输入一句顾客描述。", "生成失败")}
+    form = dict(req.form or {}) or None
+
+    def work():
+        return DEPS.parse_task(text, DEPS.catalog, form, DEPS.llm)
+
+    try:
+        parsed = GEN_POOL.submit(work).result(timeout=240)
+    except Exception as e:  # noqa: BLE001
+        log.exception("manual check failed")
+        return {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}
+    if isinstance(parsed, Clarification):
+        m["clarification"] = parsed
+        return {"kind": "clarification",
+                "questions": [{"slot": q.slot, "text": q.text, "options": list(q.options)} for q in parsed.questions]}
+    return {"kind": "ok"}
+
+
 @app.post("/api/manual/edit")
 def api_manual_edit(req: ManualEditReq):
+    _require(req.session_id)
     s = _session(req.session_id)
     m = _manual(s)
     prev = m.get("result")
@@ -685,9 +1191,45 @@ def api_manual_edit(req: ManualEditReq):
 
     def worker(emit):
         try:
-            result = pipeline_edit(prev, instruction, DEPS, _progress(emit))
+            result = pipeline_edit(prev, instruction, DEPS, _progress(emit), _post_stream(emit, m))
         except Exception as e:  # noqa: BLE001
             log.exception("manual edit failed")
+            emit({"event": "done", "data": {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}})
+            return
+        data = _manual_handle(result, m)
+        if isinstance(result, RunResult):
+            data["cache"] = _manual_cache(m)    # an edit only re-caches its own platform
+        emit({"event": "done", "data": data})
+
+    return _ndjson(worker)
+
+
+@app.post("/api/manual/platform")
+def api_manual_platform(req: PlatformReq):
+    """换平台: a cached platform switches instantly (the current one is always cached before the switch);
+    only a platform the hidden prefetch has not reached yet is generated on demand."""
+    _require(req.session_id)
+    s = _session(req.session_id)
+    m = _manual(s)
+    prev = m.get("result")
+    if prev is None:
+        return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html("请先生成一篇内容。", "提示")}})
+    key = _MANUAL_LABEL_TO_KEY.get(req.platform)
+    if key is None:
+        return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html("不认识这个平台。", "提示")}})
+    cached = (m.get("results") or {}).get(key)
+    if isinstance(cached, RunResult):
+        m["result"] = cached
+        return JSONResponse({"event": "done", "data": _manual_render(cached, m), "cached": True})
+    blocked = rate_check(s["id"])
+    if blocked:
+        return JSONResponse({"event": "done", "data": {"kind": "stop", "html": stop_html(blocked, "生成失败")}})
+
+    def worker(emit):
+        try:
+            result = pipeline_edit(prev, f"换成{req.platform}", DEPS, _progress(emit), _post_stream(emit, m))
+        except Exception as e:  # noqa: BLE001
+            log.exception("manual platform switch failed")
             emit({"event": "done", "data": {"kind": "stop", "html": stop_html(plain_error(e), "生成失败")}})
             return
         emit({"event": "done", "data": _manual_handle(result, m)})
@@ -695,49 +1237,112 @@ def api_manual_edit(req: ManualEditReq):
     return _ndjson(worker)
 
 
-@app.post("/api/manual/all-platforms")
-def api_manual_all(req: Sid):
-    s = _session(req.session_id)
-    m = _manual(s)
-    prev = m.get("result")
-    if prev is None:
-        return JSONResponse({"event": "done", "html": stop_html("请先生成一篇内容。", "提示")})
-    blocked = rate_check(s["id"])
-    if blocked:
-        return JSONResponse({"event": "done", "html": stop_html(blocked, "提示")})
+@app.post("/api/manual/cache-status")
+def api_manual_cache_status(req: Sid) -> dict:
+    """Polled while 换 is disabled: ready once every platform is cached."""
+    _require(req.session_id)
+    return _manual_cache(_manual(_session(req.session_id)))
 
-    def worker(emit):
-        try:
-            outs = run_all_platforms(prev, deps=DEPS)
-        except Exception as e:  # noqa: BLE001
-            emit({"event": "done", "html": stop_html(plain_error(e), "生成失败")})
-            return
-        cols = []
-        for p, res in outs.items():
-            if isinstance(res, RunResult):
-                m.setdefault("results", {})[p] = res
-                cols.append(f'<div class="hw-all-col"><div class="hw-all-head">{PLATFORM_LABELS[p]}</div>'
-                            f'{banner_html(res)}{phone_html(res, DEPS)}</div>')
-            else:
-                cols.append(f'<div class="hw-all-col">{stop_html(getattr(res, "message", "需要补充信息"))}</div>')
-        emit({"event": "done", "html": '<div class="hw-all-row">' + "".join(cols) + "</div>"})
 
-    return _ndjson(worker)
+@app.get("/api/manual/download-image")
+def api_manual_download_image(session_id: str = "", idx: int = 0):
+    """保存图片: one image at a time. 下载所有图片 (below) zips the same per-post images."""
+    _require(session_id)
+    s = _session(session_id)
+    r = _manual(s).get("result")
+    if r is None:
+        return JSONResponse({"error": "还没有生成内容，请先生成后再下载。"}, status_code=409)
+    images = list(getattr(getattr(r, "post", None), "images", None) or [])
+    if not images:
+        return JSONResponse({"error": "这篇内容没有可下载的图片。"}, status_code=409)
+    i = max(0, min(int(idx), len(images) - 1))
+    im = images[i]
+    data = cached_image_bytes(im.media_id)
+    if not data:
+        fetch = getattr(DEPS, "fetch_image_bytes", None)
+        if fetch is not None:
+            try:
+                data = fetch(im.media_id)
+            except Exception as e:  # noqa: BLE001
+                log.info("manual image fetch failed: %s", e)
+    if not data:
+        return JSONResponse({"error": "图片还在准备中，请稍后再试。"}, status_code=409)
+    ext = "png" if data[:4] == b"\x89PNG" else ("svg" if data[:4] == b"<svg" else "jpg")
+    mime = {"png": "image/png", "svg": "image/svg+xml", "jpg": "image/jpeg"}[ext]
+    label = PLATFORM_LABELS.get(getattr(r.post, "platform", ""), "")
+    name = re.sub(r"[^\w一-鿿-]+", "_", f"{r.model.canonical_name}_{label}_图{i + 1}")[:60] + f".{ext}"
+    return _file(name, data, mime)
+
+
+@app.get("/api/manual/download-images")
+def api_manual_download_images(session_id: str = ""):
+    """下载所有图片: the current post's images as one zip, numbered like the per-image saves (1.png, 2.jpg …).
+    Product decision 2026-10-22: the 生成 tab offers the zip the lead asked for; still per post, never the KB.
+    Images that are not cached yet are fetched once; ones that fail are left out instead of failing the zip."""
+    _require(session_id)
+    s = _session(session_id)
+    r = _manual(s).get("result")
+    if r is None:
+        return JSONResponse({"error": "还没有生成内容，请先生成后再下载。"}, status_code=409)
+    images = list(getattr(getattr(r, "post", None), "images", None) or [])
+    if not images:
+        return JSONResponse({"error": "这篇内容没有可下载的图片。"}, status_code=409)
+    fetch = getattr(DEPS, "fetch_image_bytes", None)
+    buf = io.BytesIO()
+    added = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for i, im in enumerate(images):
+            data = cached_image_bytes(im.media_id)
+            if not data and fetch is not None:
+                try:
+                    data = fetch(im.media_id)
+                except Exception as e:  # noqa: BLE001
+                    log.info("manual image fetch failed: %s", e)
+            if not data:
+                continue
+            ext = "png" if data[:4] == b"\x89PNG" else ("svg" if data[:4] == b"<svg" else "jpg")
+            z.writestr(f"{i + 1}.{ext}", data)      # same numbering as 第 N 张
+            added += 1
+    if not added:
+        return JSONResponse({"error": "图片还在准备中，请稍后再试。"}, status_code=409)
+    label = PLATFORM_LABELS.get(getattr(r.post, "platform", ""), "")
+    name = re.sub(r"[^\w一-鿿-]+", "_", f"{r.model.canonical_name}_{label}_图片")[:60] + ".zip"
+    return _file(name, buf.getvalue(), "application/zip")
+
+
+@app.get("/api/stream-image")
+def api_stream_image(session_id: str = "", scope: str = "manual", idx: int = 0):
+    """The live preview's own image, addressed by index so no media id is ever sent to the browser.
+    Served inline for the streaming phone (draft / revision events); 404 when not available yet."""
+    _require(session_id)
+    s = _store_session(session_id) if scope == "store" else _session(session_id)
+    host = s if scope == "store" else _manual(s)
+    post = host.get("stream_post")
+    images = list(getattr(post, "images", None) or [])
+    if not (0 <= int(idx) < len(images)):
+        return Response(status_code=404)
+    data = _image_bytes(images[int(idx)].media_id)
+    if not data:
+        return Response(status_code=404)
+    mime = ("image/png" if data[:4] == b"\x89PNG"
+            else "image/svg+xml" if data[:4] == b"<svg" else "image/jpeg")
+    return Response(content=data, media_type=mime, headers={"Cache-Control": "private, max-age=600"})
 
 
 @app.get("/api/manual/download-md")
 def api_manual_download(session_id: str = ""):
+    _require(session_id)
     s = _session(session_id)
     r = _manual(s).get("result")
     if r is None:
         return JSONResponse({"error": "当前没有可下载的内容。"}, status_code=409)
-    import re
     name = re.sub(r"[^\w一-鿿-]+", "_", f"{r.model.canonical_name}_{PLATFORM_LABELS[r.post.platform]}")[:60]
     return _file(f"{name}.md", render_download(r).encode("utf-8"), "text/markdown; charset=utf-8")
 
 
 @app.post("/api/manual/reset")
 def api_manual_reset(req: Sid) -> dict:
+    _require(req.session_id)
     s = _session(req.session_id)
     s["manual"] = {"id": s.get("id"), "reset_seen": reset_token()}
     return {"ok": True}

@@ -1,135 +1,386 @@
 <script setup>
-// 登录: a demo account picker (no password) — a store account with a role, or the HQ account. The right
-// column holds the engineer entry that unlocks the demo-only views.
-import { computed, ref, watch } from 'vue'
-import { ArrowRight, Building2, Check, Columns3, KeyRound, LockKeyhole, Scale, Store } from 'lucide-vue-next'
-import { account, engineer, lockEngineer, meta, postJson, setAccount, unlockEngineer } from '../api.js'
+// 登录: choose a shop, then sign in with a username + password backed by the server's account database.
+// The demo-account list signs in with one click (when the default demo password is in use). A successful
+// login goes straight to 门店端; reopening the 登录 tab shows the 账号信息 page (门店 / 账号 / 退出登录).
+// The role decides which pages show: staff → 门店端 + 生成; manager → those + 总部端 (and confirming new
+// products for their own store); developer → everything, including the demo-only 四店对比 / 对照组.
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { Check, KeyRound, LogOut, Search, Store } from 'lucide-vue-next'
+import { account, changePassword, createAccount, demoAccounts, loadMeta, login, logout, meta, removeUser } from '../api.js'
 import { tintFor } from '../components/tints.js'
 
 const props = defineProps({ active: Boolean })
 const emit = defineEmits(['go'])
 
-const ROLES = [
-  { key: '店员', hint: '日常推荐与发布，全部平台都能生成' },
-  { key: '店长', hint: '负责门店账号，全部平台都能生成' },
-]
-const kind = ref(account.kind || 'store')
-const storeId = ref(account.store_id || '')
-const role = ref(account.role || '店员')
-watch(() => props.active, (on) => { if (on) { kind.value = account.kind || 'store'; storeId.value = account.store_id || storeId.value } })
-const chosen = computed(() => meta.stores.find((s) => s.store_id === storeId.value))
+const storeId = ref('')
+const username = ref('')
+const password = ref('')
 const busy = ref(false)
+const msg = ref('')
+const pwEl = ref(null)
+const demo = ref({ accounts: [], password: '' })
+const chosen = computed(() => meta.stores.find((s) => s.store_id === storeId.value))
+// A shop search: useful as soon as the chain has more stores than one screen of cards.
+const query = ref('')
+const filteredStores = computed(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return meta.stores
+  return meta.stores.filter((s) => [s.store_name, s.district, s.anchor, s.store_id]
+    .some((v) => (v || '').toLowerCase().includes(q)))
+})
+const userHint = computed(() => {
+  const s = storeId.value.toLowerCase()
+  return s ? `例如 staff-${s} 或 manager-${s}` : '例如 staff-s01'
+})
 
-async function enter() {
-  if (kind.value === 'hq') { setAccount({ kind: 'hq', store_id: '', store_name: '' }); emit('go', 'hq'); return }
-  if (!chosen.value) return
+const groups = computed(() => {
+  const out = []
+  const byStore = new Map()
+  for (const a of demo.value.accounts) {
+    if (a.role === 'developer') continue
+    if (!byStore.has(a.store_id)) {
+      const known = meta.stores.find((s) => s.store_id === a.store_id) || {}
+      byStore.set(a.store_id, { store_id: a.store_id, store_name: a.store_name || known.store_name || a.store_id, accounts: [] })
+      out.push(byStore.get(a.store_id))
+    }
+    byStore.get(a.store_id).accounts.push(a)
+  }
+  // The demo list always shows one shop's 店员 + 店长 (plus the developer below): the picked shop, or
+  // the first shop when none is picked, so it stays a compact three-account list for every sign-out.
+  const pick = storeId.value || (meta.stores[0] && meta.stores[0].store_id) || ''
+  return out.filter((g) => g.store_id === pick)
+})
+const devAccounts = computed(() => demo.value.accounts.filter((a) => a.role === 'developer'))
+
+async function loadDemo() {
+  if (!meta.stores.length) await loadMeta()
+  demo.value = await demoAccounts()
+  initCreateForm()
+  initRemoveForm()
+}
+onMounted(loadDemo)
+watch(() => props.active, (on) => { if (on && !account.role) loadDemo() })
+
+async function submit() {
+  if (!username.value.trim() || !password.value || busy.value) return
   busy.value = true
+  msg.value = ''
   try {
-    await postJson('/api/store/select', { store_id: chosen.value.store_id })
-    await postJson('/api/store/role', { role: role.value })
-  } catch { /* the home view applies the account again when it opens */ }
-  setAccount({ kind: 'store', store_id: chosen.value.store_id, store_name: chosen.value.store_name, role: role.value })
+    const r = await login(username.value, password.value, storeId.value)
+    if (r.ok) {
+      password.value = ''
+      msg.value = ''
+      emit('go', 'home')   // a successful login (manual or demo) lands on the recommendation page
+    } else {
+      msg.value = r.reason || '登录失败'
+    }
+  } catch (e) {
+    msg.value = e.message || '暂时无法登录，请稍后再试'
+  }
   busy.value = false
-  emit('go', 'home')
 }
 
-const code = ref('')
-const codeMsg = ref('')
-const unlocking = ref(false)
-async function unlock() {
-  if (!code.value || unlocking.value) return
-  unlocking.value = true
-  codeMsg.value = ''
+/** One-click demo sign-in; without a known demo password it only fills the account field. */
+async function quick(a) {
+  if (busy.value) return
+  storeId.value = a.store_id || ''
+  username.value = a.username
+  if (!demo.value.password) {
+    msg.value = '请输入该账号的密码'
+    pwEl.value && pwEl.value.focus()
+    return
+  }
+  password.value = demo.value.password
+  await submit()
+}
+
+async function signOut() {
+  await logout()
+  msg.value = ''
+}
+
+const roleLine = computed(() => {
+  if (account.role === 'developer') return '全部页面 · 四店对比 · 对照组'
+  if (account.role === 'manager') return '门店端 · 生成 · 总部端'
+  if (account.role === 'staff') return '门店端 · 生成'
+  return ''
+})
+
+// ---- create account: a strictly higher role adds lower-role accounts
+const createRoles = computed(() => {
+  if (account.role === 'developer') return [
+    { key: 'developer', label: '开发者' },
+    { key: 'manager', label: '店长' },
+    { key: 'staff', label: '店员' },
+  ]
+  if (account.role === 'manager') return [{ key: 'staff', label: '店员' }]
+  return []
+})
+const canCreate = computed(() => createRoles.value.length > 0)
+const createStores = computed(() => (account.role === 'manager'
+  ? meta.stores.filter((s) => s.store_id === account.store_id)
+  : meta.stores))
+const createForm = reactive({ role: 'staff', store_id: '', username: '', password: '' })
+const createBusy = ref(false)
+const createMsg = ref('')
+
+function initCreateForm() {
+  if (createRoles.value.length) createForm.role = createRoles.value[0].key
+  // Always reset to the first available store: a previous account's store must not linger in a
+  // dropdown that no longer lists it (e.g. switching between managers of different shops).
+  createForm.store_id = createStores.value.length ? createStores.value[0].store_id : ''
+}
+watch(() => account.role, initCreateForm)
+
+async function create() {
+  if (!createForm.username.trim() || !createForm.password || createBusy.value) return
+  createBusy.value = true
+  createMsg.value = ''
   try {
-    const r = await unlockEngineer(code.value)
-    codeMsg.value = r.ok ? '' : r.reason || '口令不正确'
-    if (r.ok) code.value = ''
-  } catch { codeMsg.value = '暂时无法验证，请稍后再试' }
-  unlocking.value = false
+    const r = await createAccount({ ...createForm })
+    if (r.ok) {
+      createForm.username = ''
+      createForm.password = ''
+      createMsg.value = '已创建'
+      await loadDemo()   // the new account shows up in the demo list
+    } else {
+      createMsg.value = r.reason || '创建失败'
+    }
+  } catch (e) {
+    createMsg.value = e.message || '暂时无法创建，请稍后再试'
+  }
+  createBusy.value = false
+}
+
+// ---- change own password (self-service, every role)
+const pwForm = reactive({ old: '', next: '' })
+const pwBusy = ref(false)
+const pwMsg = ref('')
+async function changePw() {
+  if (!pwForm.old || !pwForm.next || pwBusy.value) return
+  pwBusy.value = true
+  pwMsg.value = ''
+  try {
+    const r = await changePassword({ old_password: pwForm.old, new_password: pwForm.next })
+    if (r.ok) { pwForm.old = ''; pwForm.next = ''; pwMsg.value = '已修改' }
+    else pwMsg.value = r.reason || '修改失败'
+  } catch (e) { pwMsg.value = e.message || '暂时无法修改，请稍后再试' }
+  pwBusy.value = false
+}
+
+// ---- remove a lower-role account (same hierarchy as create; manager own store only)
+const removableAccounts = computed(() => {
+  const rank = { staff: 1, manager: 2, developer: 3 }
+  const my = rank[account.role] || 0
+  return demo.value.accounts.filter((a) => {
+    if (a.username === account.username) return false
+    const allowed = (account.role === 'developer' && a.role === 'developer')
+      || (my > (rank[a.role] || 0))
+    if (!allowed) return false
+    if (account.role === 'manager' && a.store_id !== account.store_id) return false
+    return true
+  })
+})
+const removeForm = ref('')
+const removeBusy = ref(false)
+const removeMsg = ref('')
+function initRemoveForm() {
+  if (!removeForm.value && removableAccounts.value.length) removeForm.value = removableAccounts.value[0].username
+}
+watch(removableAccounts, initRemoveForm)
+
+async function remove() {
+  if (!removeForm.value || removeBusy.value) return
+  removeBusy.value = true
+  removeMsg.value = ''
+  try {
+    const r = await removeUser({ username: removeForm.value })
+    if (r.ok) {
+      removeForm.value = ''
+      removeMsg.value = '已删除'
+      await loadDemo()
+    } else {
+      removeMsg.value = r.reason || '删除失败'
+    }
+  } catch (e) { removeMsg.value = e.message || '暂时无法删除，请稍后再试' }
+  removeBusy.value = false
 }
 </script>
 
 <template>
-  <div class="page page-with-head page-with-tools">
+  <div class="page page-with-head">
     <header class="page-head">
-      <h1>登录</h1>
-      <p>选择演示账号，无需密码。</p>
+      <h1>{{ account.role ? '账号信息' : '登录' }}</h1>
+      <p v-if="account.role">已登录。左侧菜单里的页面按你的身份开放。</p>
+      <p v-else>选择门店，再输入账号和密码登录。不同身份看到的页面不同，店长可在总部端确认本店新品。</p>
     </header>
 
-    <div class="seg seg-lg page-tools" role="radiogroup" aria-label="账号类型">
-      <button class="seg-item" role="radio" :aria-checked="kind === 'store'" :class="{ on: kind === 'store' }" @click="kind = 'store'"><Store :size="16" aria-hidden="true" />门店账号</button>
-      <button class="seg-item" role="radio" :aria-checked="kind === 'hq'" :class="{ on: kind === 'hq' }" @click="kind = 'hq'"><Building2 :size="16" aria-hidden="true" />总部账号</button>
-    </div>
-
-    <div class="page-main">
-      <template v-if="kind === 'store'">
-        <section class="card" aria-labelledby="login-store">
-          <div class="card-head"><h2 id="login-store">选择门店</h2><span class="muted small">{{ meta.stores.length }} 家门店</span></div>
-          <div class="store-grid" role="radiogroup" aria-labelledby="login-store">
-            <button v-for="s in meta.stores" :key="s.store_id" class="store-opt" role="radio" :aria-checked="storeId === s.store_id"
-                    :class="{ on: storeId === s.store_id }" @click="storeId = s.store_id">
-              <span class="store-mark" :style="{ background: tintFor(s.store_id).tile, color: tintFor(s.store_id).ink }">{{ s.store_name.slice(0, 1) }}</span>
-              <span class="store-text"><b>{{ s.store_name }}</b><small>{{ s.district }}<template v-if="s.anchor"> · {{ s.anchor }}</template></small></span>
-              <span class="opt-check" aria-hidden="true"><Check :size="14" :stroke-width="3" /></span>
-            </button>
-          </div>
-        </section>
-
-        <section class="card" aria-labelledby="login-role">
-          <div class="card-head"><h2 id="login-role">身份</h2></div>
-          <div class="role-grid" role="radiogroup" aria-labelledby="login-role">
-            <button v-for="r in ROLES" :key="r.key" class="role-opt" role="radio" :aria-checked="role === r.key" :class="{ on: role === r.key }" @click="role = r.key">
-              <b>{{ r.key }}</b><small>{{ r.hint }}</small>
-            </button>
-          </div>
-        </section>
-
-        <div class="row">
-          <button class="btn btn-dark btn-lg" :disabled="!chosen || busy" @click="enter">进入门店端<ArrowRight :size="18" aria-hidden="true" /></button>
-          <span v-if="!chosen" class="muted small">先选择一家门店</span>
+    <!-- signed in: just this account, the shop it belongs to, and a way out -->
+    <div v-if="account.role" class="page-main">
+      <section class="card" aria-labelledby="acct-title">
+        <div class="card-head">
+          <h2 id="acct-title">账号信息</h2>
+          <span class="muted small">{{ account.role_label }}</span>
         </div>
-      </template>
-
-      <template v-else>
-        <section class="card hq-login">
-          <span class="store-mark big" :style="{ background: tintFor('hq').tile, color: tintFor('hq').ink }"><Building2 :size="26" aria-hidden="true" /></span>
+        <div class="login-who">
+          <span class="store-mark" :style="{ background: tintFor(account.store_id || 'hq').tile, color: tintFor(account.store_id || 'hq').ink }">
+            {{ (account.store_name || account.display_name || '开').slice(0, 1) }}
+          </span>
           <div>
-            <h2>总部运营</h2>
-            <p class="muted">查看各门店发布情况、审核新品上市资料、汇总顾客高频问题。</p>
+            <b>{{ account.display_name || account.username }}</b>
+            <div class="muted small">{{ roleLine }}</div>
           </div>
-        </section>
-        <div class="row"><button class="btn btn-dark btn-lg" @click="enter">进入总部端<ArrowRight :size="18" aria-hidden="true" /></button></div>
-      </template>
+        </div>
+        <dl class="acct-info">
+          <dt>门店</dt><dd>{{ account.store_name || '全部门店' }}</dd>
+          <dt>账号</dt><dd>{{ account.username }}</dd>
+        </dl>
+        <button class="btn btn-light btn-block" @click="signOut"><LogOut :size="16" aria-hidden="true" />退出登录</button>
+      </section>
+
+      <section v-if="canCreate" class="card" aria-labelledby="create-acct">
+        <div class="card-head">
+          <h2 id="create-acct">创建账号</h2>
+          <span class="muted small">只能创建比你低一级的身份</span>
+        </div>
+        <form class="login-form" @submit.prevent="create">
+          <label class="field-label" for="create-role">身份</label>
+          <select id="create-role" v-model="createForm.role" class="select">
+            <option v-for="r in createRoles" :key="r.key" :value="r.key">{{ r.label }}</option>
+          </select>
+          <label v-if="createForm.role !== 'developer'" class="field-label" for="create-store">门店</label>
+          <select v-if="createForm.role !== 'developer'" id="create-store" v-model="createForm.store_id" class="select" :disabled="createStores.length <= 1">
+            <option v-for="s in createStores" :key="s.store_id" :value="s.store_id">{{ s.store_name }}</option>
+          </select>
+          <label class="field-label" for="create-user">账号</label>
+          <input id="create-user" v-model="createForm.username" class="input" type="text" autocomplete="off"
+                 placeholder="例如 staff-s01" spellcheck="false" />
+          <label class="field-label" for="create-pass">密码</label>
+          <input id="create-pass" v-model="createForm.password" class="input" type="password" autocomplete="new-password" />
+          <div class="row end">
+            <button class="btn btn-dark" :disabled="!createForm.username.trim() || !createForm.password || createBusy">
+              {{ createBusy ? '正在创建…' : '创建' }}
+            </button>
+          </div>
+          <p v-if="createMsg" class="field-msg" role="alert">{{ createMsg }}</p>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="pw-title">
+        <div class="card-head"><h2 id="pw-title">修改密码</h2></div>
+        <form class="login-form" @submit.prevent="changePw">
+          <label class="field-label" for="pw-old">旧密码</label>
+          <input id="pw-old" v-model="pwForm.old" class="input" type="password" autocomplete="current-password" />
+          <label class="field-label" for="pw-new">新密码</label>
+          <input id="pw-new" v-model="pwForm.next" class="input" type="password" autocomplete="new-password" />
+          <div class="row end">
+            <button class="btn btn-dark" :disabled="!pwForm.old || !pwForm.next || pwBusy">
+              {{ pwBusy ? '正在修改…' : '修改密码' }}
+            </button>
+          </div>
+          <p v-if="pwMsg" class="field-msg" role="alert">{{ pwMsg }}</p>
+        </form>
+      </section>
+
+      <section v-if="canCreate && removableAccounts.length" class="card" aria-labelledby="remove-title">
+        <div class="card-head">
+          <h2 id="remove-title">删除账号</h2>
+          <span class="muted small">只能删除比你低一级的身份</span>
+        </div>
+        <form class="login-form" @submit.prevent="remove">
+          <label class="field-label" for="remove-user">账号</label>
+          <select id="remove-user" v-model="removeForm" class="select">
+            <option v-for="a in removableAccounts" :key="a.username" :value="a.username">
+              {{ a.username }} · {{ a.role_label }}<template v-if="a.store_name"> · {{ a.store_name }}</template>
+            </option>
+          </select>
+          <div class="row end">
+            <button class="btn btn-danger" :disabled="!removeForm || removeBusy">
+              {{ removeBusy ? '正在删除…' : '删除' }}
+            </button>
+          </div>
+          <p v-if="removeMsg" class="field-msg" role="alert">{{ removeMsg }}</p>
+        </form>
+      </section>
     </div>
 
-    <aside class="page-aside" aria-label="工程师入口">
-      <section class="card">
-        <h3 class="aside-title">当前账号</h3>
-        <p v-if="account.kind === 'store'"><b>{{ account.store_name }}</b> · {{ account.role }}</p>
-        <p v-else-if="account.kind === 'hq'"><b>总部运营</b></p>
-        <p v-else class="muted">尚未选择账号，门店端默认显示第一家门店。</p>
-      </section>
-
-      <section class="card">
-        <h3 class="aside-title"><KeyRound :size="16" aria-hidden="true" />工程师入口</h3>
-        <template v-if="!engineer.unlocked">
-          <p class="muted small">四店对比与对照组仅供工程师调试和评审演示。</p>
-          <form class="code-form" @submit.prevent="unlock">
-            <label class="field-label" for="eng-code">口令</label>
-            <div class="row">
-              <input id="eng-code" v-model="code" class="input" type="password" autocomplete="off" :aria-invalid="!!codeMsg" aria-describedby="eng-msg" />
-              <button class="btn btn-dark" :disabled="!code || unlocking">解锁</button>
+    <template v-else>
+      <div class="page-main">
+        <section class="card" aria-labelledby="login-store">
+          <div class="card-head">
+            <h2 id="login-store">选择门店</h2>
+            <span class="muted small">{{ filteredStores.length }} / {{ meta.stores.length }} 家门店</span>
+          </div>
+          <div class="login-search">
+            <Search :size="16" aria-hidden="true" />
+            <input v-model="query" class="input" type="search" placeholder="搜索门店名、区域或地标"
+                   aria-label="搜索门店" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="store-scroll">
+            <div class="store-grid" role="radiogroup" aria-labelledby="login-store">
+              <button v-for="s in filteredStores" :key="s.store_id" class="store-opt" role="radio"
+                      :aria-checked="storeId === s.store_id" :class="{ on: storeId === s.store_id }"
+                      @click="storeId = s.store_id">
+                <span class="store-mark" :style="{ background: tintFor(s.store_id).tile, color: tintFor(s.store_id).ink }">{{ s.store_name.slice(0, 1) }}</span>
+                <span class="store-text"><b>{{ s.store_name }}</b><small>{{ s.district }}<template v-if="s.anchor"> · {{ s.anchor }}</template></small></span>
+                <span class="opt-check" aria-hidden="true"><Check :size="14" :stroke-width="3" /></span>
+              </button>
             </div>
-            <p id="eng-msg" class="field-msg" role="alert">{{ codeMsg }}</p>
+            <p v-if="!filteredStores.length" class="muted small store-empty">没有匹配的门店，换个关键词试试。</p>
+          </div>
+          <p class="muted small">店员与店长必须选对本店；开发者账号不用选门店。</p>
+        </section>
+
+        <section class="card" aria-labelledby="login-form">
+          <div class="card-head">
+            <h2 id="login-form">账号登录</h2>
+            <span class="muted small">{{ chosen ? chosen.store_name : '未选择门店' }}</span>
+          </div>
+          <form class="login-form" @submit.prevent="submit">
+            <label class="field-label" for="login-user">账号</label>
+            <input id="login-user" v-model="username" class="input" type="text" autocomplete="username"
+                   :placeholder="userHint" spellcheck="false" />
+            <label class="field-label" for="login-pass">密码</label>
+            <div class="row">
+              <input id="login-pass" ref="pwEl" v-model="password" class="input" type="password"
+                     autocomplete="current-password" />
+              <button class="btn btn-dark" :disabled="!username.trim() || !password || busy">
+                {{ busy ? '正在登录…' : '登录' }}
+              </button>
+            </div>
+            <p v-if="msg" class="field-msg" role="alert">{{ msg }}</p>
           </form>
-        </template>
-        <template v-else>
-          <p class="muted small">已解锁，可以打开下面两个演示功能。</p>
-          <button class="card-link inset" @click="emit('go', 'compare')"><span><Columns3 :size="16" aria-hidden="true" /><b>四店对比</b></span><ArrowRight :size="16" aria-hidden="true" /></button>
-          <button class="card-link inset" @click="emit('go', 'baseline')"><span><Scale :size="16" aria-hidden="true" /><b>对照组</b></span><ArrowRight :size="16" aria-hidden="true" /></button>
-          <button class="btn btn-light btn-block" @click="lockEngineer"><LockKeyhole :size="16" aria-hidden="true" />锁定</button>
-        </template>
-      </section>
-    </aside>
+        </section>
+
+        <section class="card" aria-labelledby="login-demo">
+          <div class="card-head">
+            <h2 id="login-demo">演示账号</h2>
+            <span class="muted small">点一下选好门店并登录</span>
+          </div>
+          <p v-if="demo.password" class="muted small">统一演示密码：<b>{{ demo.password }}</b></p>
+          <p v-else class="muted small">管理员已自定义演示密码，请手动输入。</p>
+
+          <div v-for="g in groups" :key="g.store_id" class="demo-store">
+            <div class="demo-store-head"><Store :size="15" aria-hidden="true" /><b>{{ g.store_name }}</b></div>
+            <div class="role-grid">
+              <button v-for="a in g.accounts" :key="a.username" class="role-opt" :class="{ on: account.username === a.username }"
+                      @click="quick(a)">
+                <b>{{ a.role_label }}</b><small>{{ a.username }}</small>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="devAccounts.length" class="demo-store">
+            <div class="demo-store-head"><KeyRound :size="15" aria-hidden="true" /><b>开发者</b></div>
+            <div class="role-grid">
+              <button v-for="a in devAccounts" :key="a.username" class="role-opt" :class="{ on: account.username === a.username }"
+                      @click="quick(a)">
+                <b>{{ a.role_label }}</b><small>{{ a.username }} · 全部页面 + 演示功能</small>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </template>
   </div>
 </template>

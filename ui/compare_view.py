@@ -11,8 +11,7 @@ import html
 
 from agent import ui_data
 from agent.schemas import RunResult
-from ui.components import (SLOT_LABELS, fallback_note, needs_review_html, phone_html, stop_html,
-                           result_kind)
+from ui.components import needs_review_html, phone_html, result_kind, stop_html
 
 COMPARE_STORES = [
     ("S01", "校园店"),
@@ -20,7 +19,7 @@ COMPARE_STORES = [
     ("S08", "社区店"),
     ("S02", "校园二店"),
 ]
-PLATFORMS = ["朋友圈", "小红书", "公众号"]
+PLATFORMS = ["朋友圈", "小红书", "公众号", "海报", "抖音"]
 SCENARIO_LABELS = {
     "campus_daily": "校园日常",
     "office": "办公通勤",
@@ -51,13 +50,6 @@ def _meta_html(card, result=None) -> str:
         f"语气：{_esc(voice)} · 钩子：{_esc(hook)}",
         f"地标：{_esc(card.landmark or '—')}",
     ]
-    task_card = getattr(getattr(result, "task", None), "card_id", None)
-    if task_card and task_card != card.card_id:
-        slot = SLOT_LABELS.get(getattr(getattr(result, "task", None), "slot", None), "")
-        delivered = ui_data.model_display_name(getattr(getattr(result, "task", None), "model_id", None))
-        parts.insert(0, f"<span style='color:#8a4b00'>已换成下一条推荐"
-                        f"{f'（{_esc(slot)}）' if slot else ''}"
-                        f"{f'：{_esc(delivered)}' if delivered else ''}</span>")
     return ('<div style="font-size:14px;line-height:1.7;color:#1e293b;margin:2px 4px 14px">'
             + "<br>".join(parts) + "</div>")
 
@@ -75,16 +67,13 @@ def _result_panel(sid: str, card, result, regenerated: bool) -> str:
         body = stop_html(ui_data.plain_error(result))
     else:
         body = stop_html(getattr(result, "message", "") or "该门店生成失败。")
-    note = fallback_note(result) if isinstance(result, RunResult) else None
-    note_html = f'<div class="hw-banner note">ℹ️ {_esc(note)}</div>' if note else ""
-    return (f'<div class="hw-compare-card" style="flex:1 1 430px;min-width:380px;max-width:470px">'
-            f'{head}{note_html}{body}{_meta_html(card, result)}</div>')
+    return (f'<div class="hw-compare-card">'
+            f'{head}{body}{_meta_html(card, result)}</div>')
 
 
 def _similarity_html(pairs: list, names: dict[str, str]) -> str:
     if not pairs:
         return ""
-    threshold = ui_data.similarity_threshold()
     rows = []
     for p in pairs:
         seg = SEGMENT_LABELS.get(p.segment, p.segment)
@@ -95,7 +84,7 @@ def _similarity_html(pairs: list, names: dict[str, str]) -> str:
             f"{_esc(names.get(p.store_b, p.store_b))}</td><td style='padding:4px 8px'>{_esc(seg)}</td>"
             f"<td style='padding:4px 8px;text-align:right'>{p.before:.3f} → {p.after:.3f}</td>"
             f"<td style='padding:4px 8px'>{mark}</td></tr>")
-    return (f'<h4 style="margin:18px 0 6px">跨店相似度（8E：阈值 {threshold:.3f}）</h4>'
+    return (f'<h4 style="margin:18px 0 6px">跨店相似度</h4>'
             '<table style="border-collapse:collapse;font-size:13px;background:#fff;'
             'border:1px solid #e0e0e0"><thead><tr style="background:#f5f5f5">'
             '<th style="padding:5px 8px;text-align:left">门店</th><th style="padding:5px 8px;text-align:left">客群</th>'
@@ -119,14 +108,24 @@ def _batch_from_stored(rec: dict):
                               wall_seconds=float(rec.get("wall_seconds") or 0))
 
 
-def on_show_stored(model_id: str, platform: str):
-    """Instant: the precomputed set for this product + platform, labelled with its generation time."""
+def on_show_stored(model_id: str, platform: str, store_ids=None):
+    """Instant: the precomputed set for this product + platform, labelled with its generation time.
+    Only the default four stores have a stored set; a custom selection starts empty."""
+    default = [sid for sid, _ in COMPARE_STORES]
+    if store_ids and list(store_ids) != default:
+        return EMPTY_COMPARE, ""
     rec = ui_data.stored_compare(model_id, platform) if model_id else None
     if not rec:
         return EMPTY_COMPARE, ""
     cards, batch = _batch_from_stored(rec)
     from ui.state import _generated_at
-    return _compare_body(cards, batch, f"已预先生成 · {_generated_at(rec)} · 点「生成四店对比」可重新生成")
+    return _compare_body(cards, batch, f"已预先生成 · {_generated_at(rec)} · 点「生成多店对比」可重新生成")
+
+
+def _placeholder_panel() -> str:
+    """An empty dotted slot that fills the last grid row so every phone panel keeps the same size."""
+    return ('<div class="hw-compare-card hw-compare-empty" aria-hidden="true">'
+            '<div class="hw-compare-empty-inner">暂无对比</div></div>')
 
 
 def _compare_body(cards, batch, prefix: str = ""):
@@ -137,8 +136,10 @@ def _compare_body(cards, batch, prefix: str = ""):
         if result is None:
             result = RuntimeError("该门店没有返回结果。")
         cols.append(_result_panel(card.store_id, card, result, card.store_id in batch.regenerated))
-    body = ('<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">'
-            + "".join(cols) + "</div>" + _similarity_html(batch.similarity, names))
+    while len(cols) % 3:
+        cols.append(_placeholder_panel())
+    body = ('<div class="hw-compare-grid">' + "".join(cols) + "</div>"
+            + _similarity_html(batch.similarity, names))
     ok = sum(1 for x in batch.results.values() if isinstance(x, RunResult))
     failed = len(batch.results) - ok
     summary = ((prefix + " · ") if prefix else "") + (
@@ -149,21 +150,23 @@ def _compare_body(cards, batch, prefix: str = ""):
     return body, summary
 
 
-def on_compare(model_id: str, platform: str, on_progress=None):
+def on_compare(model_id: str, platform: str, store_ids=None, on_progress=None):
     if not model_id:
         return "<p>请选择一个在售产品。</p>", ""
+    stores = list(store_ids) if store_ids else [sid for sid, _ in COMPARE_STORES]
+    names = {s["store_id"]: s["store_name"] for s in ui_data.list_stores()}
     cards, missing = [], []
-    for store_id, label in COMPARE_STORES:
+    for store_id in stores:
         card = ui_data.product_card(store_id, model_id)
         if card is None:
-            missing.append(f"{label}（{store_id}）")
+            missing.append(f"{names.get(store_id, store_id)}（{store_id}）")
             continue
         cards.append(dataclasses.replace(card, platform=platform, is_default=False))
     if missing:
         return (f"<div class='hw-banner warn'>以下门店当前没有该产品的活动款，无法对比："
                 f"{_esc('、'.join(missing))}</div>", "")
     try:
-        batch = ui_data.compare(cards, on_progress=on_progress)
+        batch = ui_data.compare(cards, on_progress=on_progress, max_workers=len(cards))
     except Exception as e:  # noqa: BLE001 - a UI handler must never crash the page
         return f"<div class='hw-banner err'>{_esc(ui_data.plain_error(e))}</div>", ""
 
@@ -171,7 +174,7 @@ def on_compare(model_id: str, platform: str, on_progress=None):
 
 
 EMPTY_COMPARE = ('<div style="padding:24px;text-align:center;color:#888;border:1px dashed '
-                 '#d0d0d0;border-radius:10px">选择产品与平台后，点击「生成四店对比」查看四家门店的'
+                 '#d0d0d0;border-radius:10px">选择产品、平台与门店后，点击「生成多店对比」查看'
                  '手机预览与跨店相似度。</div>')
 
 

@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Building2, Columns3, FlaskConical, LogIn, Scale, Sparkles, Store } from 'lucide-vue-next'
-import { account, engineer, loadMeta, meta, refreshStatus, status } from './api.js'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { Building2, Columns3, Eye, EyeOff, FlaskConical, LogIn, Scale, Settings, Sparkles, Store, X } from 'lucide-vue-next'
+import { account, getSettings, loadMeta, refreshAccount, refreshStatus, saveSettings, status } from './api.js'
+import WelcomeView from './views/WelcomeView.vue'
 import HomeView from './views/HomeView.vue'
 import ClickView from './views/ClickView.vue'
 import HqView from './views/HqView.vue'
@@ -16,10 +17,20 @@ const NAV = [
   { key: 'login', label: '登录', icon: LogIn },
 ]
 const DEMO = [
-  { key: 'compare', label: '四店对比', icon: Columns3 },
+  { key: 'compare', label: '多店对比', icon: Columns3 },
   { key: 'baseline', label: '对照组', icon: Scale },
 ]
 const ALIASES = { store: 'home', manual: 'click' }   // old #tab= links keep working
+
+// Role → pages. Staff: recommendation + generate. Manager: + 总部端. Developer: everything, plus the
+// demo-only views (四店对比 / 对照组). Signed out, the app opens on a full-screen 开始 page and 登录 is a
+// click away, so a first-time visitor reads what this is before seeing an account form.
+const ROLE_TABS = {
+  staff: ['home', 'click', 'login'],
+  manager: ['home', 'click', 'hq', 'login'],
+  developer: ['home', 'click', 'hq', 'login', 'compare', 'baseline'],
+}
+const demoAllowed = computed(() => account.role === 'developer')
 
 function hashParams() {
   const h = (location.hash || '').replace(/^#/, '')
@@ -28,16 +39,22 @@ function hashParams() {
   return out
 }
 function allowed(key) {
-  return NAV.some((n) => n.key === key) || (engineer.unlocked && DEMO.some((n) => n.key === key))
+  if (!account.role) return key === 'welcome' || key === 'login'
+  if (demoAllowed.value && DEMO.some((n) => n.key === key)) return true
+  return (ROLE_TABS[account.role] || []).includes(key)
 }
 function fromHash() {
   const k = ALIASES[hashParams().tab] || hashParams().tab
-  return allowed(k) ? k : 'home'
+  if (allowed(k)) return k
+  return account.role && allowed('home') ? 'home' : 'welcome'
 }
 
 const tab = ref(fromHash())
 const homeKey = ref(0)
 let statusTimer = null
+// Remount the store / generate views when the account changes, so a new login never sees the previous
+// account's in-progress generation, draft or result.
+const acctKey = computed(() => account.username || 'guest')
 
 function go(key) { if (allowed(key)) tab.value = key }
 function onReset() { homeKey.value++ }   // 重置演示: the store view remounts and reloads on next open
@@ -45,18 +62,66 @@ watch(tab, (key) => {
   window.scrollTo({ top: 0 })
   if (hashParams().tab !== key) history.replaceState(null, '', '#tab=' + key)
 })
-watch(() => engineer.unlocked, (on) => { if (!on && DEMO.some((n) => n.key === tab.value)) tab.value = 'login' })
+// Signing out (or losing access to the current page) lands on the 开始 page; signing in opens 门店端.
+watch(() => account.role, () => {
+  if (!allowed(tab.value)) tab.value = account.role && allowed('home') ? 'home' : 'welcome'
+})
 
+const showLanding = computed(() => !account.role && tab.value === 'welcome')
+const navItems = computed(() => NAV.filter((n) => allowed(n.key)).map((n) =>
+  n.key === 'login' ? { ...n, label: (account.role === 'developer' || account.role === 'manager') ? '登录/注册' : '登录' } : n
+))
 const who = computed(() => {
-  if (account.kind === 'hq') return { name: '总部运营', sub: '总部账号', mark: '总' }
-  if (account.kind === 'store') return { name: account.store_name, sub: account.role, mark: (account.store_name || '店').slice(0, 1) }
-  return { name: '未登录', sub: '演示账号', mark: '访' }
+  if (account.role === 'developer') return { name: '开发者', sub: '全部页面 · 演示功能', mark: '开' }
+  if (account.role) {
+    return { name: account.store_name || account.display_name || account.username,
+             sub: `${account.role_label} · ${account.username}`,
+             mark: (account.store_name || account.display_name || '店').slice(0, 1) }
+  }
+  return { name: '未登录', sub: '请先登录', mark: '访' }
 })
 const kbTone = computed(() => (status.checking ? 'amber' : status.kb_ok ? 'ok' : 'bad'))
+
+// ---- API settings (developer only); the key is never echoed back, only replaced
+const settingsOpen = ref(false)
+const showSecrets = reactive({ api_key: false, ima_client_id: false, ima_api_key: false })
+const settingsForm = reactive({ base_url: '', model: '', api_key: '', ima_client_id: '', ima_api_key: '' })
+const keyConfigured = ref(false)
+const imaConfigured = ref(false)
+const settingsBusy = ref(false)
+const settingsMsg = ref('')
+async function openSettings() {
+  settingsOpen.value = true
+  showSecrets.api_key = false
+  showSecrets.ima_client_id = false
+  showSecrets.ima_api_key = false
+  settingsMsg.value = ''
+  const s = await getSettings()
+  settingsForm.base_url = s.base_url || ''
+  settingsForm.model = s.model || ''
+  settingsForm.api_key = ''
+  settingsForm.ima_client_id = ''
+  settingsForm.ima_api_key = ''
+  keyConfigured.value = !!s.key_configured
+  imaConfigured.value = !!s.ima_configured
+}
+async function saveApiSettings() {
+  if (settingsBusy.value) return
+  settingsBusy.value = true
+  settingsMsg.value = ''
+  try {
+    const r = await saveSettings({ ...settingsForm })
+    if (r.ok) { settingsMsg.value = '已保存'; refreshStatus() }
+    else settingsMsg.value = r.reason || '保存失败'
+  } catch (e) { settingsMsg.value = e.message || '暂时无法保存，请稍后再试' }
+  settingsBusy.value = false
+}
 
 onMounted(async () => {
   window.addEventListener('hashchange', () => { const k = fromHash(); if (k !== tab.value) tab.value = k })
   await loadMeta()
+  await refreshAccount()                  // the server is the source of truth for who is signed in
+  if (!allowed(tab.value)) tab.value = account.role && allowed('home') ? 'home' : 'welcome'
   refreshStatus()
   statusTimer = setInterval(refreshStatus, 2000)
 })
@@ -65,23 +130,23 @@ onBeforeUnmount(() => clearInterval(statusTimer))
 
 <template>
   <a class="skip-link" href="#main">跳到主要内容</a>
-  <div class="shell">
+  <WelcomeView v-if="showLanding" @go="go" />
+  <div v-else class="shell">
     <aside class="sidebar">
       <div class="brand">
         <img class="brand-logo" src="/logo.png" alt="HUAWEI" />
         <div>
           <div class="brand-name">PC 软文助手</div>
-          <div class="brand-sub">演示日期 {{ meta.today || status.today || '…' }}</div>
         </div>
       </div>
 
       <nav class="nav" aria-label="主导航">
-        <button v-for="n in NAV" :key="n.key" class="nav-item" :class="{ on: tab === n.key }"
+        <button v-for="n in navItems" :key="n.key" class="nav-item" :class="{ on: tab === n.key }"
                 :aria-current="tab === n.key ? 'page' : undefined" @click="go(n.key)">
           <component :is="n.icon" :size="18" :stroke-width="1.9" aria-hidden="true" />
           <span>{{ n.label }}</span>
         </button>
-        <template v-if="engineer.unlocked">
+        <template v-if="demoAllowed">
           <div class="nav-group"><FlaskConical :size="14" aria-hidden="true" />演示功能</div>
           <button v-for="n in DEMO" :key="n.key" class="nav-item" :class="{ on: tab === n.key }"
                   :aria-current="tab === n.key ? 'page' : undefined" @click="go(n.key)">
@@ -92,6 +157,9 @@ onBeforeUnmount(() => clearInterval(statusTimer))
       </nav>
 
       <div class="side-foot">
+        <button v-if="account.role === 'developer'" class="side-set" @click="openSettings">
+          <Settings :size="16" aria-hidden="true" />设置
+        </button>
         <button class="who" @click="go('login')">
           <span class="who-mark">{{ who.mark }}</span>
           <span class="who-text"><b>{{ who.name }}</b><small>{{ who.sub }}</small></span>
@@ -112,20 +180,63 @@ onBeforeUnmount(() => clearInterval(statusTimer))
     </aside>
 
     <main id="main" class="main" tabindex="-1">
-      <HomeView :key="homeKey" :active="tab === 'home'" v-show="tab === 'home'" @go="go" />
-      <ClickView v-show="tab === 'click'" />
-      <HqView :active="tab === 'hq'" v-show="tab === 'hq'" @reset="onReset" />
+      <HomeView :key="homeKey + ':' + acctKey" :active="tab === 'home'" v-show="tab === 'home'" @go="go" />
+      <ClickView :key="homeKey + ':' + acctKey" v-show="tab === 'click'" />
+      <HqView v-if="allowed('hq')" :active="tab === 'hq'" v-show="tab === 'hq'" @reset="onReset" />
       <LoginView :active="tab === 'login'" v-show="tab === 'login'" @go="go" />
-      <CompareView v-if="engineer.unlocked" :active="tab === 'compare'" v-show="tab === 'compare'" />
-      <BaselineView v-if="engineer.unlocked" :active="tab === 'baseline'" v-show="tab === 'baseline'" />
+      <CompareView v-if="demoAllowed" :active="tab === 'compare'" v-show="tab === 'compare'" />
+      <BaselineView v-if="demoAllowed" :active="tab === 'baseline'" v-show="tab === 'baseline'" />
     </main>
 
     <nav class="tabbar" aria-label="主导航">
-      <button v-for="n in NAV" :key="n.key" class="tabbar-item" :class="{ on: tab === n.key }"
+      <button v-for="n in navItems" :key="n.key" class="tabbar-item" :class="{ on: tab === n.key }"
               :aria-current="tab === n.key ? 'page' : undefined" @click="go(n.key)">
         <component :is="n.icon" :size="20" :stroke-width="1.9" aria-hidden="true" />
         <span>{{ n.label }}</span>
       </button>
     </nav>
+  </div>
+
+  <div v-if="settingsOpen" class="modal-backdrop" @click.self="settingsOpen = false">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="API 设置">
+      <div class="modal-head">
+        <h2>API 设置</h2>
+        <button class="round round-sm" aria-label="关闭" @click="settingsOpen = false"><X :size="15" aria-hidden="true" /></button>
+      </div>
+      <form class="login-form" @submit.prevent="saveApiSettings">
+        <label class="field-label" for="set-base">Base URL</label>
+        <input id="set-base" v-model="settingsForm.base_url" class="input" type="text" placeholder="https://…" spellcheck="false" />
+        <label class="field-label" for="set-model">模型</label>
+        <input id="set-model" v-model="settingsForm.model" class="input" type="text" spellcheck="false" />
+        <label class="field-label" for="set-key">LLM API Key</label>
+        <div class="row">
+          <input id="set-key" v-model="settingsForm.api_key" class="input" :type="showSecrets.api_key ? 'text' : 'password'" autocomplete="new-password"
+                 :placeholder="keyConfigured ? '已配置，留空则不变' : '未配置'" />
+          <button type="button" class="round round-sm" :title="showSecrets.api_key ? '隐藏' : '显示'" @click="showSecrets.api_key = !showSecrets.api_key">
+            <component :is="showSecrets.api_key ? EyeOff : Eye" :size="15" aria-hidden="true" />
+          </button>
+        </div>
+        <label class="field-label" for="set-imac">IMA Client ID</label>
+        <div class="row">
+          <input id="set-imac" v-model="settingsForm.ima_client_id" class="input" :type="showSecrets.ima_client_id ? 'text' : 'password'" autocomplete="off"
+                 :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+          <button type="button" class="round round-sm" :title="showSecrets.ima_client_id ? '隐藏' : '显示'" @click="showSecrets.ima_client_id = !showSecrets.ima_client_id">
+            <component :is="showSecrets.ima_client_id ? EyeOff : Eye" :size="15" aria-hidden="true" />
+          </button>
+        </div>
+        <label class="field-label" for="set-imak">IMA API Key</label>
+        <div class="row">
+          <input id="set-imak" v-model="settingsForm.ima_api_key" class="input" :type="showSecrets.ima_api_key ? 'text' : 'password'" autocomplete="new-password"
+                 :placeholder="imaConfigured ? '已配置，留空则不变' : '未配置'" />
+          <button type="button" class="round round-sm" :title="showSecrets.ima_api_key ? '隐藏' : '显示'" @click="showSecrets.ima_api_key = !showSecrets.ima_api_key">
+            <component :is="showSecrets.ima_api_key ? EyeOff : Eye" :size="15" aria-hidden="true" />
+          </button>
+        </div>
+        <div class="row end">
+          <button class="btn btn-dark" :disabled="settingsBusy">{{ settingsBusy ? '正在保存…' : '保存' }}</button>
+        </div>
+        <p v-if="settingsMsg" class="field-msg" role="alert">{{ settingsMsg }}</p>
+      </form>
+    </div>
   </div>
 </template>
