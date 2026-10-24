@@ -109,15 +109,50 @@ def fallback_note(result: Any) -> Optional[str]:
     return FALLBACK_NOTES.get(getattr(result, "fallback", None))
 
 
+# 「检查并保存」's reason for a flagged sentence that is still in the text (ui/state.py, server.py).
+STILL_FAILING_REASON = "这句未通过自动核验，请改写或删除后再保存"
+
+
+def group_failing(failing) -> list[tuple[str, list[str], list[str]]]:
+    """[(sentence, reasons, stages)], one entry per sentence ("" = the whole post), in first-seen order.
+    One sentence can fail several checks (two numbers on the wrong fact + an absolute term), and 「检查并保存」
+    adds STILL_FAILING_REASON for it too: listed once, reasons joined, the generic reason only when the
+    sentence has no specific one."""
+    groups: dict[str, tuple[list[str], list[str]]] = {}
+    for f in failing or []:
+        key = strip_fact_tags(getattr(f, "sentence", "") or "").strip()
+        reasons, stages = groups.setdefault(key, ([], []))
+        reason = (getattr(f, "reason", "") or "").strip()
+        stage = (getattr(f, "stage", "") or "").strip()
+        if reason and reason not in reasons:
+            reasons.append(reason)
+        if stage and stage not in stages:
+            stages.append(stage)
+    out = []
+    for sentence, (reasons, stages) in groups.items():
+        specific = [r for r in reasons if r != STILL_FAILING_REASON]
+        out.append((sentence, specific or reasons, stages))
+    return out
+
+
+def failing_list_html(failing, whole_post_label: str = "（整篇）") -> str:
+    """The failing sentences as <ul>, each sentence once (see group_failing)."""
+    items = "".join(f"<li><mark>{html.escape(s or whole_post_label)}</mark> — {html.escape('；'.join(rs))}</li>"
+                    for s, rs, _ in group_failing(failing))
+    return f"<ul>{items}</ul>" if items else ""
+
+
 def needs_review_html(result: NeedsReview) -> str:
-    """「需人工确认」 panel: result.message + each FailingSentence's reason (and the offending sentence
-    where one was located). The draft itself is rendered separately via phone_html(result.draft, deps) -
-    its own check-failure spans already get the .flag highlight."""
+    """「需人工确认」 panel: result.message + each failing sentence once with its reasons (or the field, for a
+    whole-post problem). The draft itself is rendered separately via phone_html(result.draft, deps) - its
+    own check-failure spans already get the .flag highlight."""
+    failing = getattr(result, "failing", None) or []
+    fields = {strip_fact_tags(f.sentence or "").strip(): f.field for f in failing}
     li = "".join(
-        f"<li>[{html.escape(f.stage)}] " + (f"「{html.escape(f.sentence)}」" if f.sentence
-                                            else html.escape(f.field or "")) +
-        f" — {html.escape(f.reason)}</li>"
-        for f in (getattr(result, "failing", None) or []))
+        f"<li>[{html.escape('/'.join(stages))}] "
+        + (f"「{html.escape(s)}」" if s else html.escape(fields.get(s) or "")) +
+        f" — {html.escape('；'.join(rs))}</li>"
+        for s, rs, stages in group_failing(failing))
     return (f'<div class="hw-banner err">⛔ {html.escape(result.message)}'
            + (f"<ul>{li}</ul>" if li else "") + '</div>')
 

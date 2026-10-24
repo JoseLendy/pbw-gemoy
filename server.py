@@ -59,7 +59,8 @@ from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult 
 from agent.ui_data import DEPS, plain_error, reset_token, today as demo_today  # noqa: E402
 from ui import baseline_view, compare_view, hq_view, state  # noqa: E402
 from ui.components import (  # noqa: E402
-    banner_html, cached_image_bytes, fallback_note, fresh_session, phone_html, stop_html, talk_card_html,
+    STILL_FAILING_REASON, banner_html, cached_image_bytes, failing_list_html, fallback_note, fresh_session, phone_html,
+    stop_html, talk_card_html,
 )
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -1122,10 +1123,8 @@ def _manual_render(r: RunResult, m: dict | None = None, edit_fail: list | None =
     published = plat in ((m or {}).get("published") or set())
     short = _MANUAL_SHORT.get(plat, PLATFORM_LABELS.get(plat, plat))
     if edit_fail:
-        items = "".join(f"<li><mark>{html.escape(f.sentence or '（整篇）')}</mark> — {html.escape(f.reason)}</li>"
-                        for f in edit_fail)
         edit_status = (f'<div class="hw-banner err">❌ 修改未通过核验，复制和导出已停用（改好后再「检查并保存」，或「恢复原文」）'
-                       f'<ul>{items}</ul></div>')
+                       f'{failing_list_html(edit_fail)}</div>')
     elif saved:
         edit_status = ('<div class="hw-banner ok">✅ 已修改·已核验</div>' if passed else
                        '<div class="hw-banner ok">✅ 已人工处理：未通过的句子已修改，并通过「检查并保存」</div>')
@@ -1136,11 +1135,30 @@ def _manual_render(r: RunResult, m: dict | None = None, edit_fail: list | None =
                        '再点「检查并保存」；通过后才能复制、导出和标记为已发布。</div>')
     else:
         edit_status = ""
+    # The sentences 正文 marks in red: exactly the list 「检查并保存」 enforces (api_manual_check_save). After a
+    # failed save that is its own failing list; before any save, the post's failing sentences; none once fixed.
+    if saved:
+        src = []
+    elif edit_fail:
+        src = edit_fail
+    elif not passed:
+        from agent.pipeline import failing_sentences
+        src = failing_sentences(r.post, r.report)
+    else:
+        src = []
+    flagged: list[str] = []
+    for f in src:
+        sentence = strip_fact_tags(getattr(f, "sentence", "") or "").strip()
+        if sentence and sentence not in flagged:
+            flagged.append(sentence)
     note = fallback_note(r)     # 「已删去未通过核验的句子」 after the trim step (agent.pipeline.trim_if_failed)
     note_html = f'<div class="hw-banner note">ℹ️ {html.escape(note)}</div>' if note else ""
     out = {"kind": "result", "phone_html": phone_html(final, DEPS), "talk_html": talk_card_html(r),
            "banner_html": note_html + banner_html(r), "report_md": render_report(final),
-           "pub_text": saved["text"] if saved else render_publishable(r.post),
+           # after a refused 「检查并保存」 the person's own draft stays in 正文 (a fix to line 1 is not lost
+           # because line 2 still fails); a saved fix wins; otherwise the generated text
+           "pub_text": saved["text"] if saved else (((m or {}).get("drafts") or {}).get(plat)
+                                                     or render_publishable(r.post)),
            "original_text": render_publishable(r.post),
            "final_text": wechat_text(final.post) if publishable else "",
            "platform_label": PLATFORM_LABELS.get(plat, plat),
@@ -1148,6 +1166,7 @@ def _manual_render(r: RunResult, m: dict | None = None, edit_fail: list | None =
            # the same controls as the store tab: edit + check, copy, .md, 发布包, 保存图片, 已发布
            "editable": True, "publishable": publishable, "passed": passed, "edited": bool(saved),
            "edit_status_html": edit_status, "can_copy": publishable and not edit_fail, "published": published,
+           "flagged": flagged,
            "publish_label": f"已发布 ✓（{short}，已记录）" if published else f"标记为已发布（{short}）"}
     if m is not None:
         out["cache"] = _manual_cache(m)
@@ -1167,6 +1186,7 @@ def _manual_handle(result, m: dict) -> dict:
     m.setdefault("results", {})[result.post.platform] = result
     # a freshly written post is a new, unedited and unpublished version on its platform
     (m.get("edited") or {}).pop(result.post.platform, None)
+    (m.get("drafts") or {}).pop(result.post.platform, None)
     (m.get("published") or set()).discard(result.post.platform)
     return _manual_render(result, m)
 
@@ -1425,18 +1445,21 @@ def api_manual_check_save(req: ManualTextReq) -> dict:
     text = (req.text or "").strip()
     if text == render_publishable(r.post).strip():
         m.setdefault("edited", {}).pop(plat, None)       # back to the generated text: nothing to save
+        m.setdefault("drafts", {}).pop(plat, None)
         return _manual_render(r, m)
     chk = _ud.check_edit(text, r)
     failing = list(chk.failing)
     if not r.report.passed:
         from agent.formatter import strip_fact_tags
         from agent.pipeline import failing_sentences
-        still = [dataclasses.replace(f, reason="这句未通过自动核验，请改写或删除后再保存")
+        still = [dataclasses.replace(f, reason=STILL_FAILING_REASON)
                  for f in failing_sentences(r.post, r.report)
                  if (f.sentence or "").strip() and strip_fact_tags(f.sentence).strip() in text]
         failing = still + failing
     if not chk.passed or failing:
+        m.setdefault("drafts", {})[plat] = text          # refused: keep what was typed
         return _manual_render(r, m, edit_fail=failing)
+    m.setdefault("drafts", {}).pop(plat, None)
     m.setdefault("edited", {})[plat] = {"text": text, "post": chk.post}
     m.setdefault("published", set()).discard(plat)      # the edited version is a new, unpublished one
     return _manual_render(r, m)
@@ -1450,6 +1473,7 @@ def api_manual_revert(req: Sid) -> dict:
     if not isinstance(r, RunResult):
         return {"kind": "stop", "html": stop_html("请先生成一篇内容。", "提示")}
     m.setdefault("edited", {}).pop(r.post.platform, None)
+    m.setdefault("drafts", {}).pop(r.post.platform, None)     # 恢复原文 = back to the generated text
     return _manual_render(r, m)
 
 

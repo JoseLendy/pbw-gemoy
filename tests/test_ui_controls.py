@@ -349,3 +349,109 @@ def test_failed_quick_edit_fixed_by_hand_unlocks_every_button():
     assert "已人工处理" in out["status_html"] and "DemoBook 14（演示版）到店可以试" in out["final_text"]
     assert state.download_text(s) is not None
     assert state.on_publish(s)["published"] is True
+
+
+# ---------------------------------------------------------------- the red marks in 正文 = what 检查并保存 enforces
+def test_store_flagged_marks_match_what_the_save_requires():
+    from agent.formatter import render_publishable
+    s, key, r = _failed_quick_edit()
+    out = state.render(s)
+    assert out["flagged"] and all(x in out["pub_text"] for x in out["flagged"])
+    fixed = render_publishable(r.post)
+    for x in out["flagged"]:                 # delete exactly what is marked …
+        fixed = fixed.replace(x, "")
+    fixed += "\n\nDemoBook 14（演示版）到店可以试。"
+    out = state.on_check_save(fixed, s)      # … and the save is accepted, with no marks left
+    assert out["publishable"] is True and out["flagged"] == []
+
+
+def test_store_flagged_after_a_refused_save_are_the_ones_still_there():
+    from agent.formatter import render_publishable
+    s, key, r = _failed_quick_edit()
+    kept = render_publishable(r.post) + "\n\nDemoBook 14（演示版）到店可以试。"
+    out = state.on_check_save(kept, s)
+    assert out["publishable"] is False and out["flagged"] and all(x in out["pub_text"] for x in out["flagged"])
+
+
+def test_store_needs_review_marks_its_failing_sentences():
+    s, key, r = _review_session()
+    out = state.render(s)
+    assert out["flagged"] == ["周末来店里上手试试。"]
+
+
+def test_store_passing_post_has_no_marks():
+    s, card, key, r = _demo_result()
+    s["results"][key] = r
+    assert state.render(s)["flagged"] == []
+
+
+@pytest.mark.parametrize("platform", PLATFORMS)
+def test_generate_tab_flagged_marks_match_what_the_save_requires(manual_api, monkeypatch, platform):
+    client, server, fake = manual_api
+    sid = f"mark-{platform}"
+    d = _generate(client, fake, sid, f"一位大学生顾客，开学季，想买 DemoBook 14（演示版），发{platform}", True,
+                  monkeypatch)
+    assert d["flagged"] and all(x in d["pub_text"] for x in d["flagged"])
+    fixed = d["pub_text"]
+    for x in d["flagged"]:                   # delete exactly what is marked …
+        fixed = fixed.replace(x, "")
+    out = client.post("/api/manual/check-save", json={"session_id": sid, "text": fixed}).json()
+    assert out["publishable"] is True and out["flagged"] == []     # … and the save is accepted
+
+
+# ---------------------------------------------------------------- the refused-save list shows each sentence once
+def test_failing_list_lists_each_sentence_once_with_its_reasons():
+    from agent.schemas import FailingSentence
+    from ui.components import STILL_FAILING_REASON, failing_list_html, group_failing
+    color = "色域口径不一样，标准版列出 100% sRGB，SE 版列出 45% NTSC。"
+    f10 = "用 F10 还原之前，先备份数据。"
+    fs = lambda s, r, st="8A": FailingSentence(field="body[3]", sentence=s, stage=st, code="c", reason=r)  # noqa: E731
+    failing = [fs(color, STILL_FAILING_REASON)] * 4 + [fs(f10, STILL_FAILING_REASON)] + [
+        fs(color, "数值「100%」不属于所标编号 F66"), fs(color, "数值「45%」不属于所标编号 F66"),
+        fs(color, "绝对化用语「100%」", "8B"), fs(color, "数值「100%」不属于所标编号 F66")]
+    groups = group_failing(failing)
+    assert [g[0] for g in groups] == [color, f10]                          # each sentence once, in order
+    assert groups[0][1] == ["数值「100%」不属于所标编号 F66", "数值「45%」不属于所标编号 F66", "绝对化用语「100%」"]
+    assert groups[1][1] == [STILL_FAILING_REASON]                          # generic only when nothing specific
+    html_out = failing_list_html(failing)
+    assert html_out.count("<li>") == 2 and html_out.count(color) == 1
+
+
+# ---------------------------------------------------------------- fixing 1 of 2 flagged lines keeps the fix
+def _two_flagged():
+    from agent.formatter import render_publishable
+    from agent.schemas import CheckIssue, CheckReport
+    s, card, key, r = _demo_result()
+    post = dataclasses.replace(r.post, body=[*r.post.body, "第二句会被标红。"])
+    report = CheckReport([
+        CheckIssue(stage="8A", severity="error", code="x", message="m", field="cta", span="周末来店里上手试试"),
+        CheckIssue(stage="8A", severity="error", code="x", message="m", field="body", span="第二句会被标红")])
+    failed = dataclasses.replace(r, post=post, report=report)
+    half = render_publishable(post).replace("周末来店里上手试试。", "DemoBook 14（演示版）到店可以试。")
+    return s, key, failed, half
+
+
+def test_store_refused_save_keeps_the_partial_fix():
+    s, key, failed, half = _two_flagged()
+    s["results"][key] = failed
+    out = state.on_check_save(half, s)
+    assert out["publishable"] is False and out["pub_text"].strip() == half.strip()
+    assert out["flagged"] == ["第二句会被标红。"]
+
+
+def test_generate_tab_refused_save_keeps_the_partial_fix(manual_api):
+    """Was a bug: the refused save sent the original post back and 正文 lost the fix to line 1."""
+    from agent.formatter import render_publishable
+    client, server, fake = manual_api
+    s, key, failed, half = _two_flagged()
+    m = server._manual(server._session("partial-fix"))
+    m["result"] = failed
+    out = client.post("/api/manual/check-save", json={"session_id": "partial-fix", "text": half}).json()
+    assert out["publishable"] is False and out["pub_text"].strip() == half.strip()
+    assert out["flagged"] == ["第二句会被标红。"]
+    # fixing line 2 as well now passes, and 恢复原文 still goes back to the generated text
+    done = client.post("/api/manual/check-save", json={"session_id": "partial-fix",
+                       "text": half.replace("第二句会被标红。", "")}).json()
+    assert done["publishable"] is True and done["flagged"] == []
+    back = client.post("/api/manual/revert", json={"session_id": "partial-fix"}).json()
+    assert back["pub_text"].strip() == render_publishable(failed.post).strip()

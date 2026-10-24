@@ -8,6 +8,7 @@ import PhoneStage from '../components/PhoneStage.vue'
 import ProductArt from '../components/ProductArt.vue'
 import ReportFold from '../components/ReportFold.vue'
 import LivePhone from '../components/LivePhone.vue'
+import MarkedTextarea from '../components/MarkedTextarea.vue'
 import { useLiveDraft } from '../components/liveDraft.js'
 import { tintFor } from '../components/tints.js'
 import { typewrite } from '../components/typewriter.js'
@@ -248,7 +249,7 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
 
               <div v-if="v.publishable || v.editable" class="editor">
                 <label class="field-label" for="home-pub-text">正文（可直接修改，改完点「检查并保存」）</label>
-                <textarea id="home-pub-text" class="textarea" v-model="text" rows="10" spellcheck="false" @input="onInput"></textarea>
+                <MarkedTextarea id="home-pub-text" v-model="text" :flagged="v.flagged || []" :rows="10" @input="onInput" />
                 <div v-if="v.edit_status_html" class="server-html" v-html="cleanHtml(v.edit_status_html)"></div>
                 <div v-if="v.editable" class="row end">
                   <button class="btn btn-light btn-sm" @click="revert"><RotateCcw :size="15" aria-hidden="true" />恢复原文</button>

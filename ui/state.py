@@ -22,6 +22,7 @@ from agent.export import wechat_text
 from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags
 from agent.schemas import RunResult, StaffContext
 from ui.components import (
+    STILL_FAILING_REASON, failing_list_html,
     LOCKED_LABEL, SLOT_LABELS, banner_html, cached_image_bytes, can_act, card_locked_label,
     default_card_of, fallback_note, fresh_session, images_ready, last_real_run_html,
     last_real_run_notice_html, needs_review_html, other_cards, phone_html, placeholder_png,
@@ -205,6 +206,28 @@ def _warm_images(session: dict, result: RunResult, allow_fetch: bool) -> None:
                      name="hwpc-image-prefetch").start()
 
 
+def _flagged_sentences(session: dict, key: str, display, review_draft, failed_run: bool) -> list[str]:
+    """The sentences 正文 marks in red: exactly the list 「检查并保存」 enforces (on_check_save). After a failed
+    save that is its own failing list; before any save, the post's failing sentences; none once a fix is saved."""
+    if session.get("edited", {}).get(key):
+        return []
+    src = session.get("edit_fail", {}).get(key)
+    if not src:
+        if review_draft is not None:
+            src = getattr(display, "failing", None) or []
+        elif failed_run:
+            from agent.pipeline import failing_sentences
+            src = failing_sentences(display.post, display.report)
+        else:
+            src = []
+    out: list[str] = []
+    for f in src:
+        s = strip_fact_tags(getattr(f, "sentence", "") or "").strip()
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
 def _review_draft(display) -> RunResult | None:
     """The draft behind a 「需人工确认」 result: shown for a person to fix, never publishable as is."""
     draft = getattr(display, "draft", None) if result_kind(display) == "needs_review" else None
@@ -273,10 +296,8 @@ def _edit_state(session: dict, key: str, publishable: bool) -> tuple:
     fails = session.get("edit_fail", {}).get(key)
     dirty = session.get("dirty", {}).get(key)
     if fails:
-        items = "".join(f"<li><mark>{html.escape(f.sentence or '（整篇）')}</mark> — {html.escape(f.reason)}</li>"
-                        for f in fails)
         return (f'<div class="hw-banner err">❌ 修改未通过核验，复制和导出已停用（改好后再「检查并保存」，或「恢复原文」）'
-                f'<ul>{items}</ul></div>', False)
+                f'{failing_list_html(fails)}</div>', False)
     if dirty:
         return ('<div class="hw-banner warn">✏️ 有未检查的修改：点「检查并保存」核验后才能复制和导出</div>', False)
     if session.get("edited", {}).get(key):
@@ -298,7 +319,7 @@ def _base_view(session: dict, slots: list, show_other: bool) -> dict:
         "edit_status_html": "", "can_copy": False, "can_export": False, "final_text": "",
         "role": "店长" if staff.role == "manager" else "店员",
         "image_pending": bool(session.get("image_pending")), "platforms": list(PLATFORM_TABS),
-        "quick_edits": list(QUICK_EDITS),
+        "quick_edits": list(QUICK_EDITS), "flagged": [],
     }
 
 
@@ -438,6 +459,7 @@ def render(session: dict, allow_fetch: bool = False) -> dict:
     line = ui_data.weekly_progress(store_id)["line"] if store_id else ""
     progress_html = f'<div class="hw-banner note">{html.escape(line)}</div>' if line else ""
     edit_status, can_export = _edit_state(session, cid, publishable)
+    flagged = _flagged_sentences(session, cid, display, review_draft, failed_run) if editable else []
     final_text = wechat_text(live.post) if isinstance(live, RunResult) and publishable else ""
     zip_ready = bool(can_export and final_text and isinstance(live, RunResult) and images_ready(live))
     view.update({
@@ -450,7 +472,7 @@ def render(session: dict, allow_fetch: bool = False) -> dict:
         "images": len(live.post.images) if image_ok else 0,
         "published": published and publishable, "progress_html": progress_html,
         "edit_status_html": edit_status, "can_copy": bool(publishable and can_export), "can_export": zip_ready,
-        "final_text": final_text, "image_pending": bool(session.get("image_pending")),
+        "final_text": final_text, "image_pending": bool(session.get("image_pending")), "flagged": flagged,
     })
     return view
 
@@ -662,7 +684,7 @@ def on_check_save(text: str, session: dict) -> dict:
                  if (f.sentence or "").strip() and strip_fact_tags(f.sentence).strip() in text]
         if still:
             chk = dataclasses.replace(chk, passed=False, failing=[
-                dataclasses.replace(f, reason="这句未通过自动核验，请改写或删除后再保存") for f in still
+                dataclasses.replace(f, reason=STILL_FAILING_REASON) for f in still
             ] + list(chk.failing))
     if chk.passed:
         session.setdefault("edited", {})[key] = {"text": text.strip(), "post": chk.post}

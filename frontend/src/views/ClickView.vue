@@ -14,6 +14,7 @@ import PlatformThumb from '../components/PlatformThumb.vue'
 import ProductArt from '../components/ProductArt.vue'
 import ReportFold from '../components/ReportFold.vue'
 import LivePhone from '../components/LivePhone.vue'
+import MarkedTextarea from '../components/MarkedTextarea.vue'
 import { useLiveDraft } from '../components/liveDraft.js'
 import { tintFor } from '../components/tints.js'
 import { typewrite } from '../components/typewriter.js'
@@ -493,8 +494,8 @@ onBeforeUnmount(stopPoll)
               <div v-if="result.banner_html" class="server-html" v-html="cleanHtml(result.banner_html)"></div>
               <div class="editor">
                 <label class="field-label" for="click-copy">正文（可直接修改，改完点「检查并保存」）</label>
-                <textarea id="click-copy" v-model="copyBox" class="textarea" rows="10" spellcheck="false"
-                          :readonly="!result.editable || typing"></textarea>
+                <MarkedTextarea id="click-copy" v-model="copyBox" :flagged="typing ? [] : (result.flagged || [])" :rows="10"
+                                :readonly="!result.editable || typing" />
                 <div v-if="dirty" class="hw-banner warn">✏️ 有未检查的修改：点「检查并保存」核验后才能复制和导出</div>
                 <div v-else-if="result.edit_status_html" class="server-html" v-html="cleanHtml(result.edit_status_html)"></div>
                 <div v-if="result.editable" class="row end">
