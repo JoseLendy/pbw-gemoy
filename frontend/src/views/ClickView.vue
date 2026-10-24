@@ -4,9 +4,9 @@
 // result view: phone preview, quick edits, copy / download, report.
 import { computed, onBeforeUnmount, reactive, ref } from 'vue'
 import {
-  ArrowLeft, ArrowRight, BookOpen, Briefcase, Check, Clapperboard, Copy, FileDown, Gift, GraduationCap,
+  ArrowLeft, ArrowRight, BookOpen, Briefcase, Check, Clapperboard, Copy, Download, FileDown, Gift, GraduationCap,
   HeartHandshake, Image as ImageIcon, MessageSquareText, MousePointerClick, Palette, Pencil, RotateCcw,
-  Shuffle, Sofa, Users,
+  Send, Shuffle, Sofa, Users,
 } from 'lucide-vue-next'
 import { cleanHtml, copyText, downloadFile, downloadUrl, meta, postJson, sessionId, stream } from '../api.js'
 import PhoneStage from '../components/PhoneStage.vue'
@@ -14,6 +14,7 @@ import PlatformThumb from '../components/PlatformThumb.vue'
 import ProductArt from '../components/ProductArt.vue'
 import ReportFold from '../components/ReportFold.vue'
 import LivePhone from '../components/LivePhone.vue'
+import MarkedTextarea from '../components/MarkedTextarea.vue'
 import { useLiveDraft } from '../components/liveDraft.js'
 import { tintFor } from '../components/tints.js'
 import { typewrite } from '../components/typewriter.js'
@@ -132,7 +133,8 @@ function handle(data) {
   applyCache(data.cache)
   if (!cache.ready && cache.state !== 'error') pollCache()   // the hidden prefetch keeps filling the other platforms
   if (cancelType) cancelType()
-  cancelType = typewrite(data.pub_text || '', (t) => { copyBox.value = t }, { onDone: () => { cancelType = null } })
+  typing.value = true
+  cancelType = typewrite(data.pub_text || '', (t) => { copyBox.value = t }, { onDone: () => { cancelType = null; typing.value = false } })
 }
 
 // ---- the hidden other-platform cache: 换 stays disabled until every platform is ready
@@ -258,9 +260,36 @@ async function pickPlatform(label) {
     switching.value = false
   }
 }
+// ---- the store tab's controls on the 生成 tab: edit + 检查并保存 / 恢复原文, 发布包, 已发布
+const typing = ref(false)
+const editBusy = ref(false)
+// a hand change that has not been checked yet: copy / 发布包 / 已发布 stay off until 检查并保存
+const dirty = computed(() => !!result.value && !typing.value && copyBox.value.trim() !== (result.value.pub_text || '').trim())
+const canCopy = computed(() => !!result.value && result.value.can_copy && !dirty.value)
+function applyEdit(data) {
+  if (!data) return
+  if (data.kind === 'stop') { stopHtml.value = data.html; return }
+  if (cancelType) { cancelType(); cancelType = null }
+  typing.value = false
+  result.value = data
+  copyBox.value = data.pub_text || ''
+}
+async function editCall(url, body = {}) {
+  if (editBusy.value || busy.value) return
+  editBusy.value = true
+  stopHtml.value = ''
+  try { applyEdit(await postJson(url, body)) }
+  catch (e) { stopHtml.value = `<div class="hw-stop">出错：${e.message || '请求失败'}</div>` }
+  finally { editBusy.value = false }
+}
+const checkSave = () => editCall('/api/manual/check-save', { text: copyBox.value })
+const revert = () => editCall('/api/manual/revert')
+const markPublished = () => editCall('/api/manual/publish')
+function exportZip() { downloadFile(downloadUrl('/api/manual/export-zip'), '发布包.zip').catch(failDownload) }
+
 async function copy() {
-  if (!result.value) return
-  await copyText(result.value.pub_text || copyBox.value)
+  if (!canCopy.value) return
+  await copyText(result.value.final_text || result.value.pub_text || copyBox.value)
   copied.value = true
   setTimeout(() => (copied.value = false), 1500)
 }
@@ -464,17 +493,25 @@ onBeforeUnmount(stopPoll)
               </div>
               <div v-if="result.banner_html" class="server-html" v-html="cleanHtml(result.banner_html)"></div>
               <div class="editor">
-                <label class="field-label" for="click-copy">正文</label>
-                <textarea id="click-copy" class="textarea" :value="copyBox" readonly rows="10" spellcheck="false"></textarea>
+                <label class="field-label" for="click-copy">正文（可直接修改，改完点「检查并保存」）</label>
+                <MarkedTextarea id="click-copy" v-model="copyBox" :flagged="typing ? [] : (result.flagged || [])" :rows="10"
+                                :readonly="!result.editable || typing" />
+                <div v-if="dirty" class="hw-banner warn">✏️ 有未检查的修改：点「检查并保存」核验后才能复制和导出</div>
+                <div v-else-if="result.edit_status_html" class="server-html" v-html="cleanHtml(result.edit_status_html)"></div>
+                <div v-if="result.editable" class="row end">
+                  <button class="btn btn-light btn-sm" :disabled="editBusy || busy" @click="revert"><RotateCcw :size="15" aria-hidden="true" />恢复原文</button>
+                  <button class="btn btn-dark btn-sm" :disabled="editBusy || busy" @click="checkSave">检查并保存</button>
+                </div>
               </div>
               <div class="action-grid">
-                <button class="btn btn-dark copy-btn" @click="copy"><component :is="copied ? Check : Copy" :size="16" aria-hidden="true" />{{ copied ? '已复制' : '复制正文' }}</button>
-                <button class="btn btn-light" @click="download"><FileDown :size="16" aria-hidden="true" />下载 .md</button>
+                <button class="btn btn-dark" :disabled="!canCopy" @click="copy"><component :is="copied ? Check : Copy" :size="16" aria-hidden="true" />{{ copied ? '已复制' : '复制文案' }}</button>
+                <button class="btn btn-light" :disabled="!result.publishable" @click="download"><FileDown :size="16" aria-hidden="true" />下载 .md</button>
+                <button class="btn btn-light" :disabled="!canCopy" @click="exportZip"><Download :size="16" aria-hidden="true" />发布包</button>
                 <div class="img-wrap">
-                  <button class="btn btn-light btn-block" :disabled="!result.images"
+                  <button class="btn btn-light btn-block" :disabled="!result.images || !result.publishable"
                           :aria-haspopup="result.images > 1" :aria-expanded="imgOpen"
                           @click="result.images > 1 ? (imgOpen = !imgOpen) : downloadImg(0)">
-                    <ImageIcon :size="16" aria-hidden="true" />下载图片
+                    <ImageIcon :size="16" aria-hidden="true" />保存图片
                   </button>
                   <div v-if="imgOpen && result.images > 1" class="plat-menu img-menu">
                     <button class="img-all" @click="imgOpen = false; downloadAllImg()">下载所有图片</button>
@@ -482,6 +519,10 @@ onBeforeUnmount(stopPoll)
                   </div>
                 </div>
               </div>
+              <button class="btn btn-block" :class="result.published ? 'btn-done' : 'btn-outline'"
+                      :disabled="(!canCopy && !result.published) || editBusy" @click="markPublished">
+                <Send :size="16" aria-hidden="true" />{{ result.publish_label }}
+              </button>
             </div>
           </div>
           <ReportFold v-if="result" :md="result.report_md" />

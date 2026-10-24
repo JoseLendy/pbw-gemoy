@@ -389,3 +389,24 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ---------- 正文 with failing sentences marked (components/MarkedTextarea.vue) ---------- */
+/* The backdrop and the textarea share .textarea (same padding, border, font, line height) and both keep a
+   scrollbar gutter, so a line wraps at the same place in both and the marks sit under the right words. */
+.marked-wrap { position: relative; }
+.marked-back, .marked-input { scrollbar-gutter: stable; overflow-wrap: break-word; word-break: normal; }
+.marked-back { position: absolute; inset: 0; min-height: 0; overflow: hidden; white-space: pre-wrap;
+  color: transparent; pointer-events: none; resize: none; }
+.marked-back mark { color: transparent; background: rgba(229, 72, 77, 0.22); border-bottom: 2px solid #E5484D;
+  border-radius: 2px; padding: 0; }
+.marked-input { position: relative; display: block; background: transparent; overflow-y: auto; }
+.flag-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.flag-list-head { width: 100%; font-size: 12.5px; font-weight: 600; color: #8C1C2A; }
+.flag-item { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 10px;
+  border: 1px solid var(--err-line); border-radius: 8px; background: var(--err-bg); color: #8C1C2A;
+  font-size: 13px; text-align: left; cursor: pointer; }
+.flag-item:hover { border-color: #E5484D; }
+.flag-item .flag-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34em; }
+.flag-item.done { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); text-decoration: line-through; }
+.flag-item .flag-done { text-decoration: none; font-size: 12px; }
+.flag-miss { font-size: 12.5px; color: var(--ink-3); }

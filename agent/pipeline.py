@@ -342,7 +342,10 @@ def run(text: str, form: dict | None = None, deps: Deps | None = None,
         if isinstance(parsed, Clarification):
             _say(on_progress, "intake", "还缺少信息，请补充")
             return parsed
-        return _from_retrieval(parsed, deps, on_progress, timer, on_post)
+        result = _from_retrieval(parsed, deps, on_progress, timer, on_post)
+        # Same step 1 as the card path's fallback: a post still failing after 2 rewrites first loses its
+        # failing sentences and is re-checked; only if that fails too does it reach the user marked red.
+        return trim_if_failed(result, deps, on_progress)
 
 
 # ---------------------------------------------------------------- run from a recommendation card
@@ -718,25 +721,63 @@ def _errors_n(r) -> int:
     return sum(1 for i in r.report.issues if i.severity == "error") if isinstance(r, RunResult) else 10 ** 6
 
 
+def _note(result: RunResult, on_progress: Progress, message: str) -> None:
+    """Why the trim step did not deliver: streamed as progress and kept on the result for the UI."""
+    _say(on_progress, "check", message)
+    try:
+        result._trim_note = message
+    except AttributeError:   # a frozen / slotted result: the progress line is enough
+        pass
+
+
+def _try_trim(result: RunResult, deps: Deps, on_progress: Progress = None) -> tuple[RunResult | None, bool]:
+    """Fallback step 1, shared by the card path and the 生成 path: delete the failing sentences and run every
+    check again. Returns (a passing, still-deliverable RunResult with fallback="trimmed" or None, whether a
+    trimmed post could be built at all). No LLM writer call; only the checks run again."""
+    failing = failing_sentences(result.post, result.report)
+    trimmed_post = _trim(result.post, failing)
+    if trimmed_post is None:
+        whole = sum(1 for f in failing if not f.sentence)
+        _note(result, on_progress, f"自动删句未执行：{whole} 处问题针对整篇（如缺少到店引导、卖点数量、段落结构），"
+                                   "删句无法解决" if whole else "自动删句未执行：没有可删的句子")
+        return None, False
+    if not _deliverable(trimmed_post):
+        _note(result, on_progress, f"自动删句未采用：删去 {len(failing)} 句后缺少标题、卖点或到店引导，内容不完整")
+        return None, True
+    report = deps.run_checks(trimmed_post, result.ledger, getattr(result, "_sibling_ledgers", {}) or {},
+                             result.task, result.plan, deps.llm)
+    if not report.passed:
+        left = sum(1 for i in report.issues if i.severity == "error")
+        _note(result, on_progress, f"自动删句未通过：删去 {len(failing)} 句后重新核验，仍有 {left} 处未通过")
+        return None, True
+    from agent.checks.prices import mark_demo_prices
+    out = copy.copy(result)
+    out.post, out.report, out.fallback = mark_demo_prices(trimmed_post, result.task), report, "trimmed"
+    out.pending = _collect_pending(result.strategy, result.plan, report, result.task)
+    _say(on_progress, "check", f"删去 {len(failing)} 处未通过的句子后核验通过")
+    return out, True
+
+
+def trim_if_failed(result, deps: Deps, on_progress: Progress = None):
+    """The 生成 path's safety net (run / edit): a RunResult that failed after its rewrites gets fallback step 1
+    (delete the failing sentences, re-check). Anything else, or a trim that does not pass, is returned as is."""
+    if not isinstance(result, RunResult) or result.report.passed:
+        return result
+    trimmed, _ = _try_trim(result, deps, on_progress)
+    return trimmed if trimmed is not None else result
+
+
 def apply_fallback(card: RecommendationCard, result: RunResult, deps: Deps, staff=None,
                    on_progress: Progress = None, on_post: PostHook = None):
     """T4 policy for a card run that failed after 2 rewrites. Returns a passing RunResult (fallback set)
     or NeedsReview. Every delivered post has passed all checks."""
     attempts = [card.card_id]
-    failing = failing_sentences(result.post, result.report)
-    trimmed_post = _trim(result.post, failing)
     best = result
-    if trimmed_post is not None:
-        report = deps.run_checks(trimmed_post, result.ledger, getattr(result, "_sibling_ledgers", {}) or {},
-                                 result.task, result.plan, deps.llm)
+    trimmed, tried = _try_trim(result, deps, on_progress)
+    if tried:
         attempts.append("trimmed")
-        if report.passed and _deliverable(trimmed_post):
-            from agent.checks.prices import mark_demo_prices
-            out = copy.copy(result)
-            out.post, out.report, out.fallback = mark_demo_prices(trimmed_post, result.task), report, "trimmed"
-            out.pending = _collect_pending(result.strategy, result.plan, report, result.task)
-            _say(on_progress, "check", f"删去 {len(failing)} 处未通过的句子后核验通过")
-            return out
+    if trimmed is not None:
+        return trimmed
     nxt = _next_card(card)
     if nxt is not None:
         attempts.append(nxt.card_id)
@@ -1018,7 +1059,8 @@ def edit(prev: RunResult, instruction: str, deps: Deps | None = None,
     deps = deps or default_deps()
     timer = _Timer()
     with collect(timer.timings):
-        return _edit_stages(prev, instruction, deps, on_progress, timer, on_post)
+        result = _edit_stages(prev, instruction, deps, on_progress, timer, on_post)
+        return trim_if_failed(result, deps, on_progress)     # same trim step as a fresh run
 
 
 def _edit_stages(prev: RunResult, instruction: str, deps: Deps, on_progress: Progress, timer: _Timer,

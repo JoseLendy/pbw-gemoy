@@ -3,11 +3,12 @@
 // questions + talk track on the right. Every rule lives server-side (ui/state.py); this renders its JSON view.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ArrowRight, Check, Copy, Download, FileDown, Image as ImageIcon, RefreshCw, RotateCcw, Send } from 'lucide-vue-next'
-import { account, cleanHtml, copyText, downloadUrl, meta, postJson, stream } from '../api.js'
+import { account, cleanHtml, copyText, downloadFile, downloadUrl, meta, postJson, sessionId, stream } from '../api.js'
 import PhoneStage from '../components/PhoneStage.vue'
 import ProductArt from '../components/ProductArt.vue'
 import ReportFold from '../components/ReportFold.vue'
 import LivePhone from '../components/LivePhone.vue'
+import MarkedTextarea from '../components/MarkedTextarea.vue'
 import { useLiveDraft } from '../components/liveDraft.js'
 import { tintFor } from '../components/tints.js'
 import { typewrite } from '../components/typewriter.js'
@@ -111,7 +112,18 @@ async function copy() {
   copied.value = true
   setTimeout(() => (copied.value = false), 1500)
 }
-function download(path) { const a = document.createElement('a'); a.href = downloadUrl(path); a.click() }
+// Downloads go through fetch → blob, so a server error shows here instead of opening a raw JSON page.
+function download(path, name = 'download') {
+  downloadFile(downloadUrl(path), name).catch((e) => { progress.value = e.message || '下载失败' })
+}
+// 保存图片: one image (第 N 张) or every image of this post as a zip, as on the 生成 tab.
+const imgOpen = ref(false)
+function saveImage(i) {
+  imgOpen.value = false
+  downloadFile(`/api/store/save-image?idx=${i}&session_id=${encodeURIComponent(sessionId.value)}&t=${Date.now()}`, `图${i + 1}`)
+    .catch((e) => { progress.value = e.message || '下载失败' })
+}
+function saveAllImages() { imgOpen.value = false; download('/api/store/save-images', '图片.zip') }
 
 function scheduleImagePoll() {
   clearInterval(imageTimer)
@@ -196,7 +208,7 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
             <button v-if="v.action && v.action.visible" class="btn btn-dark btn-lg" :disabled="busy" @click="generate">
               {{ v.action.label }}<ArrowRight :size="18" aria-hidden="true" />
             </button>
-            <button class="btn btn-light" :disabled="busy" @click="toggleOther"><RefreshCw :size="16" aria-hidden="true" />换一条</button>
+            <button class="btn btn-light btn-lg" :disabled="busy" @click="toggleOther"><RefreshCw :size="16" aria-hidden="true" />换一条</button>
           </div>
           <div v-if="v.show_other && v.slots && v.slots.length" class="slot-list">
             <button v-for="s in v.slots" :key="s.idx" class="slot" :disabled="busy" @click="selectOther(s.idx)">{{ s.label }}</button>
@@ -235,9 +247,9 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
               <div v-if="v.status_html" class="server-html" v-html="cleanHtml(v.status_html)"></div>
               <div v-if="v.banner_html" class="server-html" v-html="cleanHtml(v.banner_html)"></div>
 
-              <div v-if="v.publishable" class="editor">
+              <div v-if="v.publishable || v.editable" class="editor">
                 <label class="field-label" for="home-pub-text">正文（可直接修改，改完点「检查并保存」）</label>
-                <textarea id="home-pub-text" class="textarea" v-model="text" rows="10" spellcheck="false" @input="onInput"></textarea>
+                <MarkedTextarea id="home-pub-text" v-model="text" :flagged="v.flagged || []" :rows="10" @input="onInput" />
                 <div v-if="v.edit_status_html" class="server-html" v-html="cleanHtml(v.edit_status_html)"></div>
                 <div v-if="v.editable" class="row end">
                   <button class="btn btn-light btn-sm" @click="revert"><RotateCcw :size="15" aria-hidden="true" />恢复原文</button>
@@ -245,15 +257,25 @@ onBeforeUnmount(() => { clearInterval(imageTimer); if (cancelType) cancelType() 
                 </div>
               </div>
 
-              <div v-if="v.publishable || v.downloadable" class="action-grid">
-                <button v-if="v.publishable" class="btn btn-dark" :disabled="!v.can_copy" @click="copy">
+              <!-- the full control set is always shown once a post exists; each button is off until it may act -->
+              <div v-if="v.publishable || v.downloadable || v.editable" class="action-grid">
+                <button class="btn btn-dark" :disabled="!v.can_copy" @click="copy">
                   <component :is="copied ? Check : Copy" :size="16" aria-hidden="true" />{{ copied ? '已复制' : '复制文案' }}
                 </button>
-                <button v-if="v.downloadable" class="btn btn-light" @click="download('/api/store/download-md')"><FileDown :size="16" aria-hidden="true" />下载 .md</button>
-                <button v-if="v.publishable" class="btn btn-light" :disabled="!v.can_export" :title="v.can_export ? '' : '图片就绪后可下载'" @click="download('/api/store/export-zip')"><Download :size="16" aria-hidden="true" />发布包</button>
-                <button v-if="v.image_ok" class="btn btn-light" @click="download('/api/store/save-image')"><ImageIcon :size="16" aria-hidden="true" />保存图片</button>
+                <button class="btn btn-light" :disabled="!v.downloadable" @click="download('/api/store/download-md')"><FileDown :size="16" aria-hidden="true" />下载 .md</button>
+                <button class="btn btn-light" :disabled="!v.can_export" :title="v.can_export ? '' : (v.publishable ? '图片就绪后可下载' : '通过核验后可下载')" @click="download('/api/store/export-zip')"><Download :size="16" aria-hidden="true" />发布包</button>
+                <div class="img-wrap">
+                  <button class="btn btn-light btn-block" :disabled="!v.image_ok" :aria-haspopup="v.images > 1" :aria-expanded="imgOpen"
+                          @click="v.images > 1 ? (imgOpen = !imgOpen) : saveImage(0)">
+                    <ImageIcon :size="16" aria-hidden="true" />保存图片
+                  </button>
+                  <div v-if="imgOpen && v.images > 1" class="plat-menu img-menu">
+                    <button class="img-all" @click="saveAllImages">下载所有图片</button>
+                    <button v-for="n in v.images" :key="n" @click="saveImage(n - 1)">第 {{ n }} 张</button>
+                  </div>
+                </div>
               </div>
-              <button v-if="v.publishable" class="btn btn-block" :class="v.published ? 'btn-done' : 'btn-outline'" :disabled="!v.can_copy && !v.published" @click="publish">
+              <button v-if="v.publishable || v.editable" class="btn btn-block" :class="v.published ? 'btn-done' : 'btn-outline'" :disabled="!v.can_copy && !v.published" @click="publish">
                 <Send :size="16" aria-hidden="true" />{{ v.publish_label }}
               </button>
             </template>
