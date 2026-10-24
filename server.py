@@ -12,6 +12,8 @@ slow (ima + LLM) work so page loads and store switches never wait behind a gener
 """
 from __future__ import annotations
 
+import dataclasses
+import html
 import io
 import json
 import logging
@@ -57,7 +59,7 @@ from agent.schemas import Clarification, NeedsHuman, PLATFORM_LABELS, RunResult 
 from agent.ui_data import DEPS, plain_error, reset_token, today as demo_today  # noqa: E402
 from ui import baseline_view, compare_view, hq_view, state  # noqa: E402
 from ui.components import (  # noqa: E402
-    banner_html, cached_image_bytes, fresh_session, phone_html, stop_html, talk_card_html,
+    banner_html, cached_image_bytes, fallback_note, fresh_session, phone_html, stop_html, talk_card_html,
 )
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -877,15 +879,27 @@ def api_store_download_md(session_id: str = ""):
 
 
 @app.get("/api/store/save-image")
-def api_store_save_image(session_id: str = ""):
+def api_store_save_image(session_id: str = "", idx: int = 0):
     _require(session_id)
     s = _store_session(session_id)
     with s["lock"]:
-        out = state.save_image(s)
+        out = state.save_image(s, idx)
     if out is None:
         return JSONResponse({"error": "当前没有可保存的图片。"}, status_code=409)
     mime = {"png": "image/png", "svg": "image/svg+xml"}.get(out[0].rsplit(".", 1)[-1], "image/jpeg")
     return _file(out[0], out[1], mime)
+
+
+@app.get("/api/store/save-images")
+def api_store_save_images(session_id: str = ""):
+    """保存图片 · 下载所有图片 on the store tab: this post's images as one zip."""
+    _require(session_id)
+    s = _store_session(session_id)
+    with s["lock"]:
+        out = state.save_images(s)
+    if out is None:
+        return JSONResponse({"error": "图片还在准备中，请稍后再试。"}, status_code=409)
+    return _file(out[0], out[1], "application/zip")
 
 
 # ---------------------------------------------------------------- 三店对比
@@ -1082,11 +1096,59 @@ def _start_prefetch(m: dict, current: RunResult) -> None:
     threading.Thread(target=worker, daemon=True, name="manual-prefetch").start()
 
 
-def _manual_render(r: RunResult, m: dict | None = None) -> dict:
-    out = {"kind": "result", "phone_html": phone_html(r, DEPS), "talk_html": talk_card_html(r),
-           "banner_html": banner_html(r), "report_md": render_report(r), "pub_text": render_publishable(r.post),
-           "platform_label": PLATFORM_LABELS.get(r.post.platform, r.post.platform),
-           "model": r.model.canonical_name, "images": len(r.post.images)}
+# The store tab's short platform names, used by the weekly publish log (agent.recommend.weekly).
+_MANUAL_SHORT = {"moments": "朋友圈", "xiaohongshu": "小红书", "wechat_article": "公众号",
+                 "poster": "海报", "douyin": "抖音"}
+
+
+def _manual_final(r: RunResult, m: dict | None) -> RunResult:
+    """The post as it will be published: a saved 「检查并保存」 edit replaces the generated post."""
+    saved = ((m or {}).get("edited") or {}).get(r.post.platform)
+    return dataclasses.replace(r, post=saved["post"]) if saved else r
+
+
+def _manual_publishable(r: RunResult, m: dict | None) -> bool:
+    """Passed every check, or a person fixed the flagged sentences and 「检查并保存」 passed."""
+    return bool(r.report.passed) or bool(((m or {}).get("edited") or {}).get(r.post.platform))
+
+
+def _manual_render(r: RunResult, m: dict | None = None, edit_fail: list | None = None) -> dict:
+    from agent.export import wechat_text
+    plat = r.post.platform
+    saved = ((m or {}).get("edited") or {}).get(plat)
+    final = _manual_final(r, m)
+    passed = bool(r.report.passed)
+    publishable = _manual_publishable(r, m)
+    published = plat in ((m or {}).get("published") or set())
+    short = _MANUAL_SHORT.get(plat, PLATFORM_LABELS.get(plat, plat))
+    if edit_fail:
+        items = "".join(f"<li><mark>{html.escape(f.sentence or '（整篇）')}</mark> — {html.escape(f.reason)}</li>"
+                        for f in edit_fail)
+        edit_status = (f'<div class="hw-banner err">❌ 修改未通过核验，复制和导出已停用（改好后再「检查并保存」，或「恢复原文」）'
+                       f'<ul>{items}</ul></div>')
+    elif saved:
+        edit_status = ('<div class="hw-banner ok">✅ 已修改·已核验</div>' if passed else
+                       '<div class="hw-banner ok">✅ 已人工处理：未通过的句子已修改，并通过「检查并保存」</div>')
+    elif not passed:
+        trim_note = getattr(r, "_trim_note", "")     # why the automatic trim step did not fix it
+        edit_status = ((f'<div class="hw-banner warn">{html.escape(trim_note)}</div>' if trim_note else "") +
+                       '<div class="hw-banner note">这篇有句子未通过核验（见上方红色提示）。可以在正文里改写或删除这些句子，'
+                       '再点「检查并保存」；通过后才能复制、导出和标记为已发布。</div>')
+    else:
+        edit_status = ""
+    note = fallback_note(r)     # 「已删去未通过核验的句子」 after the trim step (agent.pipeline.trim_if_failed)
+    note_html = f'<div class="hw-banner note">ℹ️ {html.escape(note)}</div>' if note else ""
+    out = {"kind": "result", "phone_html": phone_html(final, DEPS), "talk_html": talk_card_html(r),
+           "banner_html": note_html + banner_html(r), "report_md": render_report(final),
+           "pub_text": saved["text"] if saved else render_publishable(r.post),
+           "original_text": render_publishable(r.post),
+           "final_text": wechat_text(final.post) if publishable else "",
+           "platform_label": PLATFORM_LABELS.get(plat, plat),
+           "model": r.model.canonical_name, "images": len(r.post.images),
+           # the same controls as the store tab: edit + check, copy, .md, 发布包, 保存图片, 已发布
+           "editable": True, "publishable": publishable, "passed": passed, "edited": bool(saved),
+           "edit_status_html": edit_status, "can_copy": publishable and not edit_fail, "published": published,
+           "publish_label": f"已发布 ✓（{short}，已记录）" if published else f"标记为已发布（{short}）"}
     if m is not None:
         out["cache"] = _manual_cache(m)
     return out
@@ -1103,6 +1165,9 @@ def _manual_handle(result, m: dict) -> dict:
         return {"kind": "stop", "html": stop_html(getattr(result, "message", "无法完成这次修改。"))}
     m["result"] = result
     m.setdefault("results", {})[result.post.platform] = result
+    # a freshly written post is a new, unedited and unpublished version on its platform
+    (m.get("edited") or {}).pop(result.post.platform, None)
+    (m.get("published") or set()).discard(result.post.platform)
     return _manual_render(result, m)
 
 
@@ -1336,8 +1401,95 @@ def api_manual_download(session_id: str = ""):
     r = _manual(s).get("result")
     if r is None:
         return JSONResponse({"error": "当前没有可下载的内容。"}, status_code=409)
+    if not _manual_publishable(r, _manual(s)):
+        return JSONResponse({"error": "这篇有句子未通过核验，修改并「检查并保存」后才能下载。"}, status_code=409)
     name = re.sub(r"[^\w一-鿿-]+", "_", f"{r.model.canonical_name}_{PLATFORM_LABELS[r.post.platform]}")[:60]
-    return _file(f"{name}.md", render_download(r).encode("utf-8"), "text/markdown; charset=utf-8")
+    return _file(f"{name}.md", render_download(_manual_final(r, _manual(s))).encode("utf-8"),
+                 "text/markdown; charset=utf-8")
+
+
+class ManualTextReq(Sid):
+    text: str = ""
+
+
+@app.post("/api/manual/check-save")
+def api_manual_check_save(req: ManualTextReq) -> dict:
+    """「检查并保存」 on the 生成 tab: the same deterministic edit check as the store tab (no LLM)."""
+    from agent import ui_data as _ud
+    _require(req.session_id)
+    m = _manual(_session(req.session_id))
+    r = m.get("result")
+    if not isinstance(r, RunResult):
+        return {"kind": "stop", "html": stop_html("请先生成一篇内容。", "提示")}
+    plat = r.post.platform
+    text = (req.text or "").strip()
+    if text == render_publishable(r.post).strip():
+        m.setdefault("edited", {}).pop(plat, None)       # back to the generated text: nothing to save
+        return _manual_render(r, m)
+    chk = _ud.check_edit(text, r)
+    failing = list(chk.failing)
+    if not r.report.passed:
+        from agent.formatter import strip_fact_tags
+        from agent.pipeline import failing_sentences
+        still = [dataclasses.replace(f, reason="这句未通过自动核验，请改写或删除后再保存")
+                 for f in failing_sentences(r.post, r.report)
+                 if (f.sentence or "").strip() and strip_fact_tags(f.sentence).strip() in text]
+        failing = still + failing
+    if not chk.passed or failing:
+        return _manual_render(r, m, edit_fail=failing)
+    m.setdefault("edited", {})[plat] = {"text": text, "post": chk.post}
+    m.setdefault("published", set()).discard(plat)      # the edited version is a new, unpublished one
+    return _manual_render(r, m)
+
+
+@app.post("/api/manual/revert")
+def api_manual_revert(req: Sid) -> dict:
+    _require(req.session_id)
+    m = _manual(_session(req.session_id))
+    r = m.get("result")
+    if not isinstance(r, RunResult):
+        return {"kind": "stop", "html": stop_html("请先生成一篇内容。", "提示")}
+    m.setdefault("edited", {}).pop(r.post.platform, None)
+    return _manual_render(r, m)
+
+
+@app.post("/api/manual/publish")
+def api_manual_publish(req: Sid) -> dict:
+    """标记为已发布: recorded in the store's weekly log when this account has a store."""
+    acct = _require(req.session_id)
+    s = _session(req.session_id)
+    m = _manual(s)
+    r = m.get("result")
+    if not isinstance(r, RunResult) or not _manual_publishable(r, m):
+        return {"kind": "stop", "html": stop_html("只有通过核验的内容可以标记为已发布。", "提示")}
+    plat = r.post.platform
+    published = m.setdefault("published", set())
+    store_id = acct.get("store_id") or s.get("store_id") or ""
+    if plat not in published and store_id:
+        try:
+            from agent import ui_data as _ud
+            _ud.mark_published(store_id, _MANUAL_SHORT.get(plat, plat), f"manual-{s.get('id', '')[:8]}")
+        except Exception as e:  # noqa: BLE001 - the mark is still kept on the session
+            log.warning("manual publish mark failed: %s", e)
+    published.add(plat)
+    return _manual_render(r, m)
+
+
+@app.get("/api/manual/export-zip")
+def api_manual_export_zip(session_id: str = ""):
+    """发布包: the copied text (文案.txt) plus this post's images, as on the store tab."""
+    from agent import ui_data as _ud
+    from agent.export import wechat_text
+    acct = _require(session_id)
+    s = _session(session_id)
+    m = _manual(s)
+    r = m.get("result")
+    if not isinstance(r, RunResult) or not _manual_publishable(r, m):
+        return JSONResponse({"error": "只有通过核验的内容可以下载发布包。"}, status_code=409)
+    final = _manual_final(r, m)
+    store_id = acct.get("store_id") or s.get("store_id") or "manual"
+    path = Path(_ud.export_zip(final.post, store_id, wechat_text(final.post), fetch=_image_bytes))
+    return _file(path.name, path.read_bytes(), "application/zip")
 
 
 @app.post("/api/manual/reset")

@@ -19,7 +19,7 @@ from pathlib import Path
 
 from agent import ui_data
 from agent.export import wechat_text
-from agent.formatter import render_download, render_publishable, render_report
+from agent.formatter import render_download, render_publishable, render_report, strip_fact_tags
 from agent.schemas import RunResult, StaffContext
 from ui.components import (
     LOCKED_LABEL, SLOT_LABELS, banner_html, cached_image_bytes, can_act, card_locked_label,
@@ -205,12 +205,23 @@ def _warm_images(session: dict, result: RunResult, allow_fetch: bool) -> None:
                      name="hwpc-image-prefetch").start()
 
 
+def _review_draft(display) -> RunResult | None:
+    """The draft behind a 「需人工确认」 result: shown for a person to fix, never publishable as is."""
+    draft = getattr(display, "draft", None) if result_kind(display) == "needs_review" else None
+    return draft if isinstance(draft, RunResult) else None
+
+
 def _can_publish(session: dict, card) -> bool:
     if card is None or card.locked or not can_act(card, _staff(session)):
         return False
-    display = session.get("results", {}).get(f"{card.card_id}|{card.platform}")
+    key = f"{card.card_id}|{card.platform}"
+    display = session.get("results", {}).get(key)
     if isinstance(display, RunResult):
-        return bool(display.report.passed)
+        # a failed post (e.g. a 快速调整 that still fails after the trim step) may publish once fixed by hand
+        return bool(display.report.passed) or bool(session.get("edited", {}).get(key))
+    if _review_draft(display) is not None:
+        # 需人工确认: publishable only after a person fixed it and 「检查并保存」 passed (see on_check_save).
+        return bool(session.get("edited", {}).get(key))
     # A prepared today's post can be published; a recovery record never can (it is not this run).
     live = _display_result(display) if isinstance(display, _PreparedDisplay) else None
     return isinstance(live, RunResult) and bool(live.report.passed)
@@ -307,25 +318,28 @@ def render(session: dict, allow_fetch: bool = False) -> dict:
     locked = bool(card.locked)
     results = session.get("results", {})
     display = results.get(cid)
-    live = _final(session, cid, _display_result(display))
+    review_draft = _review_draft(display)
+    live = _final(session, cid, _display_result(display) or review_draft)
     prepared = isinstance(display, _PreparedDisplay)
     publishable = _can_publish(session, card)
     editable = (isinstance(live, RunResult) and not isinstance(display, _RecoveryDisplay)
                 and can_act(card, staff) and not locked)
     downloadable = isinstance(live, RunResult) and not isinstance(display, _RecoveryDisplay)
+    failed_run = isinstance(display, RunResult) and not display.report.passed
+    if review_draft is not None or failed_run:
+        downloadable = downloadable and publishable      # failed / 需人工确认 content leaves only once it is fixed
     image_ok = downloadable and bool(getattr(live, "post", None) and live.post.images)
     actual_card = _delivered_card(session, card, live) if isinstance(live, RunResult) else card
     if actual_card is not card:
-        # The generated post belongs to the next card; never act on it under the requested card's
-        # platform/role, and hide the edit controls that would still talk about the old card.
+        # The generated post belongs to the next card (fallback=next_card). Every role may act on every
+        # platform, so it stays editable and publishable under the delivered card's permissions.
         publishable = publishable and can_act(actual_card, staff)
-        editable = False
+        editable = editable and can_act(actual_card, staff)
     prepared_slot = (SLOT_LABELS.get(getattr(actual_card, "slot", None), "")
                      if prepared and actual_card is not card else None)
     review = prepared and (display.payload or {}).get("status") == "NeedsReview"
     panel = _card_panel(actual_card, prepared and not locked, staff, prepared_slot, review, "")
-    label = ("重新生成" if display is not None else
-             "生成公众号文章" if card.platform == "公众号" else "生成")
+    label = "重新生成" if display is not None else "生成"   # same wording on every platform
     action = {"label": label, "visible": not locked and can_act(card, staff)}
 
     em = session.get("edit_message")
@@ -380,8 +394,14 @@ def render(session: dict, allow_fetch: bool = False) -> dict:
             banner_out = banner_html(live)
             phone_out = phone_html(live, ui_data.DEPS if allow_fetch else None, allow_fetch=allow_fetch)
             report_md = render_report(live)
-            if publishable:
-                pub_text = render_publishable(live.post)
+            if publishable or failed_run:
+                pub_text = render_publishable(display.post if failed_run else live.post)
+            if failed_run:
+                if session.get("edited", {}).get(cid):
+                    status_box += '<div class="hw-banner ok">已人工处理：未通过的句子已修改，并通过「检查并保存」</div>'
+                else:
+                    status_box += ('<div class="hw-banner note">这篇有句子未通过核验（见红色提示）。可以在下方正文里改写或删除'
+                                   '这些句子，再点「检查并保存」；通过后才能复制、导出和标记为已发布。</div>')
         elif kind == "locked":
             status_box += stop_html(display.message, "新品未解锁")
         elif kind == "needs_human":
@@ -391,19 +411,24 @@ def render(session: dict, allow_fetch: bool = False) -> dict:
                 items = "".join(f"<li>{html.escape(str(c))}</li>" for c in conflicts)
                 status_box += f'<div class="hw-banner warn"><ul>{items}</ul></div>'
         elif kind == "needs_review":
-            status_box += needs_review_html(display)
-            draft = getattr(display, "draft", None)
-            if isinstance(draft, RunResult):
-                phone_out = phone_html(draft, ui_data.DEPS if allow_fetch else None,
-                                       allow_fetch=allow_fetch)   # read-only: no pub_text
+            if session.get("edited", {}).get(cid):
+                status_box += ('<div class="hw-banner ok">已人工处理：未通过的句子已修改，并通过「检查并保存」</div>')
+            else:
+                status_box += needs_review_html(display)
+                status_box += ('<div class="hw-banner note">可以在下方正文里改写或删除上面列出的句子，'
+                               '再点「检查并保存」；通过后才能复制、导出和标记为已发布。</div>')
+            if isinstance(live, RunResult):
+                phone_out = phone_html(live, ui_data.DEPS if allow_fetch else None, allow_fetch=allow_fetch)
+                pub_text = render_publishable(review_draft.post)   # the draft text, to be fixed by hand
         elif kind == "baseline":
             status_box += f'<div class="hw-banner note">{html.escape(display.display_text)}</div>'
 
     if not locked and display is None:
         phone_out = EMPTY_PHONE
-    if publishable and session.get("dirty", {}).get(cid):
+    keeps_text = publishable or review_draft is not None or failed_run   # fixed by hand before it may publish
+    if keeps_text and session.get("dirty", {}).get(cid):
         pub_text = session.get("drafts", {}).get(cid, pub_text)
-    elif publishable and session.get("edited", {}).get(cid):
+    elif keeps_text and session.get("edited", {}).get(cid):
         pub_text = session["edited"][cid]["text"]
     published = bool(session.get("published", {}).get(cid))
     published_label = ((f"已发布 ✓（{card.platform}，已记录）" if published
@@ -422,6 +447,7 @@ def render(session: dict, allow_fetch: bool = False) -> dict:
         "report_md": report_md, "editable": bool(editable), "publishable": bool(publishable),
         "downloadable": bool(downloadable), "pub_text": pub_text,
         "image_ok": bool(image_ok), "publish_label": published_label or "标记为已发布",
+        "images": len(live.post.images) if image_ok else 0,
         "published": published and publishable, "progress_html": progress_html,
         "edit_status_html": edit_status, "can_copy": bool(publishable and can_export), "can_export": zip_ready,
         "final_text": final_text, "image_pending": bool(session.get("image_pending")),
@@ -592,7 +618,8 @@ def _shown_text(session: dict, key: str) -> str:
     saved = session.get("edited", {}).get(key)
     if saved:
         return saved["text"]
-    live = _display_result(session.get("results", {}).get(key))
+    d = session.get("results", {}).get(key)
+    live = _display_result(d) or _review_draft(d)
     return render_publishable(live.post) if isinstance(live, RunResult) else ""
 
 
@@ -613,14 +640,30 @@ def on_check_save(text: str, session: dict) -> dict:
     """Deterministic checks only (no LLM). Pass → 「已修改·已核验」, used for preview, copy and export, and
     logged as a human edit; fail → the failing sentences with reasons, copy/export stay off."""
     card, key = _current_card(session)
-    live = _display_result(session.get("results", {}).get(key)) if card is not None else None
-    if not isinstance(live, RunResult) or not _can_publish(session, card):
+    display = session.get("results", {}).get(key) if card is not None else None
+    review = _review_draft(display)
+    failed_run = isinstance(display, RunResult) and not display.report.passed
+    live = _display_result(display) or review
+    allowed = (not card.locked and can_act(card, _staff(session))) \
+        if (review is not None or failed_run) else _can_publish(session, card)
+    if not isinstance(live, RunResult) or not allowed:
         return render(session)
     original = render_publishable(live.post)
     if (text or "").strip() == original.strip():          # back to the generated text: nothing to save
         _drop_edit(session, key)
         return render(session)
     chk = ui_data.check_edit(text, live)
+    if review is not None or failed_run:
+        # failed / 需人工确认: every sentence the automatic check failed must be rewritten or removed by hand.
+        from agent.pipeline import failing_sentences
+        flagged = (getattr(display, "failing", None) or []) if review is not None \
+            else failing_sentences(display.post, display.report)
+        still = [f for f in flagged
+                 if (f.sentence or "").strip() and strip_fact_tags(f.sentence).strip() in text]
+        if still:
+            chk = dataclasses.replace(chk, passed=False, failing=[
+                dataclasses.replace(f, reason="这句未通过自动核验，请改写或删除后再保存") for f in still
+            ] + list(chk.failing))
     if chk.passed:
         session.setdefault("edited", {})[key] = {"text": text.strip(), "post": chk.post}
         session.setdefault("dirty", {})[key] = False
@@ -657,7 +700,8 @@ def export_zip(session: dict) -> tuple[str, bytes] | None:
     """「下载发布包」: <store>-<date>-<platform>.zip with 文案.txt (the copied text) and the images in order.
     Built from the in-process image cache only, so it never waits on image bytes."""
     card, key = _current_card(session)
-    live = _final(session, key, _display_result(session.get("results", {}).get(key))) if card else None
+    d = session.get("results", {}).get(key) if card else None
+    live = _final(session, key, _display_result(d) or _review_draft(d)) if card else None
     if not isinstance(live, RunResult) or not _can_publish(session, card) or not _edit_state(session, key, True)[1]:
         return None
     if not images_ready(live):
@@ -669,30 +713,73 @@ def export_zip(session: dict) -> tuple[str, bytes] | None:
 def download_text(session: dict) -> tuple[str, bytes] | None:
     card, cid = _current_card(session)
     stored = session.get("results", {}).get(cid)
-    result = _final(session, cid, _display_result(stored))
+    review = _review_draft(stored)
+    failed = isinstance(stored, RunResult) and not stored.report.passed
+    if (review is not None or failed) and not _can_publish(session, card):
+        return None
+    result = _final(session, cid, _display_result(stored) or review)
     if isinstance(stored, _RecoveryDisplay) or not isinstance(result, RunResult):
         return None
     name = re.sub(r"[^\w一-鿿-]+", "_", f"{result.model.canonical_name}_{card.store_name}")[:60]
     return f"{name}.md", render_download(result).encode("utf-8")
 
 
-def save_image(session: dict) -> tuple[str, bytes] | None:
-    """保存图片: one image at a time (never a bulk zip - WORKFLOW v4 rule 11 / CLAUDE.md rule 2)."""
-    card, cid = _current_card(session)
-    stored = session.get("results", {}).get(cid)
-    result = _display_result(stored)
-    if isinstance(stored, _RecoveryDisplay) or not isinstance(result, RunResult) or not result.post.images:
-        return None
-    im = result.post.images[0]
-    data = cached_image_bytes(im.media_id)
+def _post_image_bytes(media_id: str) -> bytes | None:
+    data = cached_image_bytes(media_id)
     fetch = getattr(ui_data.DEPS, "fetch_image_bytes", None)
     if not data and fetch is not None:
         try:
-            data = fetch(im.media_id)
+            data = fetch(media_id)
         except Exception:  # noqa: BLE001
             data = None
-    if not data:
-        data = placeholder_png(card.display_name or "图片")
-    ext = "png" if data[:4] == b"\x89PNG" else ("svg" if data[:4] == b"<svg" else "jpg")
-    return f"img_{re.sub(r'[^\w-]+', '_', cid)}_{int(time.time())}.{ext}", data
+    return data
+
+
+def _image_ext(data: bytes) -> str:
+    return "png" if data[:4] == b"\x89PNG" else ("svg" if data[:4] == b"<svg" else "jpg")
+
+
+def _shown_images(session: dict):
+    """(card, cid, images) of the post on screen; images is [] when there is nothing to save."""
+    card, cid = _current_card(session)
+    stored = session.get("results", {}).get(cid)
+    review = _review_draft(stored)
+    failed = isinstance(stored, RunResult) and not stored.report.passed
+    if (review is not None or failed) and not _can_publish(session, card):
+        return card, cid, []
+    result = _display_result(stored) or review
+    if isinstance(stored, _RecoveryDisplay) or not isinstance(result, RunResult):
+        return card, cid, []
+    return card, cid, list(result.post.images)
+
+
+def save_image(session: dict, idx: int = 0) -> tuple[str, bytes] | None:
+    """保存图片 · 第 N 张: one of this post's images (per post only, never the knowledge base)."""
+    card, cid, images = _shown_images(session)
+    if not images:
+        return None
+    i = max(0, min(int(idx), len(images) - 1))
+    data = _post_image_bytes(images[i].media_id) or placeholder_png(card.display_name or "图片")
+    return f"img_{re.sub(r'[^\w-]+', '_', cid)}_{i + 1}.{_image_ext(data)}", data
+
+
+def save_images(session: dict) -> tuple[str, bytes] | None:
+    """保存图片 · 下载所有图片: this post's images as one zip, numbered like 第 N 张 (1.png, 2.jpg …).
+    The same per-post zip as the 生成 tab (product decision 2026-10-22); images that fail are left out."""
+    import io
+    import zipfile
+    card, cid, images = _shown_images(session)
+    if not images:
+        return None
+    buf, added = io.BytesIO(), 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for i, im in enumerate(images):
+            data = _post_image_bytes(im.media_id)
+            if data:
+                z.writestr(f"{i + 1}.{_image_ext(data)}", data)
+                added += 1
+    if not added:
+        return None
+    name = re.sub(r"[^\w一-鿿-]+", "_", f"{card.display_name or '图片'}_{card.platform}_图片")[:60]
+    return f"{name}.zip", buf.getvalue()
 

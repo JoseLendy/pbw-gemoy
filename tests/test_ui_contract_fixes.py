@@ -50,7 +50,8 @@ def test_publish_is_ignored_before_a_result_and_for_needs_review():
         failing=[FailingSentence(field="body[0]", sentence="x", stage="8A", code="c", reason="r")],
         attempts=[cid])
     out = state.render(s)
-    assert out["editable"] is False and out["publishable"] is False and out["downloadable"] is False
+    # editable so a person can fix the draft (tests/test_ui_controls.py), but never publishable as is
+    assert out["editable"] is True and out["publishable"] is False and out["downloadable"] is False
     state.on_publish(s)
     assert s["published"] == {}
 

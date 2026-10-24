@@ -50,7 +50,7 @@ def test_every_role_can_generate_every_platform(session):
     out = state.on_platform("小红书", session)
     assert not out["panel"]["notice"] and out["action"]["visible"] is True
     out = state.on_platform("公众号", session)
-    assert out["action"]["label"] == "生成公众号文章"
+    assert out["action"]["label"] == "生成"
     out = state.on_platform("海报", session)
     assert out["platform"] == "海报" and out["action"]["visible"] is True
     out = state.on_platform("抖音", session)

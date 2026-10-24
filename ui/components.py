@@ -250,9 +250,13 @@ def phone_html(r: RunResult, deps: Any = None, allow_fetch: bool = True) -> str:
         skin = "skin-wechat"
     elif p == "moments":
         n = "one" if len(imgs) == 1 else ""
+        # 朋友圈 has no title field, but the copied text opens with the title and intro (agent.export
+        # .wechat_text), so the preview shows them too: the phone must show every word that gets posted.
+        lead = (f'<div class="p"><b>{title}</b></div>' if title else "") + \
+               (f'<div class="p">{S(post.intro)}</div>' if post.intro else "")
         screen = (f'<div class="topbar"><span>‹</span><span>朋友圈</span><span>📷</span></div>'
                   f'<div class="post"><div class="avatar"></div><div style="flex:1"><div class="name">华为授权体验店</div>'
-                  f'{paras}<div class="grid {n}">{"".join(_img_tag(im, r, deps, allow_fetch) for im in imgs)}</div>'
+                  f'{lead}{paras}<div class="grid {n}">{"".join(_img_tag(im, r, deps, allow_fetch) for im in imgs)}</div>'
                   f'<div class="cta">{S(post.cta)}</div><div class="time">刚刚</div></div></div>')
         skin = "skin-moments"
     elif p == "poster":
